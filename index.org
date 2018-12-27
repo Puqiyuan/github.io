@@ -1,37 +1,7 @@
-#+TITLE: 博客目录
+#+TITLE: 技术归档
 #+AUTHOR: Cauchy(蒲启元)
 #+EMAIL: pqy7172@gmail.com
 
-推荐你在电脑上查看此页面。这是一个还在更新中的页面。
+推荐你在电脑上查看此页面，这是一个始终处于更新中的页面。
 
 
-我一直希望成为Linux内核开发人员，或者成为Linux系统程序员，这是一个系统而漫长的过程，需要长
-期的学习和坚持。但无论如何这是我的兴趣并且我将以此为职业。写博客是这样一个过程的总结和记录。
-这主要分为以下几步来进行：
-
-- 1，学习Linux基本命令和Shell编程。
-- 2，Linux系统函数编程。
-- 3，使用Linux系统调用开发系统应用。
-- 4，研究Linux内核。
-
-根据以上步骤计划，目前暂时将各步化为对以下各书籍的学习。要注意的是，尽管是根据书籍来学习的，
-书籍里的实例代码都是由我运行过的，我推崇Learning by doing的学习方法（目前只关注2）。
-
-- 1：
-  + 书籍：[[./linux/books/1/sys.pdf][UNIX and Linux System Administration Handbook]]。博客：[[./linux/blogs/sys/admin.html][UNIX和Linux系统管理]]。
-
-- 2:
-  + 书籍：[[./linux/books/2/apue.pdf][Advanced Programming in the UNIX Environment]]。博客：[[./linux/blogs/2/apue.html][UNIX高级编程]]。
-
-
-
-
-#+BEGIN_COMMENT
-- [[./dataStructure/dataStructure.html][Data Structure]]
-
-- [[./linux/linuxsys.html][Linux system Admin]]
-
-- [[./discreteMathematics/discreteMath.html][Discrete Mathematics]]
-
-- [[./machineLearning/machineLearning.html][Machine Learning]]
-  #+END_COMMENT
