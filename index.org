@@ -1,10 +1,10 @@
 #+TITLE: 技术归档
-#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css"> 
 
 推荐你在电脑上查看此页面，这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的总
-结，但主要以Linux相关为主。
+结，但主要以Linux相关为主，联系作者：pqy7172@gmail.com。
 
 
 * Linux系统管理
