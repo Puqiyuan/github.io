@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2018-12-27 Thu 22:01 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管道与重定向</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy">
+<link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css">
+<style>code {font-family:Monospace; font-size:90%; background-color: #eee} body {font-size:14pt}</style>
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">管道与重定向</h1>
+<p>
+管道与重定向是Linux系统中基本的概念，本文结合一些实例来验证Linux系统中这两个基础概念。
+</p>
+
+<p>
+Linux系统中的每一个进程都有关联的三个文件， <code>STDIN</code> ， <code>STDOUT</code> ， <code>STDERR</code> ， 内核为进程打开这三个文件，内核会保证这三个文件的描述符分别为0，1，2。所以用数字来引用这三个文件是安全的。
+</p>
+
+<p>
+符号 <code>&lt;</code> ， <code>&gt;</code> ， <code>&gt;&gt;</code> 会对一个命令的输出与输入进行重定向。符号 <code>&lt;</code> 使得命令的输入可以从一个已存在的文件中读入。而 <code>&gt;</code> 与 <code>&gt;&gt;</code> 重定向 <code>STDOUT</code> ， <code>&gt;</code> 会替代原文件中的内容，而
+<code>&gt;&gt;</code> 只会附接在原文件尾。下面这个命令：
+</p>
+
+<pre class="example">
+echo "This is a test message." &gt; /tmp/mymessage
+
+</pre>
+
+<p>
+将会向 <code>/tmp/mymessage</code> 中写入一行，如果这个文件不存在就先创建它。
+</p>
+
+<p>
+而下面的例子展示了一个命令如何接受来自已存在文件的输入：
+</p>
+
+<pre class="example">
+mail -s "Mail test" johndoe &lt; /tmp/mymessage
+
+</pre>
+
+<p>
+如你所见， <code>mail</code> 命令接受来自文件 <code>/tmp/mymessage</code> 的信息作为要发送给johndoe邮件的内容。
+</p>
+
+<p>
+<b>符号&gt;&amp;用来将STDOUT和STDERR重定向到相同的地方。而若只重定向STDERR，用符号2&gt;。</b>
+</p>
+
+<p>
+下面的例子解释了为什么有时候需要将STDOUT和STDERR重定向到不同的地方。
+</p>
+
+<pre class="example">
+find / -name core
+
+</pre>
+
+<p>
+通常情况下它的执行会引起大量的“权限受限”错误信息，这么多的信息无益于提取有用的信息。这时候符号2&gt;就派上用场了，它可以将错误信息重定向到其它地方：
+</p>
+
+<pre class="example">
+find / -name core 2&gt; /dev/null
+
+</pre>
+
+<p>
+当然，对于有用信息的提取也可以放到一个文件中以便以后来查看：
+</p>
+
+<pre class="example">
+find / -name core &gt; /tmp/corefiles 2&gt; /dev/null
+
+</pre>
+
+<p>
+向 <code>/dev/null</code> 文件中写入信息，实际上就是丢弃这些信息。
+</p>
+
+<p>
+<b>如果要把一个命令的STDOUT作为另一个命令的STDIN，这就要用到符号|，这就是管道。</b>
+</p>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy</p>
+<p class="date">Created: 2018-12-27 Thu 22:01</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

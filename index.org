@@ -8,5 +8,5 @@
 
 
 * Linux系统管理
-
+- [[./pipe-redirection.html][管道与重定向]]
 * Linux系统开发

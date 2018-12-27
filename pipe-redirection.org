@@ -1,0 +1,43 @@
+#+TITLE: 管道与重定向
+#+AUTHOR: Cauchy
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css">
+
+管道与重定向是Linux系统中基本的概念，本文结合一些实例来验证Linux系统中这两个基础概念。
+
+Linux系统中的每一个进程都有关联的三个文件， =STDIN= ， =STDOUT= ， =STDERR= ， 内核为进程
+打开这三个文件，内核会保证这三个文件的描述符分别为0，1，2。所以用数字来引用这三个文件是安
+全的。
+
+符号 =<= ， =>= ， =>>= 会对一个命令的输出与输入进行重定向。符号 =<= 使得命令的输入可以从
+一个已存在的文件中读入。而 =>= 与 =>>= 重定向 =STDOUT= ， =>= 会替代原文件中的内容，而
+=>>= 只会附接在原文件尾。下面这个命令：
+
+: echo "This is a test message." > /tmp/mymessage
+
+将会向 =/tmp/mymessage= 中写入一行，如果这个文件不存在就先创建它。
+
+而下面的例子展示了一个命令如何接受来自已存在文件的输入：
+
+: mail -s "Mail test" johndoe < /tmp/mymessage
+
+如你所见， =mail= 命令接受来自文件 =/tmp/mymessage= 的信息作为要发送给johndoe邮件的内容。
+
+*符号>&用来将STDOUT和STDERR重定向到相同的地方。而若只重定向STDERR，用符号2>。*
+
+下面的例子解释了为什么有时候需要将STDOUT和STDERR重定向到不同的地方。
+
+: find / -name core
+
+通常情况下它的执行会引起大量的“权限受限”错误信息，这么多的信息无益于提取有用的信息。这时候
+符号2>就派上用场了，它可以将错误信息重定向到其它地方：
+
+: find / -name core 2> /dev/null
+
+当然，对于有用信息的提取也可以放到一个文件中以便以后来查看：
+
+: find / -name core > /tmp/corefiles 2> /dev/null
+
+向 =/dev/null= 文件中写入信息，实际上就是丢弃这些信息。
+
+*如果要把一个命令的STDOUT作为另一个命令的STDIN，这就要用到符号|，这就是管道。*
