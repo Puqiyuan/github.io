@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2018-12-27 Thu 22:01 -->
+<!-- 2018-12-28 Fri 21:04 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>管道与重定向</title>
@@ -130,12 +130,32 @@ find / -name core &gt; /tmp/corefiles 2&gt; /dev/null
 </p>
 
 <p>
-<b>如果要把一个命令的STDOUT作为另一个命令的STDIN，这就要用到符号|，这就是管道。</b>
+<b>如果要把一个命令的STDOUT作为另一个命令的STDIN，这就要用到符号|，这就是管道。</b> 下面几个例
+ 子展示了这种用法：
 </p>
+
+<pre class="example">
+ps -ef | grep httpd
+cut -d: -f7 &lt; /etc/passwd | sort -u
+
+</pre>
+
+<p>
+第一个命令中的ps -ef将运行结果输出到grep，而grep的运行结果不再管道到别的地方，就输出到终端窗口。而第二个命令用法类似。
+</p>
+
+<p>
+使用符号&amp;&amp;连接两个命令，则只有第一个命令成功时，第二个命令才会执行。例如：
+</p>
+
+<pre class="example">
+lpr /tmp/t2 &amp;&amp; rm /tmp/t2
+
+</pre>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2018-12-27 Thu 22:01</p>
+<p class="date">Created: 2018-12-28 Fri 21:04</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
