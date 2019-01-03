@@ -10,5 +10,6 @@
 * Linux系统管理
 - [[./pipe-redirection.html][管道与重定向]]
 * Linux系统开发
+* 内核研究
 * 文档翻译
 - [[./jit21.html][实时编译器函数库第21节中文文档]]
