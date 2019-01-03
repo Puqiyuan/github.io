@@ -2,4 +2,5 @@
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css">
-本文翻译自[[https://www.gnu.org/software/libjit/doc/libjit_21.html#Porting][libjit移植到新的架构体系]]，如有任何疑问，联系pqy7172@gmail.com。
+本文翻译自[[https://www.gnu.org/software/libjit/doc/libjit_21.html#Porting][libjit移植到新的架构体系]]，如有任何疑问，联系pqy7172@gmail.com。推荐你在电脑上查
+看此页面。
