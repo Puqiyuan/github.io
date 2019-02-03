@@ -1,2 +1,2 @@
 # Puqiyuan.github.io
-computer technial archive.
+各种计算机技术总结，主要为Linux相关。
