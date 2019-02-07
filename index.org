@@ -11,3 +11,5 @@
 - [[./pipe-redirection.html][管道与重定向]]
 * Linux系统开发
 * Linux内核研究
+* 杂项
+- 一份较为详细的翻墙指南[[./html/index.org][Bypass Guide]]。

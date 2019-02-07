@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2019-02-07 Thu 10:18 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bypass Guide</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Qiyuan Pu(pqy7172@gmail.com)">
+<link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css">
+<style>code {font-family:Monospace; font-size:90%; background-color: #eee} body {font-size:14pt}</style>
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Bypass Guide</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org6dd4213">ATTENTION(Legal Notices)</a></li>
+<li><a href="#orgb49dd4e">Overview</a></li>
+<li><a href="#orgc17fc91">Install and Configuration</a>
+<ul>
+<li><a href="#orgc06349e">Mobile Phone</a>
+<ul>
+<li><a href="#orgff696a6">Android</a></li>
+<li><a href="#orged89ee9">iOS</a></li>
+</ul>
+</li>
+<li><a href="#org3bee8d7">Computer</a>
+<ul>
+<li><a href="#orgb365cc2">Windows</a></li>
+<li><a href="#orgdbe1083">Linux(Debain)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<p>
+Please check this webpage as far as possible on the computer, as this webpage currently
+does not support the good experience of the mobile phone. Of course, I didn't have much
+interest in using web design to make it adapt to the mobile phone. Thank you for your
+understanding. :)
+</p>
+
+<p>
+Currently this tutorial only provides installation methods for Android, Windows, iOS and
+Debian Linux. Of course my desire is to have a method for all platforms. If your platform
+is Mac OS, etc. please contact me(see bottom), we will continue to complete this document
+together. Before I was successfully installed on these platforms, but now I do not have
+these platforms so it is not good for screenshots of presentation so need your help in the
+future.
+</p>
+
+
+<p>
+If you don't understand anything in the process of reading or operating, or if a link
+fails, please email me.
+</p>
+
+<p>
+You can reach any corner of the world across the firewall. Have fun. :)
+</p>
+
+<div id="outline-container-org6dd4213" class="outline-2">
+<h2 id="org6dd4213">ATTENTION(Legal Notices)</h2>
+<div class="outline-text-2" id="text-org6dd4213">
+<p>
+Once you begin to browse this document, you will comply with the following statement I
+made. If you not, please stop reading, thanks.
+</p>
+<ul class="org-ul">
+<li>The technology that anyone learns from this document CAN ONLY be used for study, work,
+scientific research, and entertainment purposes.</li>
+</ul>
+
+
+<ul class="org-ul">
+<li>It MUST NOT violate Chinese laws, and MUST NOT intentionally disseminate information
+outside of GFW to the mainland of China. It MUST NOT publish excessive remarks. Any
+violation of the law is HIS OWN responsibility and HAS NOTHING to do with me.</li>
+
+<li>For possible reasons, the techniques described in this document may not achieve the
+desired results. The author does not guarantee any of them. Even the authors are not
+responsible for solving the problems caused by these operations. However, based on past
+experience, what is said here is workable and will not bring any problems.</li>
+
+<li>Any individual or group that violates this statement HAS NOTHING to do with me.</li>
+</ul>
+</div>
+</div>
+
+
+
+<div id="outline-container-orgb49dd4e" class="outline-2">
+<h2 id="orgb49dd4e">Overview</h2>
+<div class="outline-text-2" id="text-orgb49dd4e">
+<p>
+See bottom for Email address of author. This article is completely a rookie for computers
+and mobile phones. As long as you patiently follow the documentation down you can always
+visit Google.
+</p>
+
+<p>
+Due to some reasons, it is not possible to access and use well-known websites and
+applications such as Google and Facebook in mainland China. This article does not intend
+to discuss these reasons. My purpose is to enable people to use these services to
+facilitate their work, study, life, and entertainment. Everything else has nothing to do
+with me. Any problems that come with it are the responsibility of the individual.
+</p>
+
+<p>
+For the sake of simplicity, I only discuss how to do it and achieve the desired effect,
+not to talk about why. The structure discussed in this article is based on various systems
+and hardware platforms. The main hardware platforms include mobile phones and
+computers. There are Android and iOS operating systems in the mobile platform. The
+computer platform is divided into three systems: Linux, Windows, and Mac. So next I will
+follow these classifications to discuss how to achieve the access to Google and other
+sites on these platforms.
+</p>
+
+<p>
+It is getting harder and harder now to bypass. Now the common practice is to send your
+access request to a server first, instead of sending it directly to a Google server. The
+intermediate server will visit Google for you and return the result. Well, first of all,
+you have to have your own intermediate server. Usually this intermediate server is
+available in two ways. The first is to build your own server, and how to build your own
+server is a tricky problem. Anyone who reads this document can ask the author how to do
+this(see bottom). The other is to buy a server that has already been built by others. Here
+I recommend a company that provides this kind of service: <a href="https://www.fyzhuji.com">https://www.fyzhuji.com</a>. And if
+you decide to buy services provided by the company, I suggest you join the author's
+self-built server instead of buying the company provided, so you not only save the trouble
+of creating a server, but also avoid spending more to obtain the freedom of information
+that you should get. If you think so, please contact the author. In short, I will assume
+in this article that you already have a hypothetical server with the following
+parameters(of course it doesn't work, you have to have its own available server).
+</p>
+
+<p>
+<a id="org6453e61"></a>
+</p>
+<ul class="org-ul">
+<li>Server Name: 192.168.1.1</li>
+
+<li>Remote Port: 8000</li>
+
+<li>Password: 123456</li>
+
+<li>Encrypt Method: chacha20</li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-orgc17fc91" class="outline-2">
+<h2 id="orgc17fc91">Install and Configuration</h2>
+<div class="outline-text-2" id="text-orgc17fc91">
+</div>
+<div id="outline-container-orgc06349e" class="outline-3">
+<h3 id="orgc06349e">Mobile Phone</h3>
+<div class="outline-text-3" id="text-orgc06349e">
+<p>
+Mobile phones are mainly divided into Android and iOS systems.
+</p>
+</div>
+<div id="outline-container-orgff696a6" class="outline-4">
+<h4 id="orgff696a6">Android</h4>
+<div class="outline-text-4" id="text-orgff696a6">
+</div>
+<ul class="org-ul">
+<li><a id="org0968b98"></a>Install<br>
+<div class="outline-text-5" id="text-org0968b98">
+<p>
+First we need to install the Android client. Obviously, these clients are hardly available
+in mainland China. In my github I provided the software for download: <a href="https://github.com/Puqiyuan/Shadowsocks_Install/blob/master/Shadowsocks.apk">APK for
+Android</a>. This is open source software, so you shouldn’t worry about security issues such
+as back doors.
+</p>
+</div>
+</li>
+
+<li><a id="org6406257"></a>Configuration<br>
+<div class="outline-text-5" id="text-org6406257">
+<p>
+Shadowsocks software runs after the installation is complete. It is probably as shown in
+the initial run.
+</p>
+
+
+<div id="orga9ec465" class="figure">
+<p><img src="./images/androidPhone1.jpg" alt="androidPhone1.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 1: </span>Picture of Shadowsocks initial run</p>
+</div>
+
+<p>
+Then click the + symbol in the top right corner. After clicking it looks like this:
+</p>
+
+<div id="org35e757a" class="figure">
+<p><img src="./images/androidPhone2.jpg" alt="androidPhone2.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 2: </span>Picture of after click + symbol</p>
+</div>
+
+<p>
+Then click "Manual Settings" in the top right corner. There are three ways to import the
+server. Other methods can be tried after you are familiar with this software. After
+clicking it looks like this:
+</p>
+
+<div id="org3dff38f" class="figure">
+<p><img src="./images/androidPhone3.jpg" alt="androidPhone3.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 3: </span>Picture of after click "Manual Setting"</p>
+</div>
+
+<p>
+Of course, these parameters are not what we assumed <a href="#org6453e61">here</a>. So we must modify it according
+to the server parameters assumed <a href="#org6453e61">here</a>. Parameters not mentioned in the screenshot do not
+need to be modified. The figure after modifying the parameters is as follows.
+</p>
+
+<div id="orgaf4b20f" class="figure">
+<p><img src="./images/androidPhone4.jpg" alt="androidPhone4.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 4: </span>Picture of after modified parameters</p>
+</div>
+
+<p>
+Then click the small tick in the upper right corner to complete the parameter
+configuration. Return to the main interface after completion.
+</p>
+
+<div id="org8609931" class="figure">
+<p><img src="./images/androidPhone5.jpg" alt="androidPhone5.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 5: </span>Picture of completion of config</p>
+</div>
+
+<p>
+Then click on the server entry 192.168.1.1. Makes it has a green bar on the left to
+achieve the purpose of selecting this server. Like the figure:
+</p>
+
+<div id="org5ba45ac" class="figure">
+<p><img src="./images/androidPhone6.jpg" alt="androidPhone6.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 6: </span>Picture of running a server</p>
+</div>
+
+<p>
+Of course, now you can't see the delay. That's because this server is our hypothetical
+one. It doesn't work. If it is a normal working server you should see something like this:
+</p>
+
+<div id="org6798819" class="figure">
+<p><img src="./images/androidPhone7.jpg" alt="androidPhone7.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 7: </span>Picture of running a server in that a working  server</p>
+</div>
+
+<p>
+If you see a delay like above picture, it means that you have crossed the firewall and now
+you can reach anywhere in the world. You can now visit <a href="https://www.google.com">https://www.google.com</a>. Have
+fun. :)
+</p>
+</div>
+</li>
+</ul>
+</div>
+
+
+<div id="outline-container-orged89ee9" class="outline-4">
+<h4 id="orged89ee9">iOS</h4>
+<div class="outline-text-4" id="text-orged89ee9">
+</div>
+<ul class="org-ul">
+<li><a id="orgce8322e"></a>Install<br>
+<div class="outline-text-5" id="text-orgce8322e">
+<p>
+Due to iOS software management, it is not easy for iOS devices to bypass. For some reason,
+the APP store of iOS is always off-platform for the client that used for bypassing. The
+"shadowrocket", which was previously available in the APP stores China area, has now been
+removed. As of the completion of this tutorial, the alternative that can be downloaded and
+used in China is "shadowbroken". Search and download "shadowbroken" in the APP
+store. After downloading and running as shown:
+</p>
+
+
+<div id="org9eecfdc" class="figure">
+<p><img src="./images/ios1.jpg" alt="ios1.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 8: </span>Initial running of "shadowbroken"</p>
+</div>
+</div>
+</li>
+
+<li><a id="orgba0e857"></a>Configure<br>
+<div class="outline-text-5" id="text-orgba0e857">
+<p>
+Configuration is similar to Andorid client. Click the "+" button in the picture above. As
+picture shows:
+</p>
+
+<div id="orge9b6ebd" class="figure">
+<p><img src="./images/ios3.jpg" alt="ios3.jpg" width="250px">
+</p>
+<p><span class="figure-number">Figure 9: </span>After click "+" button</p>
+</div>
+
+<p>
+Configure it according to the server parameters assumed <a href="#org6453e61">here</a>. Similar to the Android
+client.
+</p>
+
+<p>
+The most critical difficulty in bypassing of the iOS device is the acquisition of the
+client. According to my estimation, it will not be long before "shadowbroken" will be
+removed. If that happens, you can try the following solution.
+</p>
+
+<ul class="org-ul">
+<li>Try searching for software that starts with "shadow" in the Chinese region. Perhaps the
+ios client has another name on the line.</li>
+
+<li>Try switching your APP store area to a non-China area. What is more difficult to solve
+in the switching process is the debit bank card. Students generally do not have a debit
+bank card. At this time, we must go to the universal Taobao for searching visa card. Or
+try signing up for a paypal account.</li>
+
+<li>Last but not least, for a real Android phone, such as a Google phone.</li>
+</ul>
+
+
+<p>
+Thanks to Jabberwocky's help, he provided screenshots of the iOS device to me. :)
+</p>
+</div>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org3bee8d7" class="outline-3">
+<h3 id="org3bee8d7">Computer</h3>
+<div class="outline-text-3" id="text-org3bee8d7">
+<p>
+The main computer system is divided into Linux, Windows and Mac OS. Then I installed the
+bypass software on these three systems.
+</p>
+</div>
+<div id="outline-container-orgb365cc2" class="outline-4">
+<h4 id="orgb365cc2">Windows</h4>
+<div class="outline-text-4" id="text-orgb365cc2">
+</div>
+<ul class="org-ul">
+<li><a id="org3a6a0fd"></a>Install<br>
+<div class="outline-text-5" id="text-org3a6a0fd">
+<p>
+The Windows installation package is in the form of zip. Check <a href="https://github.com/shadowsocks/shadowsocks-windows/releases">here</a> for download,
+like below picture:
+</p>
+
+<div id="orgd72e060" class="figure">
+<p><img src="./images/windows1.jpg" alt="windows1.jpg" width="500px">
+</p>
+<p><span class="figure-number">Figure 10: </span>Download for Windows install package</p>
+</div>
+
+<p>
+Click on Shadowsocks-X.X.XX.zip to download and unzip and run. During the initial run, you
+may encounter problems with the version of the .Net framework being too low. At this time,
+the Windows system will prompt you to upgrade, you only need to follow the prompt to
+upgrade. The interface after starting the running is shown below.
+</p>
+
+<div id="orgc67b40e" class="figure">
+<p><img src="./images/windows2.jpg" alt="windows2.jpg" width="350px">
+</p>
+<p><span class="figure-number">Figure 11: </span>Initial running interface</p>
+</div>
+</div>
+</li>
+
+<li><a id="orgbc36b47"></a>Configure<br>
+<div class="outline-text-5" id="text-orgbc36b47">
+<p>
+Then configure according to the hypothetical server <a href="#org6453e61">mentioned</a> above. Pay attention to
+first click on the "添加" before configuration at lower left corner. Last click "确定".
+</p>
+
+
+
+<div id="org3df40a6" class="figure">
+<p><img src="./images/windows3.jpg" alt="windows3.jpg" width="350px">
+</p>
+<p><span class="figure-number">Figure 12: </span>Complete the configuration</p>
+</div>
+
+<p>
+After completion, there will be a small aircraft symbol in the lower right corner of the
+screen. Click it and configure it as shown in the figure below.
+</p>
+
+<div id="org324dbcb" class="figure">
+<p><img src="./images/windows4.jpg" alt="windows4.jpg" width="350px">
+</p>
+<p><span class="figure-number">Figure 13: </span>Enable proxy in PAC mode</p>
+</div>
+
+<p>
+You can now visit <a href="https://www.google.com">https://www.google.com</a>.
+</p>
+</div>
+</li>
+</ul>
+</div>
+
+<div id="outline-container-orgdbe1083" class="outline-4">
+<h4 id="orgdbe1083">Linux(Debain)</h4>
+<div class="outline-text-4" id="text-orgdbe1083">
+</div>
+<ul class="org-ul">
+<li><a id="orgc33b810"></a>Install<br>
+<div class="outline-text-5" id="text-orgc33b810">
+<p>
+First need to install "shadowsocks-libev":
+</p>
+<pre class="example">
+~$ sudo aptitude update
+~$ sudo aptitude install shadowsocks-libev
+</pre>
+<p>
+You also need to install a Chrome plugin from <a href="https://github.com/FelisCatus/SwitchyOmega/releases">here</a>. Download "SwitchyOmega Chromium.crx"
+as picture shows:
+</p>
+
+
+<div id="org932a754" class="figure">
+<p><img src="./images/debian1.png" alt="debian1.png" width="600px">
+</p>
+<p><span class="figure-number">Figure 14: </span>SwitchyOmega Chromium.crx</p>
+</div>
+
+<p>
+Install this downloaded plugin into Chrome.
+</p>
+</div>
+</li>
+
+<li><a id="orgdfe638b"></a>Configure<br>
+<div class="outline-text-5" id="text-orgdfe638b">
+<pre class="example">
+~$ sudo nano /etc/shadowsocks-libev/example.json
+</pre>
+<p>
+Save "example.json" as shown:
+</p>
+
+
+<div id="org2534109" class="figure">
+<p><img src="./images/debian2.png" alt="debian2.png" width="300px">
+</p>
+<p><span class="figure-number">Figure 15: </span>json configuration</p>
+</div>
+
+<p>
+SwitchyOmega need to be configure as shown:
+</p>
+
+<div id="org02902f9" class="figure">
+<p><img src="./images/debian3.png" alt="debian3.png" width="800px">
+</p>
+<p><span class="figure-number">Figure 16: </span>SwitchOmega configuration</p>
+</div>
+
+<p>
+Remember to click Apply changes on the left side of the page after completing the
+configuration.
+</p>
+
+<p>
+The last step is to run the agent:
+</p>
+<pre class="example">
+~$ ss-local -c /etc/shadowsocks-libev/example.json -v
+</pre>
+
+<p>
+Of course, the SwitchOmega plug-in must be in the enable state. Now you can visit
+google.com.
+</p>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Qiyuan Pu(pqy7172@gmail.com)</p>
+<p class="date">Created: 2019-02-07 Thu 10:18</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
