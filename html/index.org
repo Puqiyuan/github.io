@@ -1,7 +1,7 @@
 #+TITLE: Bypass Guide
 #+AUTHOR: Qiyuan Pu(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
 #+OPTIONS: num:nil
 Please check this webpage as far as possible on the computer, as this webpage currently
 does not support the good experience of the mobile phone. Of course, I didn't have much

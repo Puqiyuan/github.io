@@ -1,4 +1,4 @@
 #+TITLE: 协程切换实现
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="https://cs2.swfu.edu.cn/org-info-js/org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
