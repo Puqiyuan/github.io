@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 12:11 -->
+<!-- 2019-03-12 Tue 13:46 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,10 +63,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb02ab10">1. 协程概念</a></li>
-<li><a href="#org2678bb3">2. 架构介绍</a>
+<li><a href="#org837c4ef">1. 协程概念</a></li>
+<li><a href="#org4817a3e">2. 架构介绍</a>
 <ul>
-<li><a href="#org39c0782">2.1. X86</a></li>
+<li><a href="#orgab94eea">2.1. X86</a></li>
 </ul>
 </li>
 </ul>
@@ -76,8 +76,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-orgb02ab10" class="outline-2">
-<h2 id="orgb02ab10"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-org837c4ef" class="outline-2">
+<h2 id="org837c4ef"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -94,22 +94,51 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org2678bb3" class="outline-2">
-<h2 id="org2678bb3"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-org4817a3e" class="outline-2">
+<h2 id="org4817a3e"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
-本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。
+本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
+</p>
+
+<p>
+CPU架构经常的被分为复杂指令集（<a href="https://en.wikipedia.org/wiki/Complex_instruction_set_computer">CISC</a>）与精简指令集（<a href="https://en.wikipedia.org/wiki/Reduced_instruction_set_computer">RISC</a>）。常见的复杂指令集体系结构包括X86、
+X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的实现一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
+</p>
+
+<p>
+以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-
-<div id="outline-container-org39c0782" class="outline-3">
-<h3 id="org39c0782"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-orgab94eea" class="outline-3">
+<h3 id="orgab94eea"><span class="section-number-3">2.1</span> X86</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
+</p>
+<ul class="org-ul">
+<li>寄存器：
+包括八个通用寄存器eax、ebx、ecx、edx、esi、edi、ebp、esp。一个特殊寄存器eip用来指向当前所要运行的指令。通常编译器会赋予某些通用寄存器以特殊的用途，但体系结构层面并未如此强制要求，这一点下面的其它体系结类似。这些由编译器指明的特殊寄存器的常见用途包括：
+<ul class="org-ul">
+<li>esp：栈指针，指示栈顶在何处。</li>
+<li>ebp：指示栈基址。</li>
+</ul></li>
+<li>调用惯例：
+<ul class="org-ul">
+<li></li>
+</ul></li>
+<li>常用指令：
+<ul class="org-ul">
+<li></li>
+</ul></li>
+</ul>
+</div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 12:11</p>
+<p class="date">Created: 2019-03-12 Tue 13:46</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
