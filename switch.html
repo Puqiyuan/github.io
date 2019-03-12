@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 15:42 -->
+<!-- 2019-03-12 Tue 15:48 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,12 +63,12 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org8a16955">1. 协程概念</a></li>
-<li><a href="#orga5b9f46">2. 架构介绍</a>
+<li><a href="#orgeac63fb">1. 协程概念</a></li>
+<li><a href="#org15e43ce">2. 架构介绍</a>
 <ul>
-<li><a href="#org7088211">2.1. X86</a></li>
-<li><a href="#org7d1e185">2.2. X86-64</a></li>
-<li><a href="#org4f020a8">2.3. ARM32</a></li>
+<li><a href="#orge286c66">2.1. X86</a></li>
+<li><a href="#orgd48862a">2.2. X86-64</a></li>
+<li><a href="#org56d15e8">2.3. ARM32</a></li>
 </ul>
 </li>
 </ul>
@@ -78,8 +78,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-org8a16955" class="outline-2">
-<h2 id="org8a16955"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-orgeac63fb" class="outline-2">
+<h2 id="orgeac63fb"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -96,8 +96,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orga5b9f46" class="outline-2">
-<h2 id="orga5b9f46"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-org15e43ce" class="outline-2">
+<h2 id="org15e43ce"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -124,8 +124,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-org7088211" class="outline-3">
-<h3 id="org7088211"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-orge286c66" class="outline-3">
+<h3 id="orge286c66"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
@@ -150,8 +150,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 </div>
 
-<div id="outline-container-org7d1e185" class="outline-3">
-<h3 id="org7d1e185"><span class="section-number-3">2.2</span> X86-64</h3>
+<div id="outline-container-orgd48862a" class="outline-3">
+<h3 id="orgd48862a"><span class="section-number-3">2.2</span> X86-64</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 X86-64架构时X86架构的64位版，此架构具有64位机器字宽。
@@ -170,8 +170,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 </div>
 
-<div id="outline-container-org4f020a8" class="outline-3">
-<h3 id="org4f020a8"><span class="section-number-3">2.3</span> ARM32</h3>
+<div id="outline-container-org56d15e8" class="outline-3">
+<h3 id="org56d15e8"><span class="section-number-3">2.3</span> ARM32</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 此架构是ARM的32位版，ARM V7及以前的版本是为32位。
@@ -183,9 +183,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 <li>r12：存储系统调用的号码。</li>
 <li>r13(sp)：指示栈顶。</li>
 <li>r14(lr)：存储返回地址。</li>
-<li>r15(pc)：程序计数器，指示当前运行的指令。</li>
 <li><p>
-下面是一个关于X86和ARM寄存器的对应表格。
+r15(pc)：程序计数器，指示当前运行的指令。下面是一个关于X86和ARM寄存器的对应表格。
 </p>
 <table border="2" rules="all">
 
@@ -220,7 +219,7 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 <tr>
 <td class="org-left">r6-r10</td>
 <td class="org-left">通用寄存器</td>
-<td class="org-left">无</td>
+<td class="org-left">&#xa0;</td>
 </tr>
 
 <tr>
@@ -230,33 +229,27 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
-</tr>
-
-<tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">r12</td>
+<td class="org-left">系统调用</td>
 <td class="org-left">&#xa0;</td>
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">r13(sp)</td>
+<td class="org-left">栈指针</td>
+<td class="org-left">esp</td>
+</tr>
+
+<tr>
+<td class="org-left">r14(lr)</td>
+<td class="org-left">链接寄存器</td>
 <td class="org-left">&#xa0;</td>
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
-</tr>
-
-<tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">r15</td>
+<td class="org-left">程序计数器</td>
+<td class="org-left">eip</td>
 </tr>
 </tbody>
 </table></li>
@@ -268,7 +261,7 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 15:42</p>
+<p class="date">Created: 2019-03-12 Tue 15:48</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
