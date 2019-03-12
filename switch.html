@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 13:46 -->
+<!-- 2019-03-12 Tue 14:17 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,10 +63,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org837c4ef">1. 协程概念</a></li>
-<li><a href="#org4817a3e">2. 架构介绍</a>
+<li><a href="#org2972766">1. 协程概念</a></li>
+<li><a href="#orgdb8e183">2. 架构介绍</a>
 <ul>
-<li><a href="#orgab94eea">2.1. X86</a></li>
+<li><a href="#orgc0466e9">2.1. X86</a></li>
 </ul>
 </li>
 </ul>
@@ -76,8 +76,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-org837c4ef" class="outline-2">
-<h2 id="org837c4ef"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-org2972766" class="outline-2">
+<h2 id="org2972766"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -94,11 +94,23 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org4817a3e" class="outline-2">
-<h2 id="org4817a3e"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-orgdb8e183" class="outline-2">
+<h2 id="orgdb8e183"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
+</p>
+
+<p>
+寄存器包括通用寄存器和特殊寄存器，一般架构层面会规定出哪些寄存器是特殊的，另一方面，编译器也会说明一些通用寄存器来作为特别的目的。在操作这些特殊寄存器时要特别注意。
+</p>
+
+<p>
+调用惯例作出了调用者（caller）和被调用者（callee）之间的一系列约定，这些约定包括参数如何传递，哪些寄存器被调用者可以覆盖，被调用者的局部变量应存于何处，结果应如何返回等。之于协程切换的目的，仅需关心参数如何传递。
+</p>
+
+<p>
+本文所涉及的四个平台常用指令都大同小异，下文具体到某个平台时再作详细介绍。
 </p>
 
 <p>
@@ -110,8 +122,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-orgab94eea" class="outline-3">
-<h3 id="orgab94eea"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-orgc0466e9" class="outline-3">
+<h3 id="orgc0466e9"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
@@ -123,10 +135,7 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 <li>esp：栈指针，指示栈顶在何处。</li>
 <li>ebp：指示栈基址。</li>
 </ul></li>
-<li>调用惯例：
-<ul class="org-ul">
-<li></li>
-</ul></li>
+<li>调用惯例：参数被压栈。</li>
 <li>常用指令：
 <ul class="org-ul">
 <li></li>
@@ -138,7 +147,7 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 13:46</p>
+<p class="date">Created: 2019-03-12 Tue 14:17</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
