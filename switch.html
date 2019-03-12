@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 11:58 -->
+<!-- 2019-03-12 Tue 12:11 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -59,13 +59,57 @@ for the JavaScript code in this tag.
 <body>
 <div id="content">
 <h1 class="title">协程切换实现</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgb02ab10">1. 协程概念</a></li>
+<li><a href="#org2678bb3">2. 架构介绍</a>
+<ul>
+<li><a href="#org39c0782">2.1. X86</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
 <p>
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
+
+<div id="outline-container-orgb02ab10" class="outline-2">
+<h2 id="orgb02ab10"><span class="section-number-2">1</span> 协程概念</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
+</p>
+
+<p>
+协程是一种用户态的轻量级线程，协程的调度完全由用户控制。协程拥有自己的上下文和栈。协程调度切换时，将寄存器上下文和栈保存到其它地方，在切回来的时候，恢复先前保存的寄存器上下文和栈，
+直接操作栈则基本没有内核切换的开销，所以上下文切换用时很少。注意本文在进行这些切换操作时并不涉及段的变化。
+</p>
+
+<p>
+协程切换是用户空间的事，通过避免通常的切换陷入内核而带来的时间开销，这种切换较传统的上下文切换具有较高的效率。
+</p>
+</div>
+</div>
+
+<div id="outline-container-org2678bb3" class="outline-2">
+<h2 id="org2678bb3"><span class="section-number-2">2</span> 架构介绍</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。
+</p>
+</div>
+
+<div id="outline-container-org39c0782" class="outline-3">
+<h3 id="org39c0782"><span class="section-number-3">2.1</span> X86</h3>
+</div>
+</div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 11:58</p>
+<p class="date">Created: 2019-03-12 Tue 12:11</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
