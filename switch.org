@@ -136,3 +136,7 @@ ARM V8及以后的版本为64位。
 关于内联汇编的知识可以参考[[https://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html][这里]]。请注意这段代码只是Jmp方式的切换，即新任务不带参运行。先是
 开栈，然后先把下一个要运行的任务地址入栈，接下来用来存储当前任务环境的内存地址入栈。
 
+做好了准备工作就可以正式进行切换工作了。
+
+第一步当然是保存当前的任务环境：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-46"
