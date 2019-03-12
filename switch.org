@@ -140,3 +140,21 @@ ARM V8及以后的版本为64位。
 
 第一步当然是保存当前的任务环境：
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-46"
+由于要用eax寄存器，所以首先将eax进行了压栈。
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-33"
+这一步完成之后，栈的结构如下图：
+#+BEGIN_EXAMPLE
+16------------------- high address
+  | gotoContextAddr |
+12-------------------
+  | nowContextAddr  | stack     |
+8 ------------------- growth    |
+  | return address  | direction |
+4 -------------------           |
+  |       rax       |          \./
+0 ------------------- sp
+  |        .        |
+  |        .        | low address
+#+END_EXAMPLE                 
+
+

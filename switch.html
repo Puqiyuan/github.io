@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 17:11 -->
+<!-- 2019-03-12 Tue 17:29 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,19 +63,19 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf3ec24a">1. 协程概念</a></li>
-<li><a href="#org15c46c3">2. 架构介绍</a>
+<li><a href="#org17a7aad">1. 协程概念</a></li>
+<li><a href="#org6d93e81">2. 架构介绍</a>
 <ul>
-<li><a href="#org5fcbbc5">2.1. X86</a></li>
-<li><a href="#org0e6dda3">2.2. X86-64</a></li>
-<li><a href="#orge0a112d">2.3. ARM32</a></li>
-<li><a href="#org46b8cc5">2.4. ARM64</a></li>
+<li><a href="#orge4de974">2.1. X86</a></li>
+<li><a href="#orgf064acb">2.2. X86-64</a></li>
+<li><a href="#orgf029918">2.3. ARM32</a></li>
+<li><a href="#orge897a63">2.4. ARM64</a></li>
 </ul>
 </li>
-<li><a href="#org549317b">3. 实现原理</a></li>
-<li><a href="#org7b4f3a1">4. 编码实现</a>
+<li><a href="#org35d1407">3. 实现原理</a></li>
+<li><a href="#orga800094">4. 编码实现</a>
 <ul>
-<li><a href="#org686e546">4.1. X86</a></li>
+<li><a href="#orgaacb83a">4.1. X86</a></li>
 </ul>
 </li>
 </ul>
@@ -85,8 +85,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-orgf3ec24a" class="outline-2">
-<h2 id="orgf3ec24a"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-org17a7aad" class="outline-2">
+<h2 id="org17a7aad"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -103,8 +103,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org15c46c3" class="outline-2">
-<h2 id="org15c46c3"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-org6d93e81" class="outline-2">
+<h2 id="org6d93e81"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -124,15 +124,15 @@ for the JavaScript code in this tag.
 
 <p>
 CPU架构经常的被分为复杂指令集（<a href="https://en.wikipedia.org/wiki/Complex_instruction_set_computer">CISC</a>）与精简指令集（<a href="https://en.wikipedia.org/wiki/Reduced_instruction_set_computer">RISC</a>）。常见的复杂指令集体系结构包括X86、
-X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org49d1970">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
+X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org85e4d6a">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
 </p>
 
 <p>
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-org5fcbbc5" class="outline-3">
-<h3 id="org5fcbbc5"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-orge4de974" class="outline-3">
+<h3 id="orge4de974"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
@@ -157,8 +157,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 </div>
 
-<div id="outline-container-org0e6dda3" class="outline-3">
-<h3 id="org0e6dda3"><span class="section-number-3">2.2</span> X86-64</h3>
+<div id="outline-container-orgf064acb" class="outline-3">
+<h3 id="orgf064acb"><span class="section-number-3">2.2</span> X86-64</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 X86-64架构时X86架构的64位版，此架构具有64位机器字宽。
@@ -177,8 +177,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 </div>
 
-<div id="outline-container-orge0a112d" class="outline-3">
-<h3 id="orge0a112d"><span class="section-number-3">2.3</span> ARM32</h3>
+<div id="outline-container-orgf029918" class="outline-3">
+<h3 id="orgf029918"><span class="section-number-3">2.3</span> ARM32</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 此架构是ARM的32位版，ARM V7及以前的版本是为32位。
@@ -276,8 +276,8 @@ r15(pc)：程序计数器，指示当前运行的指令。下面是一个关于X
 </div>
 
 
-<div id="outline-container-org46b8cc5" class="outline-3">
-<h3 id="org46b8cc5"><span class="section-number-3">2.4</span> ARM64</h3>
+<div id="outline-container-orge897a63" class="outline-3">
+<h3 id="orge897a63"><span class="section-number-3">2.4</span> ARM64</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
 ARM V8及以后的版本为64位。
@@ -298,8 +298,8 @@ ARM V8及以后的版本为64位。
 </div>
 
 
-<div id="outline-container-org549317b" class="outline-2">
-<h2 id="org549317b"><span class="section-number-2">3</span> 实现原理</h2>
+<div id="outline-container-org35d1407" class="outline-2">
+<h2 id="org35d1407"><span class="section-number-2">3</span> 实现原理</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 本节将概要介绍实现原理，而具体的代码实现细节留待下节。讨论实现时，协程、上下文、任务它们几者互为同义词。在讨论实现时，我更愿意用任务，而实现程序中多用上下文。
@@ -316,17 +316,17 @@ ARM V8及以后的版本为64位。
 </div>
 
 
-<div id="outline-container-org7b4f3a1" class="outline-2">
-<h2 id="org7b4f3a1"><span class="section-number-2">4</span> 编码实现</h2>
+<div id="outline-container-orga800094" class="outline-2">
+<h2 id="orga800094"><span class="section-number-2">4</span> 编码实现</h2>
 <div class="outline-text-2" id="text-4">
 <p>
-<a id="org49d1970"></a>
+<a id="org85e4d6a"></a>
 此节将会详细讨论各个平台上的协程切换实现细节。尽管总体原理相似，但具体到实现层面依然有许多待解决的问题，接下来一一讨论。
 </p>
 </div>
 
-<div id="outline-container-org686e546" class="outline-3">
-<h3 id="org686e546"><span class="section-number-3">4.1</span> X86</h3>
+<div id="outline-container-orgaacb83a" class="outline-3">
+<h3 id="orgaacb83a"><span class="section-number-3">4.1</span> X86</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 首先需要定义偏移，以定出偏移多少字节是哪个寄存器的内容。
@@ -383,13 +383,36 @@ ARM V8及以后的版本为64位。
 <span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>)
 </pre>
 </div>
+<p>
+由于要用eax寄存器，所以首先将eax进行了压栈。
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">pushl</span> <span style="color: #F0DFAF; font-weight: bold;">%eax</span>
+</pre>
+</div>
+<p>
+这一步完成之后，栈的结构如下图：
+</p>
+<pre class="example">
+16------------------- high address
+  | gotoContextAddr |
+12-------------------
+  | nowContextAddr  | stack     |
+8 ------------------- growth    |
+  | return address  | direction |
+4 -------------------           |
+  |       rax       |          \./
+0 ------------------- sp
+  |        .        |
+  |        .        | low address
+</pre>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 17:11</p>
+<p class="date">Created: 2019-03-12 Tue 17:29</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
