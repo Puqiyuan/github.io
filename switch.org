@@ -156,5 +156,14 @@ ARM V8及以后的版本为64位。
   |        .        |
   |        .        | low address
 #+END_EXAMPLE                 
+接下来取到用来存储当前任务环境的内存地址到eax：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "33-34"
 
+注意COROUTINE_WORD_SIZE*0x2为8，正好是用来存储当前任务环境的内存地址在栈中的偏移。
 
+接下来就是存储ebx、ecx、edx、esi、edi、ebp寄存器的内容，以先前定义好的偏移来存储。
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "34-40"
+直到要存储esp时，发现它的存储与前述几个寄存器都不一样，不再那么简单直接。这就引出存储当前
+任务环境时极其重要的一点意识：
+*进行存储的过程中，一定不能破坏进入到切换代码前(也就是我们自己写的汇编代码)的任务环境。*
+这一点相当重要，如果在编写切换代码过程中稍微不记住这点，就会引起难以察觉令人抓狂的bug。
