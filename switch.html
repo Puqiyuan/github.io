@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 14:17 -->
+<!-- 2019-03-12 Tue 14:23 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,10 +63,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org2972766">1. 协程概念</a></li>
-<li><a href="#orgdb8e183">2. 架构介绍</a>
+<li><a href="#org312b614">1. 协程概念</a></li>
+<li><a href="#org72fbb1f">2. 架构介绍</a>
 <ul>
-<li><a href="#orgc0466e9">2.1. X86</a></li>
+<li><a href="#org0bf478f">2.1. X86</a></li>
 </ul>
 </li>
 </ul>
@@ -76,8 +76,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-org2972766" class="outline-2">
-<h2 id="org2972766"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-org312b614" class="outline-2">
+<h2 id="org312b614"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -94,8 +94,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orgdb8e183" class="outline-2">
-<h2 id="orgdb8e183"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-org72fbb1f" class="outline-2">
+<h2 id="org72fbb1f"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -122,8 +122,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-orgc0466e9" class="outline-3">
-<h3 id="orgc0466e9"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-org0bf478f" class="outline-3">
+<h3 id="org0bf478f"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
@@ -138,6 +138,11 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 <li>调用惯例：参数被压栈。</li>
 <li>常用指令：
 <ul class="org-ul">
+<li>movl：在内存与寄存器或寄存器与寄存器之间移动数据。</li>
+<li>pushl：将内存或某个寄存器的内容压栈。</li>
+<li>ret：返回调用者。</li>
+<li>leal：将操作数所指地址而非内容加载到寄存器或内存地址中。</li>
+<li>subl：将两个操作数做减法。</li>
 <li></li>
 </ul></li>
 </ul>
@@ -147,7 +152,7 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 14:17</p>
+<p class="date">Created: 2019-03-12 Tue 14:23</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
