@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 15:48 -->
+<!-- 2019-03-12 Tue 17:04 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,12 +63,19 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgeac63fb">1. 协程概念</a></li>
-<li><a href="#org15e43ce">2. 架构介绍</a>
+<li><a href="#orgc1a09db">1. 协程概念</a></li>
+<li><a href="#org4caaac0">2. 架构介绍</a>
 <ul>
-<li><a href="#orge286c66">2.1. X86</a></li>
-<li><a href="#orgd48862a">2.2. X86-64</a></li>
-<li><a href="#org56d15e8">2.3. ARM32</a></li>
+<li><a href="#org3d22c8b">2.1. X86</a></li>
+<li><a href="#org9580b54">2.2. X86-64</a></li>
+<li><a href="#org01cfc62">2.3. ARM32</a></li>
+<li><a href="#org053760c">2.4. ARM64</a></li>
+</ul>
+</li>
+<li><a href="#org5483b75">3. 实现原理</a></li>
+<li><a href="#org065b525">4. 编码实现</a>
+<ul>
+<li><a href="#org38ae1aa">4.1. X86</a></li>
 </ul>
 </li>
 </ul>
@@ -78,8 +85,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-orgeac63fb" class="outline-2">
-<h2 id="orgeac63fb"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-orgc1a09db" class="outline-2">
+<h2 id="orgc1a09db"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -96,8 +103,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org15e43ce" class="outline-2">
-<h2 id="org15e43ce"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-org4caaac0" class="outline-2">
+<h2 id="org4caaac0"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -117,15 +124,15 @@ for the JavaScript code in this tag.
 
 <p>
 CPU架构经常的被分为复杂指令集（<a href="https://en.wikipedia.org/wiki/Complex_instruction_set_computer">CISC</a>）与精简指令集（<a href="https://en.wikipedia.org/wiki/Reduced_instruction_set_computer">RISC</a>）。常见的复杂指令集体系结构包括X86、
-X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的实现一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
+X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#orgb9588ee">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
 </p>
 
 <p>
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-orge286c66" class="outline-3">
-<h3 id="orge286c66"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-org3d22c8b" class="outline-3">
+<h3 id="org3d22c8b"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
@@ -150,8 +157,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 </div>
 
-<div id="outline-container-orgd48862a" class="outline-3">
-<h3 id="orgd48862a"><span class="section-number-3">2.2</span> X86-64</h3>
+<div id="outline-container-org9580b54" class="outline-3">
+<h3 id="org9580b54"><span class="section-number-3">2.2</span> X86-64</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 X86-64架构时X86架构的64位版，此架构具有64位机器字宽。
@@ -170,8 +177,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 </div>
 
-<div id="outline-container-org56d15e8" class="outline-3">
-<h3 id="org56d15e8"><span class="section-number-3">2.3</span> ARM32</h3>
+<div id="outline-container-org01cfc62" class="outline-3">
+<h3 id="org01cfc62"><span class="section-number-3">2.3</span> ARM32</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 此架构是ARM的32位版，ARM V7及以前的版本是为32位。
@@ -254,14 +261,110 @@ r15(pc)：程序计数器，指示当前运行的指令。下面是一个关于X
 </tbody>
 </table></li>
 </ul></li>
+
+<li>调用惯例：第一个参数会被送到r0寄存器。</li>
+<li>常用指令：
+<ul class="org-ul">
+<li>str：将寄存器的值存到内存。</li>
+<li>mov：在两个寄存器间移动值。</li>
+<li>ldr：将内存中的某个值加载到寄存器。</li>
+<li>push：将寄存器的值压栈。</li>
+<li>add：对操作数执行加操作。</li>
+</ul></li>
 </ul>
+</div>
+</div>
+
+
+<div id="outline-container-org053760c" class="outline-3">
+<h3 id="org053760c"><span class="section-number-3">2.4</span> ARM64</h3>
+<div class="outline-text-3" id="text-2-4">
+<p>
+ARM V8及以后的版本为64位。
+</p>
+<ul class="org-ul">
+<li>寄存器：x0-x30共计31个寄存器。x31依使用环境决定是用作什么目的的寄存器，作为栈时写作sp。
+特殊目的的寄存器包括：
+<ul class="org-ul">
+<li>x29：栈基址。</li>
+<li>x30：链接寄存器，用于存放返回地址。</li>
+</ul></li>
+
+<li>调用惯例：第一个参数被传往x0寄存器。</li>
+<li>常用指令：与ARM32类似，不同的是，ARM64下操作栈用stp和ldp指令并保证操作栈时16字节对齐，而不是ARM32的push与pop。返回调用调用者时用ret。</li>
+</ul>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-org5483b75" class="outline-2">
+<h2 id="org5483b75"><span class="section-number-2">3</span> 实现原理</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+本节将概要介绍实现原理，而具体的代码实现细节留待下节。讨论实现时，协程、上下文、任务它们几者互为同义词。在讨论实现时，我更愿意用任务，而实现程序中多用上下文。
+</p>
+
+<p>
+在CPU里定义任务环境：就是所有寄存器的内容。对于任务切换，我们需要保存当前任务环境，并恢复新任务的任务环境同时切换到新任务去运行。本实现分为两个方式：具有参数和不具有参数的切换。对于带参的，还需要按照调用惯例把参数传到相应的位置。
+</p>
+
+<p>
+当前的任务环境存放到某个内存地址，而在另一个内存地址又存放着新任务的任务环境。当然，任务环境是一个较大的结构体，因为要存储和恢复的不只是一个寄存器，以上述两个内存地址作为基址，偏移一定的字节就得到各个寄存器的内容。
+</p>
+</div>
+</div>
+
+
+<div id="outline-container-org065b525" class="outline-2">
+<h2 id="org065b525"><span class="section-number-2">4</span> 编码实现</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+<a id="orgb9588ee"></a>
+此节将会详细讨论各个平台上的协程切换实现细节。尽管总体原理相似，但具体到实现层面依然有许多待解决的问题，接下来一一讨论。
+</p>
+</div>
+
+<div id="outline-container-org38ae1aa" class="outline-3">
+<h3 id="org38ae1aa"><span class="section-number-3">4.1</span> X86</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+首先需要定义偏移，以定出偏移多少字节是哪个寄存器的内容。
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_EAX</span> (0x00*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_EBX</span> (0x01*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_ECX</span> (0x02*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_EDX</span> (0x03*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_ESP</span> (0x04*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_ESI</span> (0x05*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_EDI</span> (0x06*COROUTINE_WORD_SIZE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">COROUTINE_X86_REG_GEN_EBP</span> (0x07*COROUTINE_WORD_SIZE)
+</pre>
+</div>
+<p>
+其中，COROUTINE_WORD_SIZE是机器字宽，对于X86是4字节。
+</p>
+
+<p>
+接下来需要将两个内存地址传递到栈上，以便协程切换时使用，这两个地址是用户给出。以下内联汇编完成了这个工作：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">COROUTINE_X86_JMP</span>(<span style="color: #DFAF8F;">nowContextAddr</span>,<span style="color: #DFAF8F;">gotoContextAddr</span>) <span style="color: #F0DFAF; font-weight: bold;">__asm__</span> \
+  __volatile__(<span style="color: #CC9393;">"subl $0x8,%%esp;movl %0,0x4(%%esp);movl %1,(%%esp);\</span>
+<span style="color: #CC9393;">call CoroutineX86Jmp"</span>::<span style="color: #CC9393;">"r"</span>(gotoContextAddr),<span style="color: #CC9393;">"r"</span>(nowContextAddr):<span style="color: #CC9393;">"esp"</span>);
+</pre>
+</div>
+<p>
+关于内联汇编的知识可以参考<a href="https://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html">这里</a>。请注意这段代码只是Jmp方式的切换，即新任务不带参运行。先是开栈，然后先把下一个要运行的任务地址入栈，接下来用来存储当前任务环境的内存地址入栈。
+</p>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 15:48</p>
+<p class="date">Created: 2019-03-12 Tue 17:04</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
