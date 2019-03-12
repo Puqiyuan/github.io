@@ -2,3 +2,5 @@
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
+在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在
+文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
