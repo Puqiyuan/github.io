@@ -364,8 +364,9 @@ ARM64函数要开栈时，使用sub指令对栈指针进行减法操作，为了
 的空间。这样只能编码0-4095的立即数，但是ARM可开的栈空间可以原大于4095字节，这是因为ARM额外
 提供了两个比特位（具体到开栈，低位有效），当它有效时对12个比特位所代表的数字扩大2**12倍。
 下图是摘自[[https://developer.arm.com/docs/ddi0487/latest/arm-architecture-reference-manual-armv8-for-armv8-a-architecture-profile][ARM64官方手册]]C4-234页的一张图，此图完全决定了我们的程序应该如何编写：
-#+CAPTION: ARM64 sub指令编码方式
-#+LABEL: fig:
-#+ATTR_HTML: alt="" title="" align="center" width="500"
-[[./sub.png]]
+
+#+BEGIN_EXAMPLE
+31 30 29 28 27 26 25 24 |23   22| 21 20 19 18 17 16 15 14 13 12 11 10| 9 8 7 6 5| 4 3 2 1 0|
+sf op S  1  0  0  0  1  | shift |              imm12                 |    Rn    |   Rd     |
+#+END_EXAMPLE
 
