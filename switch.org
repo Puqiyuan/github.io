@@ -363,10 +363,43 @@ ARM64函数要开栈时，使用sub指令对栈指针进行减法操作，为了
 集的一个特点。固定长度的指令导致立即数的编码只能得到有限的空间，ARM64给予立即数12个比特位
 的空间。这样只能编码0-4095的立即数，但是ARM可开的栈空间可以原大于4095字节，这是因为ARM额外
 提供了两个比特位（具体到开栈，低位有效），当它有效时对12个比特位所代表的数字扩大2**12倍。
-下图是摘自[[https://developer.arm.com/docs/ddi0487/latest/arm-architecture-reference-manual-armv8-for-armv8-a-architecture-profile][ARM64官方手册]]C4-234页的一张图，此图完全决定了我们的程序应该如何编写：
+下图是改变自[[https://developer.arm.com/docs/ddi0487/latest/arm-architecture-reference-manual-armv8-for-armv8-a-architecture-profile][ARM64官方手册]]C4-234页的一张图，此图完全决定了我们的程序应该如何编写：
 
 #+BEGIN_EXAMPLE
+｜　　　　byte 3 　　　　　｜         byte 2           |       byte 1         |    byte 0      |
 31 30 29 28 27 26 25 24 |23   22| 21 20 19 18 17 16 15 14 13 12 11 10| 9 8 7 6 5| 4 3 2 1 0|
 sf op S  1  0  0  0  1  | shift |              imm12                 |    Rn    |   Rd     |
 #+END_EXAMPLE
+
+对于开栈指令，0-9比特位都为1。sf，op也为1，而S为1。这些比特位的具体意义也可以参照ARM64官方
+手册，之于我们的目的——计算栈大小，只需知道0-9比特位都为1，sf，op也为1，S为0确定了这是一条
+开栈指令，然后要判断该指令中的立即数是否需要移位，即扩大2**12倍。这是由23与22位比特决定。
+然后就是取出10-21比特的立即数进行运算取得栈大小。
+
+实现代码如下图：
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "3-39"
+byteCode是传进来的机器指令，而codeSize暂时未用到。ARM64开栈最多两条操作栈指针的sub指令，所
+以：
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "7-8"
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "21-22"
+判断了函数代码段开头两句是否是开栈指令。我们仅分析第一条指令提取栈大小的实现逻辑，第二条类
+似。
+
+注意ARM64默认是小端架构，所以低字节在低地址端，高字节在高地址端。为了确定第22，23比特是否
+置位，我们用byte2与0xc0作与运算，0xc0来源是二进制11000000。
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "9-10"
+
+接着取出了立即数的高六个比特位，将byte2与0x3f作与运算，0x3f的来源是二进制00111111。注意最
+后这六个比特需要左移6位，因为前述的0x3f与运算丢弃了六位。
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "10-11"
+
+然后类似的取出低六比特位，注意最后要右移两位。
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "11-12"
+
+最后根据是否需要扩大2**12倍来计算最终栈大小。
+#+INCLUDE: "../STACKCALFINISHED/testaarch64/stack_size.c" src c:lines "14-19"
+
+
+
+
 
