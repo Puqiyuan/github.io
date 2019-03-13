@@ -1,12 +1,11 @@
 #+TITLE: 协程切换实现
-#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
 #+OPTIONS: ^:nil
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
 如果你在阅读本文时有任何疑惑，我多半怀疑那是我没有表达清楚，因为讲清楚切换这种细微的事并不
 是一件容易的事。我希望你投入到本文档的时间是值得的，能收获一些东西，所以如果有任何疑问请联
-系作者。
-
+系作者pqy7172@gmail.com
 
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在
 文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
