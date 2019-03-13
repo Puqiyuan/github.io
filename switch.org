@@ -53,6 +53,7 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
   求，这一点下面的其它体系结类似。这些由编译器指明的特殊寄存器的常见用途包括：
   - esp：栈指针，指示栈顶在何处。
   - ebp：指示栈基址。
+    <<x86call>>
 - 调用惯例：参数被压栈。
 - 常用指令：
   - movl：在内存与寄存器或寄存器与寄存器之间移动数据。
@@ -114,6 +115,7 @@ ARM V8及以后的版本为64位。
   
     
 * 实现原理
+<<原理>>
 本节将概要介绍实现原理，而具体的代码实现细节留待下节。讨论实现时，协程、上下文、任
 务它们几者互为同义词。在讨论实现时，我更愿意用任务，而实现程序中多用上下文。
 
@@ -128,18 +130,21 @@ ARM V8及以后的版本为64位。
 下面这个图来解释实现原理应该会更加清晰：
 
 #+BEGIN_EXAMPLE
---------- current task          --------- resuming task
-|  r0   | store address         |  r0   | memory address
----------                       ---------
-|  r1   |                       |  r1   |
----------   \            /      ---------
-|   .   |    \          /       |   .   |
-|   .   |    1\        /2       |   .   |
-               \      /
+________________________________________________________
+--------- current task          --------- resuming task |
+|  r0   | store address         |  r0   | memory address|
+---------                       ---------               |
+|  r1   |                       |  r1   |               |
+---------   \            /      ---------               |
+|   .   |    \          /       |   .   |               |
+|   .   |    1\        /2       |   .   |               |
+               \      /                                 |
+_____________________________________________memory_____|               
               ----------
               |switcher| the codes that you implement
               ----------
-              1|      |2
+              /|\     |2
+              1|     \|/
            ----------------
            |r0, r1, r2, r3|
            |r4, r5, r6, r7|
@@ -172,7 +177,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 任务环境和恢复新任务环境两大部分，注意这只是Jmp方式的切换，即 =CoroutineX86Jmp= 函数。最后
 会给出Call方式实现与Jmp的不同之处。
 
-*** 保存当前任务环境
+*** 保存任务环境
 第一步当然是保存当前的任务环境：
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-46"
 
@@ -181,6 +186,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 由于要用eax寄存器，所以首先将eax进行了压栈。
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-33"
 这一步完成之后，栈的结构如下图：
+<<stack>>
 #+BEGIN_EXAMPLE
 16------------------- high address
   | gotoContextAddr |
@@ -210,5 +216,58 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 我们来看这两行代码：
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "40-42"
 [[x86intro][前文]]介绍过leal指令的作用，它并不是将栈偏移 =COROUTINE_WORD_SIZE*0x4=
-的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务
+为16的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务存储地址起始
+偏移 =COROUTINE_X86_REG_GEN_ESP= 也就是说 =sp+16= 作为了当前任务环境的栈指针，这是合理的，
+因为[[stack][图中]]栈上的元素都是我们切换器代码压入的，这些压入动作影响了原来当前任务的栈指针，回退16
+字节才是当前任务环境的栈指针。
+
+当前任务环境的eip存储也不那么直接简单，这涉及有关切换的几个任务之间的关系分析。下图应该能
+清晰反映调用者（caller）、切换代码（switcher）、存储当前任务环境的内存地址(current task)三
+者之间的关系。
+
+#+BEGIN_EXAMPLE
+   caller                              stack                                      current task
+-------------  1:put return        -------------                                    --------
+|statement 1|  return address    \ |    ...    |                                    |  r0  |
+|   call----|--------------------- ------------- return address ---------- 3:store \--------
+|statement 3|         |          / |statement 3|----------------|switcher|----------|  eip |
+|    ...    |         |            -------------                ---------- return  /|   .  |
+                      |            |    ...    |                   /|\     address  |   .  |
+                      |                                             |               -memory-
+                      |_____________________________________________|              context of
+                                     2:call switcher                                 caller
+#+END_EXAMPLE     
+X86架构在调用函数（ =CoroutineX86Jmp= ）时会自动将返回地址压栈，图中步骤1，在调用
+=CoroutineX86Jmp= 后， =CoroutineX86Jmp= 也将作为一个任务，但我们要保存的是调用者（caller）
+的返回地址。
+
+所以接下来保存eip的代码就不难理解了：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "42-44"
+=COROUTINE_WORD_SIZE*0x1= 为4，即是返回地址在栈上的偏移。
+最后一步保存eax寄存器的值，eax在栈顶，一进来 =CoroutineX86Jmp= 函数eax就被压栈保存了。
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "44-46"
+
+完成了当前任务环境的保存，接下来应该恢复要运行任务的任务环境。
+*** 恢复任务环境
+这段代码是 =CoroutineX86Jmp= 的第二部分，代码如下：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "48-59"
+下面逐一分析这段代码。
+
+根据实现[[原理][实现原理]]，要恢复运行任务的环境存放于某个内存地址，在[[准备][准备]]一节我们又把它移到了栈上。
+所以首先是取出这个任务的地址：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "48-49"
+接下来就是一串的恢复寄存器：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "49-56"
+
+在恢复eip时，我们又遭遇了不那么简单直接的操作，这涉及X86的程序控制转交机制。最后一句指令是
+ret，这句指令具体所作是将控制流转移到栈顶所存的地址，所以先就将要恢复任务的eip压到了栈上，
+现在来看下面的代码就不难理解了：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "56-60"
+
+*** Call方式
+Call方式多了一个参数，导致了其栈结构与Jmp方式不一样，其它类似于Jmp方式的实现，根据X86的[[x86call][调
+用惯例]]，我们要保证在切换到新任务运行前参数被放置于正确的位置－即栈上。
+
+以下代码是调用 =CoroutineX86Call= 的代码：
+#+INCLUDE: "../coroutineARM64/pub_coroutine.h" src asm:lines "43-46"
 

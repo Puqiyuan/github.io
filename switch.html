@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-13 Wed 09:45 -->
+<!-- 2019-03-13 Wed 11:34 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,22 +63,24 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org8b7ca36">1. 协程概念</a></li>
-<li><a href="#orgddc20a7">2. 架构介绍</a>
+<li><a href="#orgb16a6d4">1. 协程概念</a></li>
+<li><a href="#org982d5d4">2. 架构介绍</a>
 <ul>
-<li><a href="#org6405473">2.1. X86</a></li>
-<li><a href="#orgda11685">2.2. X86-64</a></li>
-<li><a href="#orgb03fcc1">2.3. ARM32</a></li>
-<li><a href="#org76c5ce9">2.4. ARM64</a></li>
+<li><a href="#org92a05b4">2.1. X86</a></li>
+<li><a href="#orgafb5990">2.2. X86-64</a></li>
+<li><a href="#org4ddfc64">2.3. ARM32</a></li>
+<li><a href="#orgff955b3">2.4. ARM64</a></li>
 </ul>
 </li>
-<li><a href="#orge86105c">3. 实现原理</a></li>
-<li><a href="#org383f39d">4. 编码实现</a>
+<li><a href="#orgd484231">3. 实现原理</a></li>
+<li><a href="#org332dd2f">4. 编码实现</a>
 <ul>
-<li><a href="#orga825493">4.1. X86</a>
+<li><a href="#org2cda055">4.1. X86</a>
 <ul>
-<li><a href="#orgfbb67e5">4.1.1. 准备</a></li>
-<li><a href="#orgf8a4db2">4.1.2. 保存当前任务环境</a></li>
+<li><a href="#orgb4a552a">4.1.1. 准备</a></li>
+<li><a href="#orgdacb69a">4.1.2. 保存任务环境</a></li>
+<li><a href="#org758ca5b">4.1.3. 恢复任务环境</a></li>
+<li><a href="#org271db3c">4.1.4. Call方式</a></li>
 </ul>
 </li>
 </ul>
@@ -95,8 +97,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-org8b7ca36" class="outline-2">
-<h2 id="org8b7ca36"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-orgb16a6d4" class="outline-2">
+<h2 id="orgb16a6d4"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -113,8 +115,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orgddc20a7" class="outline-2">
-<h2 id="orgddc20a7"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-org982d5d4" class="outline-2">
+<h2 id="org982d5d4"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -134,25 +136,26 @@ for the JavaScript code in this tag.
 
 <p>
 CPU架构经常的被分为复杂指令集（<a href="https://en.wikipedia.org/wiki/Complex_instruction_set_computer">CISC</a>）与精简指令集（<a href="https://en.wikipedia.org/wiki/Reduced_instruction_set_computer">RISC</a>）。常见的复杂指令集体系结构包括X86、
-X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org477e17b">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
+X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org9009cc1">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
 </p>
 
 <p>
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-org6405473" class="outline-3">
-<h3 id="org6405473"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-org92a05b4" class="outline-3">
+<h3 id="org92a05b4"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
-<a id="orgc065230"></a>
+<a id="org807f1bc"></a>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
 </p>
 <ul class="org-ul">
 <li>寄存器：包括八个通用寄存器eax、ebx、ecx、edx、esi、edi、ebp、esp。一个特殊寄存器eip用来指向当前所要运行的指令。通常编译器会赋予某些通用寄存器以特殊的用途，但体系结构层面并未如此强制要求，这一点下面的其它体系结类似。这些由编译器指明的特殊寄存器的常见用途包括：
 <ul class="org-ul">
 <li>esp：栈指针，指示栈顶在何处。</li>
-<li>ebp：指示栈基址。</li>
+<li>ebp：指示栈基址。
+<a id="orgc21e491"></a></li>
 </ul></li>
 <li>调用惯例：参数被压栈。</li>
 <li>常用指令：
@@ -168,8 +171,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 </div>
 
-<div id="outline-container-orgda11685" class="outline-3">
-<h3 id="orgda11685"><span class="section-number-3">2.2</span> X86-64</h3>
+<div id="outline-container-orgafb5990" class="outline-3">
+<h3 id="orgafb5990"><span class="section-number-3">2.2</span> X86-64</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 X86-64架构时X86架构的64位版，此架构具有64位机器字宽。
@@ -188,8 +191,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 </div>
 
-<div id="outline-container-orgb03fcc1" class="outline-3">
-<h3 id="orgb03fcc1"><span class="section-number-3">2.3</span> ARM32</h3>
+<div id="outline-container-org4ddfc64" class="outline-3">
+<h3 id="org4ddfc64"><span class="section-number-3">2.3</span> ARM32</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 此架构是ARM的32位版，ARM V7及以前的版本是为32位。
@@ -287,8 +290,8 @@ r15(pc)：程序计数器，指示当前运行的指令。下面是一个关于X
 </div>
 
 
-<div id="outline-container-org76c5ce9" class="outline-3">
-<h3 id="org76c5ce9"><span class="section-number-3">2.4</span> ARM64</h3>
+<div id="outline-container-orgff955b3" class="outline-3">
+<h3 id="orgff955b3"><span class="section-number-3">2.4</span> ARM64</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
 ARM V8及以后的版本为64位。
@@ -309,10 +312,11 @@ ARM V8及以后的版本为64位。
 </div>
 
 
-<div id="outline-container-orge86105c" class="outline-2">
-<h2 id="orge86105c"><span class="section-number-2">3</span> 实现原理</h2>
+<div id="outline-container-orgd484231" class="outline-2">
+<h2 id="orgd484231"><span class="section-number-2">3</span> 实现原理</h2>
 <div class="outline-text-2" id="text-3">
 <p>
+<a id="orgd449418"></a>
 本节将概要介绍实现原理，而具体的代码实现细节留待下节。讨论实现时，协程、上下文、任务它们几者互为同义词。在讨论实现时，我更愿意用任务，而实现程序中多用上下文。
 </p>
 
@@ -329,18 +333,21 @@ ARM V8及以后的版本为64位。
 </p>
 
 <pre class="example">
---------- current task          --------- resuming task
-|  r0   | store address         |  r0   | memory address
----------                       ---------
-|  r1   |                       |  r1   |
----------   \            /      ---------
-|   .   |    \          /       |   .   |
-|   .   |    1\        /2       |   .   |
-               \      /
+________________________________________________________
+--------- current task          --------- resuming task |
+|  r0   | store address         |  r0   | memory address|
+---------                       ---------               |
+|  r1   |                       |  r1   |               |
+---------   \            /      ---------               |
+|   .   |    \          /       |   .   |               |
+|   .   |    1\        /2       |   .   |               |
+               \      /                                 |
+_____________________________________________memory_____|               
               ----------
               |switcher| the codes that you implement
               ----------
-              1|      |2
+              /|\     |2
+              1|     \|/
            ----------------
            |r0, r1, r2, r3|
            |r4, r5, r6, r7|
@@ -351,27 +358,27 @@ ARM V8及以后的版本为64位。
 </div>
 </div>
 
-<div id="outline-container-org383f39d" class="outline-2">
-<h2 id="org383f39d"><span class="section-number-2">4</span> 编码实现</h2>
+<div id="outline-container-org332dd2f" class="outline-2">
+<h2 id="org332dd2f"><span class="section-number-2">4</span> 编码实现</h2>
 <div class="outline-text-2" id="text-4">
 <p>
-<a id="org477e17b"></a>
+<a id="org9009cc1"></a>
 此节将会详细讨论各个平台上的协程切换实现细节。尽管总体原理相似，但具体到实现层面依然有许多待解决的问题，接下来一一讨论。
 </p>
 </div>
 
-<div id="outline-container-orga825493" class="outline-3">
-<h3 id="orga825493"><span class="section-number-3">4.1</span> X86</h3>
+<div id="outline-container-org2cda055" class="outline-3">
+<h3 id="org2cda055"><span class="section-number-3">4.1</span> X86</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </p>
 </div>
-<div id="outline-container-orgfbb67e5" class="outline-4">
-<h4 id="orgfbb67e5"><span class="section-number-4">4.1.1</span> 准备</h4>
+<div id="outline-container-orgb4a552a" class="outline-4">
+<h4 id="orgb4a552a"><span class="section-number-4">4.1.1</span> 准备</h4>
 <div class="outline-text-4" id="text-4-1-1">
 <p>
-<a id="org0dbaefe"></a>
+<a id="org8301741"></a>
 首先需要定义偏移，以定出偏移多少字节是哪个寄存器的内容。
 </p>
 <div class="org-src-container">
@@ -409,8 +416,8 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </div>
 </div>
 
-<div id="outline-container-orgf8a4db2" class="outline-4">
-<h4 id="orgf8a4db2"><span class="section-number-4">4.1.2</span> 保存当前任务环境</h4>
+<div id="outline-container-orgdacb69a" class="outline-4">
+<h4 id="orgdacb69a"><span class="section-number-4">4.1.2</span> 保存任务环境</h4>
 <div class="outline-text-4" id="text-4-1-2">
 <p>
 第一步当然是保存当前的任务环境：
@@ -446,6 +453,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </div>
 <p>
 这一步完成之后，栈的结构如下图：
+<a id="orgdd66d75"></a>
 </p>
 <pre class="example">
 16------------------- high address
@@ -461,7 +469,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
   |        .        | low address
 </pre>
 <p>
-其中， <code>gotoContextAddr</code> 和 <code>nowContextAddr</code> 是在<a href="#org0dbaefe">准备</a>一节压入栈的，而在那一节调用
+其中， <code>gotoContextAddr</code> 和 <code>nowContextAddr</code> 是在<a href="#org8301741">准备</a>一节压入栈的，而在那一节调用
 <code>CoroutineX86Jmp</code> 函数时，会将 <code>return address</code>
 压入栈。接下来取到用来存储当前任务环境的内存地址到eax：
 </p>
@@ -498,9 +506,133 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </pre>
 </div>
 <p>
-<a href="#orgc065230">前文</a>介绍过leal指令的作用，它并不是将栈偏移 <code>COROUTINE_WORD_SIZE*0x4</code>
-的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务
+<a href="#org807f1bc">前文</a>介绍过leal指令的作用，它并不是将栈偏移 <code>COROUTINE_WORD_SIZE*0x4</code>
+为16的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务存储地址起始偏移 <code>COROUTINE_X86_REG_GEN_ESP</code> 也就是说 <code>sp+16</code> 作为了当前任务环境的栈指针，这是合理的，
+因为<a href="#orgdd66d75">图中</a>栈上的元素都是我们切换器代码压入的，这些压入动作影响了原来当前任务的栈指针，回退16
+字节才是当前任务环境的栈指针。
 </p>
+
+<p>
+当前任务环境的eip存储也不那么直接简单，这涉及有关切换的几个任务之间的关系分析。下图应该能清晰反映调用者（caller）、切换代码（switcher）、存储当前任务环境的内存地址(current task)三者之间的关系。
+</p>
+
+<pre class="example">
+   caller                              stack                                      current task
+-------------  1:put return        -------------                                    --------
+|statement 1|  return address    \ |    ...    |                                    |  r0  |
+|   call----|--------------------- ------------- return address ---------- 3:store \--------
+|statement 3|         |          / |statement 3|----------------|switcher|----------|  eip |
+|    ...    |         |            -------------                ---------- return  /|   .  |
+                      |            |    ...    |                   /|\     address  |   .  |
+                      |                                             |               -memory-
+                      |_____________________________________________|              context of
+                                     2:call switcher                                 caller
+</pre>
+<p>
+X86架构在调用函数（ <code>CoroutineX86Jmp</code> ）时会自动将返回地址压栈，图中步骤1，在调用
+<code>CoroutineX86Jmp</code> 后， <code>CoroutineX86Jmp</code> 也将作为一个任务，但我们要保存的是调用者（caller）
+的返回地址。
+</p>
+
+<p>
+所以接下来保存eip的代码就不难理解了：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x1)(<span style="color: #DFAF8F;">%esp</span>) ,<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_EIP(<span style="color: #DFAF8F;">%eax</span>)  
+</pre>
+</div>
+<p>
+<code>COROUTINE_WORD_SIZE*0x1</code> 为4，即是返回地址在栈上的偏移。
+最后一步保存eax寄存器的值，eax在栈顶，一进来 <code>CoroutineX86Jmp</code> 函数eax就被压栈保存了。
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (<span style="color: #DFAF8F;">%esp</span>) ,<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>)
+</pre>
+</div>
+
+<p>
+完成了当前任务环境的保存，接下来应该恢复要运行任务的任务环境。
+</p>
+</div>
+</div>
+<div id="outline-container-org758ca5b" class="outline-4">
+<h4 id="org758ca5b"><span class="section-number-4">4.1.3</span> 恢复任务环境</h4>
+<div class="outline-text-4" id="text-4-1-3">
+<p>
+这段代码是 <code>CoroutineX86Jmp</code> 的第二部分，代码如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x3)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%eax</span> 
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EBX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebx</span> 
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ECX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EDX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%edx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ESI(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%esi</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EDI(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%edi</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EBP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebp</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ESP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%esp</span> 
+<span style="color: #93E0E3;">pushl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EIP(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%eax</span>
+<span style="color: #93E0E3;">ret</span>
+</pre>
+</div>
+<p>
+下面逐一分析这段代码。
+</p>
+
+<p>
+根据实现<a href="#orgd449418">实现原理</a>，要恢复运行任务的环境存放于某个内存地址，在<a href="#org8301741">准备</a>一节我们又把它移到了栈上。
+所以首先是取出这个任务的地址：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x3)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%eax</span> 
+</pre>
+</div>
+<p>
+接下来就是一串的恢复寄存器：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EBX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebx</span> 
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ECX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EDX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%edx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ESI(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%esi</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EDI(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%edi</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EBP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebp</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ESP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%esp</span> 
+</pre>
+</div>
+
+<p>
+在恢复eip时，我们又遭遇了不那么简单直接的操作，这涉及X86的程序控制转交机制。最后一句指令是
+ret，这句指令具体所作是将控制流转移到栈顶所存的地址，所以先就将要恢复任务的eip压到了栈上，
+现在来看下面的代码就不难理解了：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">pushl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EIP(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%eax</span>
+<span style="color: #93E0E3;">ret</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org271db3c" class="outline-4">
+<h4 id="org271db3c"><span class="section-number-4">4.1.4</span> Call方式</h4>
+<div class="outline-text-4" id="text-4-1-4">
+<p>
+Call方式多了一个参数，导致了其栈结构与Jmp方式不一样，其它类似于Jmp方式的实现，根据X86的<a href="#orgc21e491">调用惯例</a>，我们要保证在切换到新任务运行前参数被放置于正确的位置－即栈上。
+</p>
+
+<p>
+以下代码是调用 <code>CoroutineX86Call</code> 的代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">COROUTINE_X86_CALL</span>(<span style="color: #DFAF8F;">nowContextAddr</span>,<span style="color: #DFAF8F;">gotoContextAddr</span>,<span style="color: #DFAF8F;">param</span>) __asm__ \
+  <span style="color: #F0DFAF; font-weight: bold;">__volatile__</span>(<span style="color: #CC9393;">"subl $0x0c,%%esp;movl %0,0x8(%%esp);movl %1,0x4(%%esp);movl %2,(%%esp);\</span>
+<span style="color: #CC9393;">call CoroutineX86Call"</span>::<span style="color: #CC9393;">"r"</span>(param),<span style="color: #CC9393;">"r"</span>(gotoContextAddr),<span style="color: #CC9393;">"r"</span>(nowContextAddr):<span style="color: #CC9393;">"esp"</span>)<span style="color: #5F7F5F;">;</span>
+</pre>
+</div>
 </div>
 </div>
 </div>
@@ -508,7 +640,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-13 Wed 09:45</p>
+<p class="date">Created: 2019-03-13 Wed 11:34</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
