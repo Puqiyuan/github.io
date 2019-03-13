@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-12 Tue 17:50 -->
+<!-- 2019-03-13 Wed 09:45 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
@@ -63,30 +63,40 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgafb975c">1. 协程概念</a></li>
-<li><a href="#org376d142">2. 架构介绍</a>
+<li><a href="#org8b7ca36">1. 协程概念</a></li>
+<li><a href="#orgddc20a7">2. 架构介绍</a>
 <ul>
-<li><a href="#org760f8f8">2.1. X86</a></li>
-<li><a href="#org8c6c614">2.2. X86-64</a></li>
-<li><a href="#orge00db40">2.3. ARM32</a></li>
-<li><a href="#orge8cde0f">2.4. ARM64</a></li>
+<li><a href="#org6405473">2.1. X86</a></li>
+<li><a href="#orgda11685">2.2. X86-64</a></li>
+<li><a href="#orgb03fcc1">2.3. ARM32</a></li>
+<li><a href="#org76c5ce9">2.4. ARM64</a></li>
 </ul>
 </li>
-<li><a href="#orgbec4bc8">3. 实现原理</a></li>
-<li><a href="#orge68f722">4. 编码实现</a>
+<li><a href="#orge86105c">3. 实现原理</a></li>
+<li><a href="#org383f39d">4. 编码实现</a>
 <ul>
-<li><a href="#org4ffdc28">4.1. X86</a></li>
+<li><a href="#orga825493">4.1. X86</a>
+<ul>
+<li><a href="#orgfbb67e5">4.1.1. 准备</a></li>
+<li><a href="#orgf8a4db2">4.1.2. 保存当前任务环境</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
 <p>
+如果你在阅读本文时有任何疑惑，我多半怀疑那是我没有表达清楚，因为讲清楚切换这种细微的事并不是一件容易的事。我希望你投入到本文档的时间是值得的，能收获一些东西，所以如果有任何疑问请联系作者。
+</p>
+
+
+<p>
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-orgafb975c" class="outline-2">
-<h2 id="orgafb975c"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-org8b7ca36" class="outline-2">
+<h2 id="org8b7ca36"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -103,8 +113,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org376d142" class="outline-2">
-<h2 id="org376d142"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-orgddc20a7" class="outline-2">
+<h2 id="orgddc20a7"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -124,17 +134,18 @@ for the JavaScript code in this tag.
 
 <p>
 CPU架构经常的被分为复杂指令集（<a href="https://en.wikipedia.org/wiki/Complex_instruction_set_computer">CISC</a>）与精简指令集（<a href="https://en.wikipedia.org/wiki/Reduced_instruction_set_computer">RISC</a>）。常见的复杂指令集体系结构包括X86、
-X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org1498dfd">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
+X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org477e17b">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
 </p>
 
 <p>
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-org760f8f8" class="outline-3">
-<h3 id="org760f8f8"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-org6405473" class="outline-3">
+<h3 id="org6405473"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
+<a id="orgc065230"></a>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
 </p>
 <ul class="org-ul">
@@ -157,8 +168,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 </div>
 
-<div id="outline-container-org8c6c614" class="outline-3">
-<h3 id="org8c6c614"><span class="section-number-3">2.2</span> X86-64</h3>
+<div id="outline-container-orgda11685" class="outline-3">
+<h3 id="orgda11685"><span class="section-number-3">2.2</span> X86-64</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 X86-64架构时X86架构的64位版，此架构具有64位机器字宽。
@@ -177,8 +188,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 </div>
 
-<div id="outline-container-orge00db40" class="outline-3">
-<h3 id="orge00db40"><span class="section-number-3">2.3</span> ARM32</h3>
+<div id="outline-container-orgb03fcc1" class="outline-3">
+<h3 id="orgb03fcc1"><span class="section-number-3">2.3</span> ARM32</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 此架构是ARM的32位版，ARM V7及以前的版本是为32位。
@@ -276,8 +287,8 @@ r15(pc)：程序计数器，指示当前运行的指令。下面是一个关于X
 </div>
 
 
-<div id="outline-container-orge8cde0f" class="outline-3">
-<h3 id="orge8cde0f"><span class="section-number-3">2.4</span> ARM64</h3>
+<div id="outline-container-org76c5ce9" class="outline-3">
+<h3 id="org76c5ce9"><span class="section-number-3">2.4</span> ARM64</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
 ARM V8及以后的版本为64位。
@@ -298,8 +309,8 @@ ARM V8及以后的版本为64位。
 </div>
 
 
-<div id="outline-container-orgbec4bc8" class="outline-2">
-<h2 id="orgbec4bc8"><span class="section-number-2">3</span> 实现原理</h2>
+<div id="outline-container-orge86105c" class="outline-2">
+<h2 id="orge86105c"><span class="section-number-2">3</span> 实现原理</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 本节将概要介绍实现原理，而具体的代码实现细节留待下节。讨论实现时，协程、上下文、任务它们几者互为同义词。在讨论实现时，我更愿意用任务，而实现程序中多用上下文。
@@ -312,23 +323,55 @@ ARM V8及以后的版本为64位。
 <p>
 当前的任务环境存放到某个内存地址，而在另一个内存地址又存放着新任务的任务环境。当然，任务环境是一个较大的结构体，因为要存储和恢复的不只是一个寄存器，以上述两个内存地址作为基址，偏移一定的字节就得到各个寄存器的内容。
 </p>
+
+<p>
+下面这个图来解释实现原理应该会更加清晰：
+</p>
+
+<pre class="example">
+--------- current task          --------- resuming task
+|  r0   | store address         |  r0   | memory address
+---------                       ---------
+|  r1   |                       |  r1   |
+---------   \            /      ---------
+|   .   |    \          /       |   .   |
+|   .   |    1\        /2       |   .   |
+               \      /
+              ----------
+              |switcher| the codes that you implement
+              ----------
+              1|      |2
+           ----------------
+           |r0, r1, r2, r3|
+           |r4, r5, r6, r7|
+           |     ...      |
+           ----------------
+                 CPU
+</pre>
 </div>
 </div>
 
-
-<div id="outline-container-orge68f722" class="outline-2">
-<h2 id="orge68f722"><span class="section-number-2">4</span> 编码实现</h2>
+<div id="outline-container-org383f39d" class="outline-2">
+<h2 id="org383f39d"><span class="section-number-2">4</span> 编码实现</h2>
 <div class="outline-text-2" id="text-4">
 <p>
-<a id="org1498dfd"></a>
+<a id="org477e17b"></a>
 此节将会详细讨论各个平台上的协程切换实现细节。尽管总体原理相似，但具体到实现层面依然有许多待解决的问题，接下来一一讨论。
 </p>
 </div>
 
-<div id="outline-container-org4ffdc28" class="outline-3">
-<h3 id="org4ffdc28"><span class="section-number-3">4.1</span> X86</h3>
+<div id="outline-container-orga825493" class="outline-3">
+<h3 id="orga825493"><span class="section-number-3">4.1</span> X86</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
+X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
+</p>
+</div>
+<div id="outline-container-orgfbb67e5" class="outline-4">
+<h4 id="orgfbb67e5"><span class="section-number-4">4.1.1</span> 准备</h4>
+<div class="outline-text-4" id="text-4-1-1">
+<p>
+<a id="org0dbaefe"></a>
 首先需要定义偏移，以定出偏移多少字节是哪个寄存器的内容。
 </p>
 <div class="org-src-container">
@@ -359,10 +402,16 @@ ARM V8及以后的版本为64位。
 关于内联汇编的知识可以参考<a href="https://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html">这里</a>。请注意这段代码只是Jmp方式的切换，即新任务不带参运行。先是开栈，然后先把下一个要运行的任务地址入栈，接下来用来存储当前任务环境的内存地址入栈。
 </p>
 
-<p>
-做好了准备工作就可以正式进行切换工作了。
-</p>
 
+<p>
+做好了准备工作就可以正式进行切换工作了。下面的两小节都是核心的切换代码部分，它包括保存当前任务环境和恢复新任务环境两大部分，注意这只是Jmp方式的切换，即 <code>CoroutineX86Jmp</code> 函数。最后会给出Call方式实现与Jmp的不同之处。
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgf8a4db2" class="outline-4">
+<h4 id="orgf8a4db2"><span class="section-number-4">4.1.2</span> 保存当前任务环境</h4>
+<div class="outline-text-4" id="text-4-1-2">
 <p>
 第一步当然是保存当前的任务环境：
 </p>
@@ -383,6 +432,11 @@ ARM V8及以后的版本为64位。
 <span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>)
 </pre>
 </div>
+
+<p>
+下面一一分析这段代码以及其中隐藏的陷阱。
+</p>
+
 <p>
 由于要用eax寄存器，所以首先将eax进行了压栈。
 </p>
@@ -407,7 +461,9 @@ ARM V8及以后的版本为64位。
   |        .        | low address
 </pre>
 <p>
-接下来取到用来存储当前任务环境的内存地址到eax：
+其中， <code>gotoContextAddr</code> 和 <code>nowContextAddr</code> 是在<a href="#org0dbaefe">准备</a>一节压入栈的，而在那一节调用
+<code>CoroutineX86Jmp</code> 函数时，会将 <code>return address</code>
+压入栈。接下来取到用来存储当前任务环境的内存地址到eax：
 </p>
 <div class="org-src-container">
 <pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x2)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%eax</span>
@@ -415,7 +471,7 @@ ARM V8及以后的版本为64位。
 </div>
 
 <p>
-注意COROUTINE_WORD_SIZE*0x2为8，正好是用来存储当前任务环境的内存地址在栈中的偏移。
+注意 <code>COROUTINE_WORD_SIZE*0x2</code> 为8，正好是用来存储当前任务环境的内存地址在栈中的偏移。
 </p>
 
 <p>
@@ -433,15 +489,26 @@ ARM V8及以后的版本为64位。
 <p>
 直到要存储esp时，发现它的存储与前述几个寄存器都不一样，不再那么简单直接。这就引出存储当前任务环境时极其重要的一点意识：
 <b>进行存储的过程中，一定不能破坏进入到切换代码前(也就是我们自己写的汇编代码)的任务环境。</b>
-这一点相当重要，如果在编写切换代码过程中稍微不记住这点，就会引起难以察觉令人抓狂的bug。
+这一点相当重要，如果在编写切换代码过程中稍微不记住这点，就可能会引起难以察觉令人抓狂的bug。
+我们来看这两行代码：
 </p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">leal</span> (COROUTINE_WORD_SIZE*0x4)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_ESP(<span style="color: #DFAF8F;">%eax</span>)
+</pre>
+</div>
+<p>
+<a href="#orgc065230">前文</a>介绍过leal指令的作用，它并不是将栈偏移 <code>COROUTINE_WORD_SIZE*0x4</code>
+的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务
+</p>
+</div>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-12 Tue 17:50</p>
+<p class="date">Created: 2019-03-13 Wed 09:45</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

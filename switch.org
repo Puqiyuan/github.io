@@ -3,6 +3,11 @@
 #+EMAIL: pqy7172@gmail.com
 #+OPTIONS: ^:nil
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
+如果你在阅读本文时有任何疑惑，我多半怀疑那是我没有表达清楚，因为讲清楚切换这种细微的事并不
+是一件容易的事。我希望你投入到本文档的时间是值得的，能收获一些东西，所以如果有任何疑问请联
+系作者。
+
+
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在
 文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 
@@ -41,6 +46,7 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 ** X86
+<<x86intro>>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
 - 寄存器：包括八个通用寄存器eax、ebx、ecx、edx、esi、edi、ebp、esp。一个特殊寄存器eip用来指向当前
   所要运行的指令。通常编译器会赋予某些通用寄存器以特殊的用途，但体系结构层面并未如此强制要
@@ -119,6 +125,28 @@ ARM V8及以后的版本为64位。
 境是一个较大的结构体，因为要存储和恢复的不只是一个寄存器，以上述两个内存地址作为基址，偏移
 一定的字节就得到各个寄存器的内容。
 
+下面这个图来解释实现原理应该会更加清晰：
+
+#+BEGIN_EXAMPLE
+--------- current task          --------- resuming task
+|  r0   | store address         |  r0   | memory address
+---------                       ---------
+|  r1   |                       |  r1   |
+---------   \            /      ---------
+|   .   |    \          /       |   .   |
+|   .   |    1\        /2       |   .   |
+               \      /
+              ----------
+              |switcher| the codes that you implement
+              ----------
+              1|      |2
+           ----------------
+           |r0, r1, r2, r3|
+           |r4, r5, r6, r7|
+           |     ...      |
+           ----------------
+                 CPU
+#+END_EXAMPLE
 
 * 编码实现
 <<编码实现>>
@@ -126,6 +154,9 @@ ARM V8及以后的版本为64位。
 待解决的问题，接下来一一讨论。
 
 ** X86
+X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
+*** 准备
+<<准备>>
 首先需要定义偏移，以定出偏移多少字节是哪个寄存器的内容。
 #+INCLUDE: "../coroutineARM64/pub_arch.h" src c:lines "19-27"
 其中，COROUTINE_WORD_SIZE是机器字宽，对于X86是4字节。
@@ -136,10 +167,17 @@ ARM V8及以后的版本为64位。
 关于内联汇编的知识可以参考[[https://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html][这里]]。请注意这段代码只是Jmp方式的切换，即新任务不带参运行。先是
 开栈，然后先把下一个要运行的任务地址入栈，接下来用来存储当前任务环境的内存地址入栈。
 
-做好了准备工作就可以正式进行切换工作了。
 
+做好了准备工作就可以正式进行切换工作了。下面的两小节都是核心的切换代码部分，它包括保存当前
+任务环境和恢复新任务环境两大部分，注意这只是Jmp方式的切换，即 =CoroutineX86Jmp= 函数。最后
+会给出Call方式实现与Jmp的不同之处。
+
+*** 保存当前任务环境
 第一步当然是保存当前的任务环境：
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-46"
+
+下面一一分析这段代码以及其中隐藏的陷阱。
+
 由于要用eax寄存器，所以首先将eax进行了压栈。
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-33"
 这一步完成之后，栈的结构如下图：
@@ -155,15 +193,22 @@ ARM V8及以后的版本为64位。
 0 ------------------- sp
   |        .        |
   |        .        | low address
-#+END_EXAMPLE                 
-接下来取到用来存储当前任务环境的内存地址到eax：
+#+END_EXAMPLE
+其中， =gotoContextAddr= 和 =nowContextAddr= 是在[[准备][准备]]一节压入栈的，而在那一节调用
+=CoroutineX86Jmp= 函数时，会将 =return address=
+压入栈。接下来取到用来存储当前任务环境的内存地址到eax：
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "33-34"
 
-注意COROUTINE_WORD_SIZE*0x2为8，正好是用来存储当前任务环境的内存地址在栈中的偏移。
+注意 =COROUTINE_WORD_SIZE*0x2= 为8，正好是用来存储当前任务环境的内存地址在栈中的偏移。
 
 接下来就是存储ebx、ecx、edx、esi、edi、ebp寄存器的内容，以先前定义好的偏移来存储。
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "34-40"
 直到要存储esp时，发现它的存储与前述几个寄存器都不一样，不再那么简单直接。这就引出存储当前
 任务环境时极其重要的一点意识：
 *进行存储的过程中，一定不能破坏进入到切换代码前(也就是我们自己写的汇编代码)的任务环境。*
-这一点相当重要，如果在编写切换代码过程中稍微不记住这点，就会引起难以察觉令人抓狂的bug。
+这一点相当重要，如果在编写切换代码过程中稍微不记住这点，就可能会引起难以察觉令人抓狂的bug。
+我们来看这两行代码：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "40-42"
+[[x86intro][前文]]介绍过leal指令的作用，它并不是将栈偏移 =COROUTINE_WORD_SIZE*0x4=
+的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务
+
