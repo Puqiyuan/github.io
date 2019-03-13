@@ -1,5 +1,5 @@
 #+TITLE: 协程切换实现
-#+AUTHOR: Cauchy
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
 #+OPTIONS: ^:nil
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
@@ -159,6 +159,7 @@ _____________________________________________memory_____|
 待解决的问题，接下来一一讨论。
 
 ** X86
+<<x86>>
 X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 *** 准备
 <<准备>>
@@ -168,6 +169,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 
 接下来需要将两个内存地址传递到栈上，以便协程切换时使用，这两个地址是用户给出。以下内联汇编
 完成了这个工作：
+<<jmpcall>>
 #+INCLUDE: "../coroutineARM64/pub_coroutine.h" src c:lines "53-56"
 关于内联汇编的知识可以参考[[https://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html][这里]]。请注意这段代码只是Jmp方式的切换，即新任务不带参运行。先是
 开栈，然后先把下一个要运行的任务地址入栈，接下来用来存储当前任务环境的内存地址入栈。
@@ -179,6 +181,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 
 *** 保存任务环境
 第一步当然是保存当前的任务环境：
+<<codejumpstore>>
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "32-46"
 
 下面一一分析这段代码以及其中隐藏的陷阱。
@@ -250,6 +253,7 @@ X86架构在调用函数（ =CoroutineX86Jmp= ）时会自动将返回地址压�
 完成了当前任务环境的保存，接下来应该恢复要运行任务的任务环境。
 *** 恢复任务环境
 这段代码是 =CoroutineX86Jmp= 的第二部分，代码如下：
+<<codejumpresume>>
 #+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "48-59"
 下面逐一分析这段代码。
 
@@ -270,4 +274,46 @@ Call方式多了一个参数，导致了其栈结构与Jmp方式不一样，其�
 
 以下代码是调用 =CoroutineX86Call= 的代码：
 #+INCLUDE: "../coroutineARM64/pub_coroutine.h" src asm:lines "43-46"
+可以看到，其与Jmp方式的[[jmpcall][调用]]并无本质区别，只是多压了一个参数入栈并且相应的调整了开栈的大小。
+
+下面也是保存当前任务环境：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "66-80"
+在第一句 =pushl %eax= 后其栈结构与[[stack][Jmp方式]]的栈结构有所区别：
+#+BEGIN_EXAMPLE
+20------------------- high address
+  |      param      |
+16------------------- 
+  | gotoContextAddr |
+12-------------------           |
+  | nowContextAddr  | stack     |
+8 ------------------- growth    |
+  | return address  | direction |
+4 -------------------           |
+  |       rax       |          \./
+0 ------------------- sp
+  |        .        |
+  |        .        | low address
+#+END_EXAMPLE
+所以保存当前任务环境的代码就没什么新鲜的了。与[[codejumpstore][Jmp方式]]的不同就是保存栈顶时偏移为20，这是自
+然的，因为多了一个参数压栈。
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "74-75"
+在恢复时，大体也与[[codejumpresume][Jmp方式]]类似：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "82-97"
+需要关注的不同就是其参数的确传到了栈顶：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "83-84"
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "93-94"
+
+** X86-64
+在[[X86][X86]]中详细讨论了实现原理，所以在X86-64下的实现只会概述其与X86实现的不同，本小节尾会列出本
+架构Jmp方式实现的代码，为避免冗余，其它代码不予列出。
+
+Jmp与Call的实现均与X86下的实现类似，只是指令后缀为q代表64比特，并且多保存或恢复了几个寄存
+器。
+
+调用：
+#+INCLUDE: "../coroutineARM64/pub_coroutine.h" src c:lines "132-141"
+保存当前任务环境：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "131-153"
+恢复下一个任务环境：
+#+INCLUDE: "../coroutineARM64/coroutine.S" src asm:lines "155-174"
 

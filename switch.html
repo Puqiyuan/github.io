@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-03-13 Wed 11:34 -->
+<!-- 2019-03-13 Wed 12:08 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>协程切换实现</title>
 <meta name="generator" content="Org mode">
-<meta name="author" content="Cauchy">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
 <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
 <style>code {font-family:Monospace; font-size:90%; background-color: #eee} body {font-size:14pt}</style>
 <script type="text/javascript">
@@ -63,26 +63,27 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb16a6d4">1. 协程概念</a></li>
-<li><a href="#org982d5d4">2. 架构介绍</a>
+<li><a href="#orgbed7cdc">1. 协程概念</a></li>
+<li><a href="#orgb932c66">2. 架构介绍</a>
 <ul>
-<li><a href="#org92a05b4">2.1. X86</a></li>
-<li><a href="#orgafb5990">2.2. X86-64</a></li>
-<li><a href="#org4ddfc64">2.3. ARM32</a></li>
-<li><a href="#orgff955b3">2.4. ARM64</a></li>
+<li><a href="#org72cf09e">2.1. X86</a></li>
+<li><a href="#org174797a">2.2. X86-64</a></li>
+<li><a href="#org6a5d26d">2.3. ARM32</a></li>
+<li><a href="#org89418d8">2.4. ARM64</a></li>
 </ul>
 </li>
-<li><a href="#orgd484231">3. 实现原理</a></li>
-<li><a href="#org332dd2f">4. 编码实现</a>
+<li><a href="#org037b160">3. 实现原理</a></li>
+<li><a href="#org67df3a4">4. 编码实现</a>
 <ul>
-<li><a href="#org2cda055">4.1. X86</a>
+<li><a href="#org6dcf4dc">4.1. X86</a>
 <ul>
-<li><a href="#orgb4a552a">4.1.1. 准备</a></li>
-<li><a href="#orgdacb69a">4.1.2. 保存任务环境</a></li>
-<li><a href="#org758ca5b">4.1.3. 恢复任务环境</a></li>
-<li><a href="#org271db3c">4.1.4. Call方式</a></li>
+<li><a href="#org24ff2f4">4.1.1. 准备</a></li>
+<li><a href="#org5124485">4.1.2. 保存任务环境</a></li>
+<li><a href="#org7238da5">4.1.3. 恢复任务环境</a></li>
+<li><a href="#org47cc2b0">4.1.4. Call方式</a></li>
 </ul>
 </li>
+<li><a href="#orgba92a3e">4.2. X86-64</a></li>
 </ul>
 </li>
 </ul>
@@ -97,8 +98,8 @@ for the JavaScript code in this tag.
 在X86、X86-64平台上协程切换已得到实现的情况下，本文打算在ARM32、ARM64平台上实现同样的功能。在文尾还将介绍一种在已知机器指令的情况下如何获得栈大小的方法。
 </p>
 
-<div id="outline-container-orgb16a6d4" class="outline-2">
-<h2 id="orgb16a6d4"><span class="section-number-2">1</span> 协程概念</h2>
+<div id="outline-container-orgbed7cdc" class="outline-2">
+<h2 id="orgbed7cdc"><span class="section-number-2">1</span> 协程概念</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程是资源分配的基本单位，这些资源包括内存空间，文件表，外部设备等，而线程是CPU调度的基本单位。
@@ -115,8 +116,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org982d5d4" class="outline-2">
-<h2 id="org982d5d4"><span class="section-number-2">2</span> 架构介绍</h2>
+<div id="outline-container-orgb932c66" class="outline-2">
+<h2 id="orgb932c66"><span class="section-number-2">2</span> 架构介绍</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 本节将对X86、X86-64、ARM32、ARM64几种平台逐一进行介绍。当然完全的介绍一种体系结构超出了本文的范围，如果读者对此有兴趣，请参考相应官方手册。我仅关心之于我的目的所需要的体系结构的背景知识。这些背景知识包括寄存器介绍，调用惯例，常用指令。
@@ -136,18 +137,18 @@ for the JavaScript code in this tag.
 
 <p>
 CPU架构经常的被分为复杂指令集（<a href="https://en.wikipedia.org/wiki/Complex_instruction_set_computer">CISC</a>）与精简指令集（<a href="https://en.wikipedia.org/wiki/Reduced_instruction_set_computer">RISC</a>）。常见的复杂指令集体系结构包括X86、
-X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#org9009cc1">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
+X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时是完全相反的思路，CISC希望能在一个时钟周期内完成更多的事情，而RISC希望做更少的事情。这样CISC的指令集会较复杂，硬件电路设计会变得很复杂，但对于汇编程序编写较容易，而RISC具有相反的特点。在后文的<a href="#orge810d37">编码实现</a>一节我们会看到这些不同的指令集设计哲学是如何影响到我们的汇编程序编写。网上有许多关于这二者设计思想有意思的讨论，可Google"cisc vs risc"。
 </p>
 
 <p>
 以下针对体系结构的介绍仅涉及我们所需要的体系结构知识，其所述理论仅是相应体系结构的一个子集。
 </p>
 </div>
-<div id="outline-container-org92a05b4" class="outline-3">
-<h3 id="org92a05b4"><span class="section-number-3">2.1</span> X86</h3>
+<div id="outline-container-org72cf09e" class="outline-3">
+<h3 id="org72cf09e"><span class="section-number-3">2.1</span> X86</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
-<a id="org807f1bc"></a>
+<a id="org20ea566"></a>
 本文所指X86具体为Intel 8086系列，这些CPU拥有32位字宽。
 </p>
 <ul class="org-ul">
@@ -155,7 +156,7 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 <ul class="org-ul">
 <li>esp：栈指针，指示栈顶在何处。</li>
 <li>ebp：指示栈基址。
-<a id="orgc21e491"></a></li>
+<a id="org8807c04"></a></li>
 </ul></li>
 <li>调用惯例：参数被压栈。</li>
 <li>常用指令：
@@ -171,8 +172,8 @@ X86-64。常见的精简指令集包括ARM系列。二者在设计指令集时�
 </div>
 </div>
 
-<div id="outline-container-orgafb5990" class="outline-3">
-<h3 id="orgafb5990"><span class="section-number-3">2.2</span> X86-64</h3>
+<div id="outline-container-org174797a" class="outline-3">
+<h3 id="org174797a"><span class="section-number-3">2.2</span> X86-64</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 X86-64架构时X86架构的64位版，此架构具有64位机器字宽。
@@ -191,8 +192,8 @@ r14、r15。一个特殊寄存器rip用来指向当前所要运行的指令。�
 </div>
 </div>
 
-<div id="outline-container-org4ddfc64" class="outline-3">
-<h3 id="org4ddfc64"><span class="section-number-3">2.3</span> ARM32</h3>
+<div id="outline-container-org6a5d26d" class="outline-3">
+<h3 id="org6a5d26d"><span class="section-number-3">2.3</span> ARM32</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 此架构是ARM的32位版，ARM V7及以前的版本是为32位。
@@ -290,8 +291,8 @@ r15(pc)：程序计数器，指示当前运行的指令。下面是一个关于X
 </div>
 
 
-<div id="outline-container-orgff955b3" class="outline-3">
-<h3 id="orgff955b3"><span class="section-number-3">2.4</span> ARM64</h3>
+<div id="outline-container-org89418d8" class="outline-3">
+<h3 id="org89418d8"><span class="section-number-3">2.4</span> ARM64</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
 ARM V8及以后的版本为64位。
@@ -312,11 +313,11 @@ ARM V8及以后的版本为64位。
 </div>
 
 
-<div id="outline-container-orgd484231" class="outline-2">
-<h2 id="orgd484231"><span class="section-number-2">3</span> 实现原理</h2>
+<div id="outline-container-org037b160" class="outline-2">
+<h2 id="org037b160"><span class="section-number-2">3</span> 实现原理</h2>
 <div class="outline-text-2" id="text-3">
 <p>
-<a id="orgd449418"></a>
+<a id="orgd54cf55"></a>
 本节将概要介绍实现原理，而具体的代码实现细节留待下节。讨论实现时，协程、上下文、任务它们几者互为同义词。在讨论实现时，我更愿意用任务，而实现程序中多用上下文。
 </p>
 
@@ -358,27 +359,28 @@ _____________________________________________memory_____|
 </div>
 </div>
 
-<div id="outline-container-org332dd2f" class="outline-2">
-<h2 id="org332dd2f"><span class="section-number-2">4</span> 编码实现</h2>
+<div id="outline-container-org67df3a4" class="outline-2">
+<h2 id="org67df3a4"><span class="section-number-2">4</span> 编码实现</h2>
 <div class="outline-text-2" id="text-4">
 <p>
-<a id="org9009cc1"></a>
+<a id="orge810d37"></a>
 此节将会详细讨论各个平台上的协程切换实现细节。尽管总体原理相似，但具体到实现层面依然有许多待解决的问题，接下来一一讨论。
 </p>
 </div>
 
-<div id="outline-container-org2cda055" class="outline-3">
-<h3 id="org2cda055"><span class="section-number-3">4.1</span> X86</h3>
+<div id="outline-container-org6dcf4dc" class="outline-3">
+<h3 id="org6dcf4dc"><span class="section-number-3">4.1</span> X86</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
+<a id="orgf87f3c7"></a>
 X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </p>
 </div>
-<div id="outline-container-orgb4a552a" class="outline-4">
-<h4 id="orgb4a552a"><span class="section-number-4">4.1.1</span> 准备</h4>
+<div id="outline-container-org24ff2f4" class="outline-4">
+<h4 id="org24ff2f4"><span class="section-number-4">4.1.1</span> 准备</h4>
 <div class="outline-text-4" id="text-4-1-1">
 <p>
-<a id="org8301741"></a>
+<a id="org5a028b0"></a>
 首先需要定义偏移，以定出偏移多少字节是哪个寄存器的内容。
 </p>
 <div class="org-src-container">
@@ -398,6 +400,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 
 <p>
 接下来需要将两个内存地址传递到栈上，以便协程切换时使用，这两个地址是用户给出。以下内联汇编完成了这个工作：
+<a id="orga4d464a"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">COROUTINE_X86_JMP</span>(<span style="color: #DFAF8F;">nowContextAddr</span>,<span style="color: #DFAF8F;">gotoContextAddr</span>) <span style="color: #F0DFAF; font-weight: bold;">__asm__</span> \
@@ -416,11 +419,12 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </div>
 </div>
 
-<div id="outline-container-orgdacb69a" class="outline-4">
-<h4 id="orgdacb69a"><span class="section-number-4">4.1.2</span> 保存任务环境</h4>
+<div id="outline-container-org5124485" class="outline-4">
+<h4 id="org5124485"><span class="section-number-4">4.1.2</span> 保存任务环境</h4>
 <div class="outline-text-4" id="text-4-1-2">
 <p>
 第一步当然是保存当前的任务环境：
+<a id="orgf19acfc"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-asm"><span style="color: #93E0E3;">pushl</span> <span style="color: #F0DFAF; font-weight: bold;">%eax</span>
@@ -453,7 +457,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </div>
 <p>
 这一步完成之后，栈的结构如下图：
-<a id="orgdd66d75"></a>
+<a id="org8f01738"></a>
 </p>
 <pre class="example">
 16------------------- high address
@@ -469,7 +473,7 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
   |        .        | low address
 </pre>
 <p>
-其中， <code>gotoContextAddr</code> 和 <code>nowContextAddr</code> 是在<a href="#org8301741">准备</a>一节压入栈的，而在那一节调用
+其中， <code>gotoContextAddr</code> 和 <code>nowContextAddr</code> 是在<a href="#org5a028b0">准备</a>一节压入栈的，而在那一节调用
 <code>CoroutineX86Jmp</code> 函数时，会将 <code>return address</code>
 压入栈。接下来取到用来存储当前任务环境的内存地址到eax：
 </p>
@@ -506,9 +510,9 @@ X86上的实现将会详细介绍，而其它架构的介绍会相对粗略。
 </pre>
 </div>
 <p>
-<a href="#org807f1bc">前文</a>介绍过leal指令的作用，它并不是将栈偏移 <code>COROUTINE_WORD_SIZE*0x4</code>
+<a href="#org20ea566">前文</a>介绍过leal指令的作用，它并不是将栈偏移 <code>COROUTINE_WORD_SIZE*0x4</code>
 为16的地址的内容给ecx寄存器，而是将这个地址给ecx。接着又将这个地址存到当前任务存储地址起始偏移 <code>COROUTINE_X86_REG_GEN_ESP</code> 也就是说 <code>sp+16</code> 作为了当前任务环境的栈指针，这是合理的，
-因为<a href="#orgdd66d75">图中</a>栈上的元素都是我们切换器代码压入的，这些压入动作影响了原来当前任务的栈指针，回退16
+因为<a href="#org8f01738">图中</a>栈上的元素都是我们切换器代码压入的，这些压入动作影响了原来当前任务的栈指针，回退16
 字节才是当前任务环境的栈指针。
 </p>
 
@@ -557,11 +561,12 @@ X86架构在调用函数（ <code>CoroutineX86Jmp</code> ）时会自动将返�
 </p>
 </div>
 </div>
-<div id="outline-container-org758ca5b" class="outline-4">
-<h4 id="org758ca5b"><span class="section-number-4">4.1.3</span> 恢复任务环境</h4>
+<div id="outline-container-org7238da5" class="outline-4">
+<h4 id="org7238da5"><span class="section-number-4">4.1.3</span> 恢复任务环境</h4>
 <div class="outline-text-4" id="text-4-1-3">
 <p>
 这段代码是 <code>CoroutineX86Jmp</code> 的第二部分，代码如下：
+<a id="org519713f"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x3)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%eax</span> 
@@ -582,7 +587,7 @@ X86架构在调用函数（ <code>CoroutineX86Jmp</code> ）时会自动将返�
 </p>
 
 <p>
-根据实现<a href="#orgd449418">实现原理</a>，要恢复运行任务的环境存放于某个内存地址，在<a href="#org8301741">准备</a>一节我们又把它移到了栈上。
+根据实现<a href="#orgd54cf55">实现原理</a>，要恢复运行任务的环境存放于某个内存地址，在<a href="#org5a028b0">准备</a>一节我们又把它移到了栈上。
 所以首先是取出这个任务的地址：
 </p>
 <div class="org-src-container">
@@ -617,11 +622,11 @@ ret，这句指令具体所作是将控制流转移到栈顶所存的地址，�
 </div>
 </div>
 
-<div id="outline-container-org271db3c" class="outline-4">
-<h4 id="org271db3c"><span class="section-number-4">4.1.4</span> Call方式</h4>
+<div id="outline-container-org47cc2b0" class="outline-4">
+<h4 id="org47cc2b0"><span class="section-number-4">4.1.4</span> Call方式</h4>
 <div class="outline-text-4" id="text-4-1-4">
 <p>
-Call方式多了一个参数，导致了其栈结构与Jmp方式不一样，其它类似于Jmp方式的实现，根据X86的<a href="#orgc21e491">调用惯例</a>，我们要保证在切换到新任务运行前参数被放置于正确的位置－即栈上。
+Call方式多了一个参数，导致了其栈结构与Jmp方式不一样，其它类似于Jmp方式的实现，根据X86的<a href="#org8807c04">调用惯例</a>，我们要保证在切换到新任务运行前参数被放置于正确的位置－即栈上。
 </p>
 
 <p>
@@ -633,14 +638,177 @@ Call方式多了一个参数，导致了其栈结构与Jmp方式不一样，其�
 <span style="color: #CC9393;">call CoroutineX86Call"</span>::<span style="color: #CC9393;">"r"</span>(param),<span style="color: #CC9393;">"r"</span>(gotoContextAddr),<span style="color: #CC9393;">"r"</span>(nowContextAddr):<span style="color: #CC9393;">"esp"</span>)<span style="color: #5F7F5F;">;</span>
 </pre>
 </div>
+<p>
+可以看到，其与Jmp方式的<a href="#orga4d464a">调用</a>并无本质区别，只是多压了一个参数入栈并且相应的调整了开栈的大小。
+</p>
+
+<p>
+下面也是保存当前任务环境：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">pushl</span> <span style="color: #F0DFAF; font-weight: bold;">%eax</span>
+<span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x2)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%eax</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ebx</span> ,COROUTINE_X86_REG_GEN_EBX(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_ECX(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%edx</span> ,COROUTINE_X86_REG_GEN_EDX(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%esi</span> ,COROUTINE_X86_REG_GEN_ESI(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%edi</span> ,COROUTINE_X86_REG_GEN_EDI(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ebp</span> ,COROUTINE_X86_REG_GEN_EBP(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">leal</span> (COROUTINE_WORD_SIZE*0x5)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_ESP(<span style="color: #DFAF8F;">%eax</span>)
+<span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x1)(<span style="color: #DFAF8F;">%esp</span>) ,<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_EIP(<span style="color: #DFAF8F;">%eax</span>)  
+<span style="color: #93E0E3;">movl</span> (<span style="color: #DFAF8F;">%esp</span>) ,<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ecx</span> ,COROUTINE_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>)
+</pre>
+</div>
+<p>
+在第一句 <code>pushl %eax</code> 后其栈结构与<a href="#org8f01738">Jmp方式</a>的栈结构有所区别：
+</p>
+<pre class="example">
+20------------------- high address
+  |      param      |
+16------------------- 
+  | gotoContextAddr |
+12-------------------           |
+  | nowContextAddr  | stack     |
+8 ------------------- growth    |
+  | return address  | direction |
+4 -------------------           |
+  |       rax       |          \./
+0 ------------------- sp
+  |        .        |
+  |        .        | low address
+</pre>
+<p>
+所以保存当前任务环境的代码就没什么新鲜的了。与<a href="#orgf19acfc">Jmp方式</a>的不同就是保存栈顶时偏移为20，这是自然的，因为多了一个参数压栈。
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">leal</span> (COROUTINE_WORD_SIZE*0x5)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%ecx</span>
+</pre>
+</div>
+<p>
+在恢复时，大体也与<a href="#org519713f">Jmp方式</a>类似：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x3)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%eax</span> 
+<span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x4)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%ebx</span> 
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ECX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ecx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EDX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%edx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ESI(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%esi</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EDI(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%edi</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EBP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebp</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_ESP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%esp</span>  
+<span style="color: #93E0E3;">subl</span> <span style="color: #F0DFAF; font-weight: bold;">$</span>(COROUTINE_WORD_SIZE*0x2),<span style="color: #DFAF8F;">%esp</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ebx</span>,(COROUTINE_WORD_SIZE*0x1)(<span style="color: #DFAF8F;">%esp</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EIP(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ebx</span>,(<span style="color: #DFAF8F;">%esp</span>)
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EBX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%ebx</span>
+<span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_X86_REG_GEN_EAX(<span style="color: #DFAF8F;">%eax</span>),<span style="color: #DFAF8F;">%eax</span>
+<span style="color: #93E0E3;">jmp</span>  *(<span style="color: #DFAF8F;">%esp</span>)
+</pre>
+</div>
+<p>
+需要关注的不同就是其参数的确传到了栈顶：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> (COROUTINE_WORD_SIZE*0x4)(<span style="color: #DFAF8F;">%esp</span>),<span style="color: #DFAF8F;">%ebx</span> 
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movl</span> <span style="color: #F0DFAF; font-weight: bold;">%ebx</span>,(<span style="color: #DFAF8F;">%esp</span>)
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgba92a3e" class="outline-3">
+<h3 id="orgba92a3e"><span class="section-number-3">4.2</span> X86-64</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+在<a href="#org72cf09e">X86</a>中详细讨论了实现原理，所以在X86-64下的实现只会概述其与X86实现的不同，本小节尾会列出本架构Jmp方式实现的代码，为避免冗余，其它代码不予列出。
+</p>
+
+<p>
+Jmp与Call的实现均与X86下的实现类似，只是指令后缀为q代表64比特，并且多保存或恢复了几个寄存器。
+</p>
+
+<p>
+调用：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">__attribute__</span>((optimize(<span style="color: #CC9393;">"-O0"</span>))) <span style="color: #7CB8BB;">void</span> \
+<span style="color: #93E0E3;">COROUTINE_IA64_JMP</span>(<span style="color: #7CB8BB;">void</span> * <span style="color: #DFAF8F;">nowContextAddr</span>,<span style="color: #7CB8BB;">void</span> * <span style="color: #DFAF8F;">gotoContextAddr</span>) \
+{\
+  <span style="color: #F0DFAF; font-weight: bold;">__asm__</span> \
+  __volatile__(<span style="color: #CC9393;">"subq $0x10,%%rsp;movq %0,0x08(%%rsp);movq %1,(%%rsp);\</span>
+<span style="color: #CC9393;">  "</span>::<span style="color: #CC9393;">"r"</span>(gotoContextAddr),<span style="color: #CC9393;">"r"</span>(nowContextAddr):<span style="color: #CC9393;">"rsp"</span>);\
+  CoroutineIA64Jmp();\
+  <span style="color: #F0DFAF; font-weight: bold;">__asm__</span> __volatile__(<span style="color: #CC9393;">""</span>:::<span style="color: #CC9393;">"rsp"</span>);\
+}
+</pre>
+</div>
+<p>
+保存当前任务环境：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">pushq</span> <span style="color: #F0DFAF; font-weight: bold;">%rax</span>
+<span style="color: #93E0E3;">movq</span> (COROUTINE_WORD_SIZE*0x2)(<span style="color: #DFAF8F;">%rsp</span>),<span style="color: #DFAF8F;">%rax</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rbx</span> ,COROUTINE_IA64_REG_GEN_RBX(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rcx</span> ,COROUTINE_IA64_REG_GEN_RCX(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rdx</span> ,COROUTINE_IA64_REG_GEN_RDX(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rsi</span> ,COROUTINE_IA64_REG_GEN_RSI(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rdi</span> ,COROUTINE_IA64_REG_GEN_RDI(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rbp</span> ,COROUTINE_IA64_REG_GEN_RBP(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r8</span> ,COROUTINE_IA64_REG_GEN_R8(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r9</span> ,COROUTINE_IA64_REG_GEN_R9(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r10</span> ,COROUTINE_IA64_REG_GEN_R10(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r11</span> ,COROUTINE_IA64_REG_GEN_R11(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r12</span> ,COROUTINE_IA64_REG_GEN_R12(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r13</span> ,COROUTINE_IA64_REG_GEN_R13(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r14</span> ,COROUTINE_IA64_REG_GEN_R14(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%r15</span> ,COROUTINE_IA64_REG_GEN_R15(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">lea</span> (COROUTINE_WORD_SIZE*0x4)(<span style="color: #DFAF8F;">%rsp</span>),<span style="color: #DFAF8F;">%rcx</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rcx</span> ,COROUTINE_IA64_REG_GEN_RSP(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> (COROUTINE_WORD_SIZE*0x1)(<span style="color: #DFAF8F;">%rsp</span>) ,<span style="color: #DFAF8F;">%rcx</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rcx</span> ,COROUTINE_IA64_REG_GEN_RIP(<span style="color: #DFAF8F;">%rax</span>)  
+<span style="color: #93E0E3;">movq</span> (<span style="color: #DFAF8F;">%rsp</span>) ,<span style="color: #DFAF8F;">%rcx</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">%rcx</span> ,COROUTINE_IA64_REG_GEN_RAX(<span style="color: #DFAF8F;">%rax</span>)
+</pre>
+</div>
+<p>
+恢复下一个任务环境：
+</p>
+<div class="org-src-container">
+<pre class="src src-asm"><span style="color: #93E0E3;">movq</span> (COROUTINE_WORD_SIZE*0x3)(<span style="color: #DFAF8F;">%rsp</span>),<span style="color: #DFAF8F;">%rax</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RBX(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rbx</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RCX(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rcx</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RDX(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rdx</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RSI(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rsi</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RDI(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rdi</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RBP(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rbp</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RSP(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rsp</span>  
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R8(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r8</span>
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R9(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r9</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R10(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r10</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R11(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r11</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R12(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r12</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R13(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r13</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R14(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r14</span> 
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_R15(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%r15</span> 
+<span style="color: #93E0E3;">pushq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RIP(<span style="color: #DFAF8F;">%rax</span>)
+<span style="color: #93E0E3;">movq</span> <span style="color: #F0DFAF; font-weight: bold;">COROUTINE</span>_IA64_REG_GEN_RAX(<span style="color: #DFAF8F;">%rax</span>),<span style="color: #DFAF8F;">%rax</span>
+<span style="color: #93E0E3;">retq</span>
+</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
-<p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-03-13 Wed 11:34</p>
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2019-03-13 Wed 12:08</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
