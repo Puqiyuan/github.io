@@ -12,5 +12,5 @@
 * Linux系统开发
 * Linux内核研究
 * 杂项
-- 一份较为详细的翻墙指南[[./html/index-protected.html][Bypass Guide]]。
+- 一份较为详细的翻墙指南[[./html/encrypted.html][Bypass Guide]]。
 - 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
