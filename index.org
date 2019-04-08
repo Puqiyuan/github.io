@@ -3,14 +3,16 @@
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css"> 
 
-推荐你在电脑上查看此页面，这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的总
-结，但主要以Linux相关为主，联系作者：pqy7172@gmail.com。
+推荐你在电脑上查看此页面，这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研
+究、学习、总结。有任何想法请联系作者：pqy7172@gmail.com。
 
 
 * Linux系统管理
 - [[./pipe-redirection.html][管道与重定向]]
 * Linux系统开发
 * Linux内核研究
+* 算法研究
+* 体系结构研究
 * 杂项
 - 一份较为详细的翻墙指南[[./html/index-protected.html][Bypass Guide]]。
 - 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
