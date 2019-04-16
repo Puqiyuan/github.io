@@ -3,8 +3,8 @@
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css"> 
 
-推荐你在电脑上查看此页面，这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研
-究、学习、总结。有任何想法请联系作者：pqy7172@gmail.com。
+这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。有任何想法
+请联系作者：pqy7172@gmail.com。
 
 理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，无论技术多简单多复杂。热爱技术也热
 爱生活。:-)
@@ -15,7 +15,8 @@
 * Linux系统开发
 * Linux内核研究
 * 算法研究
+- [[./shift-and.html][Shift-And]]字符串匹配算法。
 * 体系结构研究
 * 杂项
 - 一份较为详细的翻墙指南[[./html/][Bypass Guide]]。
-- 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
+- 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]。
