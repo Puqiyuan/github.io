@@ -19,4 +19,4 @@
 * 体系结构研究
 * 杂项
 - 一份较为详细的翻墙指南[[./html/][Bypass Guide]]。
-- 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]。
+- 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
