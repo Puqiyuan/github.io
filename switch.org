@@ -2,7 +2,7 @@
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
 #+OPTIONS: ^:nil
-#+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
 如果你在阅读本文时有任何疑惑，我多半怀疑那是我没有表达清楚，因为讲清楚切换这种细微的事并不
 是一件容易的事。我希望你投入到本文档的时间是值得的，能收获一些东西，所以如果有任何疑问请联
 系作者pqy7172@gmail.com。

@@ -1,7 +1,7 @@
 #+TITLE: 管道与重定向
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
 
 管道与重定向是Linux系统中基本的概念，本文结合一些实例来验证Linux系统中这两个基础概念。
 

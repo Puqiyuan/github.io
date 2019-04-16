@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2019-04-16 Tue 23:37 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shift-And字符串匹配算法</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy">
+<link rel="stylesheet" href="./org-manual.css" type="text/css">
+<style>code {font-family:Monospace; font-size:90%; background-color: #eee} body {font-size:14pt}</style>
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2018 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Shift-And字符串匹配算法</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orge124210">1. 前言</a></li>
+<li><a href="#org94caa35">2. 预备知识</a></li>
+<li><a href="#org933aa6b">3. Shift-And</a>
+<ul>
+<li><a href="#org1eb3bc8">3.1. 形象描述</a></li>
+<li><a href="#org8a044a2">3.2. 公式描述</a></li>
+<li><a href="#org41ed6f5">3.3. 伪码表示</a></li>
+<li><a href="#org4ea181c">3.4. C代码实现</a></li>
+</ul>
+</li>
+<li><a href="#orgddb9257">4. 性能比较</a></li>
+<li><a href="#org691cfa8">5. 后记</a></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orge124210" class="outline-2">
+<h2 id="orge124210"><span class="section-number-2">1</span> 前言</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+字符串匹配可以說是计算机科学里最为基础的研究领域之一，其应用的领域极其广泛。每次你在Chrome
+浏览器里按下Ctrl-F时，在Vim、Emacs等知名编辑器里方便的搜索替换某个变量时，愉快的使用
+Everthing搜索时，每次grep，find时甚至基因配对检测时其背后最为核心的技术就是字符串匹配。一个更加基础的体现是：其应用领域之广泛以致于其研究者往往也无法预料他们的研究成果可以应用到何处。
+</p>
+
+<p>
+针对我们工作中的应用，就是zealot引擎里对于数据包中特定字符串的匹配。
+</p>
+
+<p>
+字符串匹配问题可以理解为从给定的符号序列中找出一个具有某种属性的模式，最简单的例子就是从给定的字符序列中找出一个给定的字符串。本文将介绍这样一种匹配算法—Shift-And，理论上它比KMP算法快将近两倍。后文我们也将实际来测量它的性能。
+</p>
+
+<p>
+字符串匹配
+</p>
+
+<p>
+本文主要理论来源于《Flexible Pattern Matching in Strings》一书。这是一本短小精悍的理论书籍，
+它具有所有学术书籍共有的特点：高度抽象化、理论化、形式化、公式化以及符号化。正是由于这些特点，再加上工作中的需要促使本文作者完成这篇文档—一个形象的、具体的、易理解的、多示例的、符合直觉的算法描述与实现。本文作者的愿景是实现书中每个匹配算法以形成一个系列，进而可以依
+zealot引擎中不同的使用场景来应用不同的匹配算法，最后以达到zealot引擎串匹配模块高度自主可控。
+</p>
+</div>
+</div>
+
+<div id="outline-container-org94caa35" class="outline-2">
+<h2 id="org94caa35"><span class="section-number-2">2</span> 预备知识</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+一个字符串中所有可能出现的字符组成一个字母表，例如ATCTAGAGA字符串的字母表是{A，C，G，T}。
+字符串匹配问题就是在一个大的字符串T中搜索某个字符串p的所有出现位置。其中，T称为文本，p称为模式串。T和p都定义在同一个字母表上。给定字符串x，y和z，称x是xy的一个前缀，x是yx的一个后缀，
+x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的问题。应用场景之一指的是模式串长度以及字母表大小，依据这些场景的不同最高效的算法可能不同。
+</p>
+
+<p>
+解决字符串匹配问题的方法从分类上說共有三类。本文所介绍的Shift-And算法属于前缀匹配类。这种类别的匹配算法在文本T中由前向后搜索，逐个读入文本字符，以匹配模式串p中的最长公共前缀。当这个公共前缀的长度等于模式串p的长度时，代表匹配成功。
+</p>
+</div>
+</div>
+
+<div id="outline-container-org933aa6b" class="outline-2">
+<h2 id="org933aa6b"><span class="section-number-2">3</span> Shift-And</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+定义“向前”：从左向右。定义向后：“从右到左”。
+</p>
+
+<p>
+本节将要从各个角度来描述Shift-And算法。从具体到抽象，从示例到一般。在读者看来这样的书籍/文档流程才是符合人类认知习惯的模式。我们完成一篇文档、书籍不是要写的抽象复杂让读者觉得高深看不懂，而是以深入浅出平白的语言讲给其他人，确保他人有了形象深刻的认知，然后才能进行抽象的形式化。尽管这样的流程走下来可能比较繁多，但是没有关系，形象使人深刻，这种繁多还是值得的。
+</p>
+
+<p>
+当你发现一本书籍/文档写的极其抽象而让你摸不着头脑，你大可以认为这不是你的理解力问题，而是作者的表达力问题，因为本质上没有你不能理解的东西：-）。
+</p>
+</div>
+
+<div id="outline-container-org1eb3bc8" class="outline-3">
+<h3 id="org1eb3bc8"><span class="section-number-3">3.1</span> 形象描述</h3>
+<div class="outline-text-3" id="text-3-1">
+<p>
+本节描述以文本：
+</p>
+<pre class="example">
+T=a n n u a l _ a n n  o  u  n  c  e
+  1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+</pre>
+<p>
+模式串：
+</p>
+<pre class="example">
+p=a n n o u n c e
+  1 2 3 4 5 6 7 8
+</pre>
+<p>
+为例。忽略其中的空格，它只是为了标下标而存在。t1代表a，而t4t5t6代表ual，t11t12t13t14代表
+ounc。同理，p3p4p5代表nou。算法在运行过程中不停的读入文本T，用指针i指示当前读入文本T的位置。
+i=7时，表示正在读入t7为_字符。
+</p>
+
+<p>
+本算法将要维护一个由0和1组成的掩码串D，它的长度与模式串的长度p.length相同。这个掩码串表征了模式串中以p1开始向前有多少个字符与文本T中以当前读入位置i为起始（包括i）向后有多少个字符是相等的。
+比如D=00010000中的1在第五位（向后看），意味着i开始向后有五个字符与模式串的前五个字符
+p1p2p3p4p5组成的字符串相等。可以看到，这样的i=12，即此时已读入到文本的第十二个字符。有了这些形象化的理解终于可以引出书中专业化的描述：
+</p>
+<pre class="example">
+“Shift-And算法维护一个字符串的集合，集合中的每个字符串即是模式串p的前缀，同时也是已读入文本的后缀”。
+</pre>
+
+<p>
+什么时候匹配到整个模式串呢？
+</p>
+
+<p>
+可以想见D=10000000时代表成功匹配到整个模式串，结合前文的示例这个意义不言而喻。
+</p>
+
+<p>
+在算法进行过程中D将变化，如何随着读入文本T而将D正确的变化呢？还是根据上述具体的例子，我们先来手工进行这个过程。首先考虑D的初始值，再次给出D表征的意义：
+</p>
+<pre class="example">
+掩码串D表征了模式串中以p1开始向前有多少个字符与文本T中以当前读入位置i为起始（包括i）向后有多少个字符是相等的。
+</pre>
+<p>
+初始时，T与p中没有一个字符是相等的，所以可以說D的初始值D0=00000000。
+</p>
+</div>
+</div>
+
+
+<div id="outline-container-org8a044a2" class="outline-3">
+<h3 id="org8a044a2"><span class="section-number-3">3.2</span> 公式描述</h3>
+</div>
+<div id="outline-container-org41ed6f5" class="outline-3">
+<h3 id="org41ed6f5"><span class="section-number-3">3.3</span> 伪码表示</h3>
+</div>
+<div id="outline-container-org4ea181c" class="outline-3">
+<h3 id="org4ea181c"><span class="section-number-3">3.4</span> C代码实现</h3>
+</div>
+</div>
+
+<div id="outline-container-orgddb9257" class="outline-2">
+<h2 id="orgddb9257"><span class="section-number-2">4</span> 性能比较</h2>
+</div>
+<div id="outline-container-org691cfa8" class="outline-2">
+<h2 id="org691cfa8"><span class="section-number-2">5</span> 后记</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy</p>
+<p class="date">Created: 2019-04-16 Tue 23:37</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
