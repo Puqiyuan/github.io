@@ -1,7 +1,7 @@
 #+TITLE: Bypass Guide
 #+AUTHOR: Qiyuan Pu(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
 #+OPTIONS: num:nil
 
 If you don't understand anything in the process of reading or operating, or if a link
