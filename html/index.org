@@ -1,20 +1,8 @@
 #+TITLE: Bypass Guide
 #+AUTHOR: Qiyuan Pu(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="https://cs3.swfu.edu.cn/~puqiyuan/org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
 #+OPTIONS: num:nil
-Please check this webpage as far as possible on the computer, as this webpage currently
-does not support the good experience of the mobile phone. Of course, I didn't have much
-interest in using web design to make it adapt to the mobile phone. Thank you for your
-understanding. :)
-
-Currently this tutorial only provides installation methods for Android, Windows, iOS and
-Debian Linux. Of course my desire is to have a method for all platforms. If your platform
-is Mac OS, etc. please contact me(see bottom), we will continue to complete this document
-together. Before I was successfully installed on these platforms, but now I do not have
-these platforms so it is not good for screenshots of presentation so need your help in the
-future.
-
 
 If you don't understand anything in the process of reading or operating, or if a link
 fails, please email me.
