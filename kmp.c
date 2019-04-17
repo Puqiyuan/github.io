@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 void computeLPSArray(char* pat, int M, int* lps); 
 
 void KMPSearch(char* pat, char* txt) 
 { 
-	int M = strlen(pat); 
-	int N = strlen(txt); 
+	int M = strlen(pat) - 1; 
+	int N = strlen(txt) - 1;
 
 	int lps[M]; 
 
@@ -24,7 +25,7 @@ void KMPSearch(char* pat, char* txt)
 
 		if (j == M)
 			{ 
-				printf("%d\n", i - j); 
+				printf("%d \n", i - j); 
 				j = lps[j - 1]; 
 			} 
 
@@ -68,12 +69,32 @@ void computeLPSArray(char* pat, int M, int* lps)
 					} 
 			} 
 		} 
-} 
+}
+
+int convert(char *filename, char *str)
+{
+	long int i = 0;
+	char ch;
+	FILE *fp = fopen(filename, "r");
+
+	while ((ch = fgetc(fp)) != EOF)
+		{
+			str[i] = ch;
+			i++;
+		}
+
+	return 0;
+}
+
 
 int main() 
-{ 
-	char txt[] = "ABABDABACDABABCABAB"; 
-	char pat[] = "ABABCABAB"; 
+{
+	char *txt = (char*)malloc(377487360 * sizeof(char));
+	char *pat = (char*)malloc(10 * sizeof(char));
+
+	convert("./leipzig1M.txt", txt);
+	convert("./pat.txt", pat);
+
 	KMPSearch(pat, txt); 
 	return 0; 
 } 
