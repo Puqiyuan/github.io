@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-04-16 Tue 23:37 -->
+<!-- 2019-04-17 Wed 20:18 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shift-And字符串匹配算法</title>
@@ -63,23 +63,23 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge124210">1. 前言</a></li>
-<li><a href="#org94caa35">2. 预备知识</a></li>
-<li><a href="#org933aa6b">3. Shift-And</a>
+<li><a href="#orge4ef140">1. 前言</a></li>
+<li><a href="#orgd472db4">2. 预备知识</a></li>
+<li><a href="#org26b276f">3. Shift-And</a>
 <ul>
-<li><a href="#org1eb3bc8">3.1. 形象描述</a></li>
-<li><a href="#org8a044a2">3.2. 公式描述</a></li>
-<li><a href="#org41ed6f5">3.3. 伪码表示</a></li>
-<li><a href="#org4ea181c">3.4. C代码实现</a></li>
+<li><a href="#org9d6fba0">3.1. 形象描述</a></li>
+<li><a href="#org12ea73e">3.2. 公式描述</a></li>
+<li><a href="#org6b531c1">3.3. 伪码表示</a></li>
+<li><a href="#org3ac31f0">3.4. C代码实现</a></li>
 </ul>
 </li>
-<li><a href="#orgddb9257">4. 性能比较</a></li>
-<li><a href="#org691cfa8">5. 后记</a></li>
+<li><a href="#org9a19d5f">4. 性能比较</a></li>
+<li><a href="#org0703a07">5. 后记</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orge124210" class="outline-2">
-<h2 id="orge124210"><span class="section-number-2">1</span> 前言</h2>
+<div id="outline-container-orge4ef140" class="outline-2">
+<h2 id="orge4ef140"><span class="section-number-2">1</span> 前言</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 字符串匹配可以說是计算机科学里最为基础的研究领域之一，其应用的领域极其广泛。每次你在Chrome
@@ -96,19 +96,14 @@ Everthing搜索时，每次grep，find时甚至基因配对检测时其背后最
 </p>
 
 <p>
-字符串匹配
-</p>
-
-<p>
 本文主要理论来源于《Flexible Pattern Matching in Strings》一书。这是一本短小精悍的理论书籍，
-它具有所有学术书籍共有的特点：高度抽象化、理论化、形式化、公式化以及符号化。正是由于这些特点，再加上工作中的需要促使本文作者完成这篇文档—一个形象的、具体的、易理解的、多示例的、符合直觉的算法描述与实现。本文作者的愿景是实现书中每个匹配算法以形成一个系列，进而可以依
-zealot引擎中不同的使用场景来应用不同的匹配算法，最后以达到zealot引擎串匹配模块高度自主可控。
+它具有所有学术书籍共有的特点：高度抽象化、理论化、形式化、公式化以及符号化。正是由于这些特点，再加上工作中的需要促使本文作者完成这篇文档—一个形象的、具体的、易理解的、多示例的、符合直觉的算法描述与实现。本文作者的愿景是实现书中每个匹配算法以形成一个系列，进而可以更好的利用开源匹配库以及在必要的时候应用自己所写的匹配算法。
 </p>
 </div>
 </div>
 
-<div id="outline-container-org94caa35" class="outline-2">
-<h2 id="org94caa35"><span class="section-number-2">2</span> 预备知识</h2>
+<div id="outline-container-orgd472db4" class="outline-2">
+<h2 id="orgd472db4"><span class="section-number-2">2</span> 预备知识</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 一个字符串中所有可能出现的字符组成一个字母表，例如ATCTAGAGA字符串的字母表是{A，C，G，T}。
@@ -122,8 +117,8 @@ x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的�
 </div>
 </div>
 
-<div id="outline-container-org933aa6b" class="outline-2">
-<h2 id="org933aa6b"><span class="section-number-2">3</span> Shift-And</h2>
+<div id="outline-container-org26b276f" class="outline-2">
+<h2 id="org26b276f"><span class="section-number-2">3</span> Shift-And</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 定义“向前”：从左向右。定义向后：“从右到左”。
@@ -138,8 +133,8 @@ x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的�
 </p>
 </div>
 
-<div id="outline-container-org1eb3bc8" class="outline-3">
-<h3 id="org1eb3bc8"><span class="section-number-3">3.1</span> 形象描述</h3>
+<div id="outline-container-org9d6fba0" class="outline-3">
+<h3 id="org9d6fba0"><span class="section-number-3">3.1</span> 形象描述</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 本节描述以文本：
@@ -191,27 +186,27 @@ p1p2p3p4p5组成的字符串相等。可以看到，这样的i=12，即此时已
 </div>
 
 
-<div id="outline-container-org8a044a2" class="outline-3">
-<h3 id="org8a044a2"><span class="section-number-3">3.2</span> 公式描述</h3>
+<div id="outline-container-org12ea73e" class="outline-3">
+<h3 id="org12ea73e"><span class="section-number-3">3.2</span> 公式描述</h3>
 </div>
-<div id="outline-container-org41ed6f5" class="outline-3">
-<h3 id="org41ed6f5"><span class="section-number-3">3.3</span> 伪码表示</h3>
+<div id="outline-container-org6b531c1" class="outline-3">
+<h3 id="org6b531c1"><span class="section-number-3">3.3</span> 伪码表示</h3>
 </div>
-<div id="outline-container-org4ea181c" class="outline-3">
-<h3 id="org4ea181c"><span class="section-number-3">3.4</span> C代码实现</h3>
+<div id="outline-container-org3ac31f0" class="outline-3">
+<h3 id="org3ac31f0"><span class="section-number-3">3.4</span> C代码实现</h3>
 </div>
 </div>
 
-<div id="outline-container-orgddb9257" class="outline-2">
-<h2 id="orgddb9257"><span class="section-number-2">4</span> 性能比较</h2>
+<div id="outline-container-org9a19d5f" class="outline-2">
+<h2 id="org9a19d5f"><span class="section-number-2">4</span> 性能比较</h2>
 </div>
-<div id="outline-container-org691cfa8" class="outline-2">
-<h2 id="org691cfa8"><span class="section-number-2">5</span> 后记</h2>
+<div id="outline-container-org0703a07" class="outline-2">
+<h2 id="org0703a07"><span class="section-number-2">5</span> 后记</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-04-16 Tue 23:37</p>
+<p class="date">Created: 2019-04-17 Wed 20:18</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
