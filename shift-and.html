@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-04-18 Thu 22:46 -->
+<!-- 2019-04-18 Thu 22:47 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shift-And字符串匹配算法</title>
@@ -63,27 +63,27 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org95b9ba1">1. 前言</a></li>
-<li><a href="#orgce89056">2. 预备知识</a></li>
-<li><a href="#org775ced5">3. Shift-And</a>
+<li><a href="#orgb733588">1. 前言</a></li>
+<li><a href="#org210c080">2. 预备知识</a></li>
+<li><a href="#orgd525478">3. Shift-And</a>
 <ul>
-<li><a href="#org2d583a3">3.1. 形象描述</a></li>
-<li><a href="#org3ab6f9e">3.2. 伪码表示</a></li>
-<li><a href="#org1824d2c">3.3. C代码实现</a></li>
+<li><a href="#org200abfc">3.1. 形象描述</a></li>
+<li><a href="#org5844519">3.2. 伪码表示</a></li>
+<li><a href="#org8b62522">3.3. C代码实现</a></li>
 </ul>
 </li>
-<li><a href="#orgf9bd622">4. 性能比较</a>
+<li><a href="#org961d656">4. 性能比较</a>
 <ul>
-<li><a href="#orgd2d8545">4.1. KMP算法</a></li>
-<li><a href="#orgee2f7cf">4.2. 复杂度</a></li>
+<li><a href="#orgddfc606">4.1. KMP算法</a></li>
+<li><a href="#org3f3ebb0">4.2. 复杂度</a></li>
 </ul>
 </li>
-<li><a href="#orgf1f26c8">5. 后记</a></li>
+<li><a href="#orgbc6efbd">5. 后记</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org95b9ba1" class="outline-2">
-<h2 id="org95b9ba1"><span class="section-number-2">1</span> 前言</h2>
+<div id="outline-container-orgb733588" class="outline-2">
+<h2 id="orgb733588"><span class="section-number-2">1</span> 前言</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 字符串匹配可以說是计算机科学里最为基础的研究领域之一，其应用的领域极其广泛。每次你在Chrome
@@ -106,8 +106,8 @@ Everthing搜索时，每次grep，find时甚至基因配对检测时其背后最
 </div>
 </div>
 
-<div id="outline-container-orgce89056" class="outline-2">
-<h2 id="orgce89056"><span class="section-number-2">2</span> 预备知识</h2>
+<div id="outline-container-org210c080" class="outline-2">
+<h2 id="org210c080"><span class="section-number-2">2</span> 预备知识</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 一个字符串中所有可能出现的字符组成一个字母表，例如ATCTAGAGA字符串的字母表是{A，C，G，T}。
@@ -121,8 +121,8 @@ x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的�
 </div>
 </div>
 
-<div id="outline-container-org775ced5" class="outline-2">
-<h2 id="org775ced5"><span class="section-number-2">3</span> Shift-And</h2>
+<div id="outline-container-orgd525478" class="outline-2">
+<h2 id="orgd525478"><span class="section-number-2">3</span> Shift-And</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 定义“向前”：从左向右。定义向后：“从右到左”。
@@ -137,8 +137,8 @@ x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的�
 </p>
 </div>
 
-<div id="outline-container-org2d583a3" class="outline-3">
-<h3 id="org2d583a3"><span class="section-number-3">3.1</span> 形象描述</h3>
+<div id="outline-container-org200abfc" class="outline-3">
+<h3 id="org200abfc"><span class="section-number-3">3.1</span> 形象描述</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 本节描述以文本：
@@ -213,22 +213,22 @@ D &lt;— ((D &lt;&lt; 1) | 1) &amp; B[c]
 </div>
 </div>
 
-<div id="outline-container-org3ab6f9e" class="outline-3">
-<h3 id="org3ab6f9e"><span class="section-number-3">3.2</span> 伪码表示</h3>
+<div id="outline-container-org5844519" class="outline-3">
+<h3 id="org5844519"><span class="section-number-3">3.2</span> 伪码表示</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 下面的图展示了Shift-And的伪码表示：
 </p>
 
-<div id="orgdc6f067" class="figure">
+<div id="org2f18846" class="figure">
 <p><img src="./shift-and.png" alt="shift-and.png">
 </p>
 <p><span class="figure-number">Figure 1: </span>Shift-And算法伪码表示</p>
 </div>
 </div>
 </div>
-<div id="outline-container-org1824d2c" class="outline-3">
-<h3 id="org1824d2c"><span class="section-number-3">3.3</span> C代码实现</h3>
+<div id="outline-container-org8b62522" class="outline-3">
+<h3 id="org8b62522"><span class="section-number-3">3.3</span> C代码实现</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 有了上面坚实的理解，下面可以给出Shift-And算法的C语言实现：
@@ -311,12 +311,12 @@ D &lt;— ((D &lt;&lt; 1) | 1) &amp; B[c]
 </div>
 </div>
 
-<div id="outline-container-orgf9bd622" class="outline-2">
-<h2 id="orgf9bd622"><span class="section-number-2">4</span> 性能比较</h2>
+<div id="outline-container-org961d656" class="outline-2">
+<h2 id="org961d656"><span class="section-number-2">4</span> 性能比较</h2>
 <div class="outline-text-2" id="text-4">
 </div>
-<div id="outline-container-orgd2d8545" class="outline-3">
-<h3 id="orgd2d8545"><span class="section-number-3">4.1</span> KMP算法</h3>
+<div id="outline-container-orgddfc606" class="outline-3">
+<h3 id="orgddfc606"><span class="section-number-3">4.1</span> KMP算法</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 KMP算法利用模式串自身的特点而做到模式串本身不必逐个与文本进行比较，而是可以跳过某些字符，
@@ -444,8 +444,8 @@ KMP算法的预处理过程回答了这个问题，即针对模式串pat的每�
 </div>
 </div>
 
-<div id="outline-container-orgee2f7cf" class="outline-3">
-<h3 id="orgee2f7cf"><span class="section-number-3">4.2</span> 复杂度</h3>
+<div id="outline-container-org3f3ebb0" class="outline-3">
+<h3 id="org3f3ebb0"><span class="section-number-3">4.2</span> 复杂度</h3>
 <div class="outline-text-3" id="text-4-2">
 <p>
 Shift-And算法通过逐个扫描文本而完成匹配，预处理也只扫描一遍模式串故复杂度为O(m+n)。而KMP也是扫描一次文本串即可，时间复杂度也为O(m+n)，其中n为文本长度，m为模式串长度。
@@ -459,8 +459,8 @@ Shift-And算法通过逐个扫描文本而完成匹配，预处理也只扫描�
 </div>
 </div>
 
-<div id="outline-container-orgf1f26c8" class="outline-2">
-<h2 id="orgf1f26c8"><span class="section-number-2">5</span> 后记</h2>
+<div id="outline-container-orgbc6efbd" class="outline-2">
+<h2 id="orgbc6efbd"><span class="section-number-2">5</span> 后记</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 研究模式串匹配算法，我总有一种不深刻的感觉，尽管也实现了，运行了，甚至与其它算法作比较了，
@@ -471,7 +471,7 @@ Shift-And算法通过逐个扫描文本而完成匹配，预处理也只扫描�
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-04-18 Thu 22:46</p>
+<p class="date">Created: 2019-04-18 Thu 22:47</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
