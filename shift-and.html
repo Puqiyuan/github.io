@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-04-17 Wed 20:18 -->
+<!-- 2019-04-18 Thu 22:40 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shift-And字符串匹配算法</title>
@@ -63,23 +63,27 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge4ef140">1. 前言</a></li>
-<li><a href="#orgd472db4">2. 预备知识</a></li>
-<li><a href="#org26b276f">3. Shift-And</a>
+<li><a href="#orge661f36">1. 前言</a></li>
+<li><a href="#org15a1af3">2. 预备知识</a></li>
+<li><a href="#org1f8807b">3. Shift-And</a>
 <ul>
-<li><a href="#org9d6fba0">3.1. 形象描述</a></li>
-<li><a href="#org12ea73e">3.2. 公式描述</a></li>
-<li><a href="#org6b531c1">3.3. 伪码表示</a></li>
-<li><a href="#org3ac31f0">3.4. C代码实现</a></li>
+<li><a href="#org365766b">3.1. 形象描述</a></li>
+<li><a href="#org5146d99">3.2. 伪码表示</a></li>
+<li><a href="#org1ce9d53">3.3. C代码实现</a></li>
 </ul>
 </li>
-<li><a href="#org9a19d5f">4. 性能比较</a></li>
-<li><a href="#org0703a07">5. 后记</a></li>
+<li><a href="#orgc887b1b">4. 性能比较</a>
+<ul>
+<li><a href="#orgbf94e48">4.1. KMP算法</a></li>
+<li><a href="#org7c2cb59">4.2. 复杂度</a></li>
+</ul>
+</li>
+<li><a href="#orgeabf42e">5. 后记</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orge4ef140" class="outline-2">
-<h2 id="orge4ef140"><span class="section-number-2">1</span> 前言</h2>
+<div id="outline-container-orge661f36" class="outline-2">
+<h2 id="orge661f36"><span class="section-number-2">1</span> 前言</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 字符串匹配可以說是计算机科学里最为基础的研究领域之一，其应用的领域极其广泛。每次你在Chrome
@@ -102,8 +106,8 @@ Everthing搜索时，每次grep，find时甚至基因配对检测时其背后最
 </div>
 </div>
 
-<div id="outline-container-orgd472db4" class="outline-2">
-<h2 id="orgd472db4"><span class="section-number-2">2</span> 预备知识</h2>
+<div id="outline-container-org15a1af3" class="outline-2">
+<h2 id="org15a1af3"><span class="section-number-2">2</span> 预备知识</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 一个字符串中所有可能出现的字符组成一个字母表，例如ATCTAGAGA字符串的字母表是{A，C，G，T}。
@@ -117,8 +121,8 @@ x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的�
 </div>
 </div>
 
-<div id="outline-container-org26b276f" class="outline-2">
-<h2 id="org26b276f"><span class="section-number-2">3</span> Shift-And</h2>
+<div id="outline-container-org1f8807b" class="outline-2">
+<h2 id="org1f8807b"><span class="section-number-2">3</span> Shift-And</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 定义“向前”：从左向右。定义向后：“从右到左”。
@@ -133,8 +137,8 @@ x是yxz的一个因子。字符串匹配是一个与应用场景极其相关的�
 </p>
 </div>
 
-<div id="outline-container-org9d6fba0" class="outline-3">
-<h3 id="org9d6fba0"><span class="section-number-3">3.1</span> 形象描述</h3>
+<div id="outline-container-org365766b" class="outline-3">
+<h3 id="org365766b"><span class="section-number-3">3.1</span> 形象描述</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 本节描述以文本：
@@ -158,8 +162,8 @@ i=7时，表示正在读入t7为_字符。
 
 <p>
 本算法将要维护一个由0和1组成的掩码串D，它的长度与模式串的长度p.length相同。这个掩码串表征了模式串中以p1开始向前有多少个字符与文本T中以当前读入位置i为起始（包括i）向后有多少个字符是相等的。
-比如D=00010000中的1在第五位（向后看），意味着i开始向后有五个字符与模式串的前五个字符
-p1p2p3p4p5组成的字符串相等。可以看到，这样的i=12，即此时已读入到文本的第十二个字符。有了这些形象化的理解终于可以引出书中专业化的描述：
+比如D=00010000中的1在第五位（向后看），意味着i开始向后有五个字符(包括i)与模式串的前四个字符
+p1p2p3p4p5组成的字符串相等。可以看到，这样的i=12，即此时已读入到文本的第十二个字符。有了这些形象化的理解终于可以引出专业化的描述了：
 </p>
 <pre class="example">
 “Shift-And算法维护一个字符串的集合，集合中的每个字符串即是模式串p的前缀，同时也是已读入文本的后缀”。
@@ -179,34 +183,295 @@ p1p2p3p4p5组成的字符串相等。可以看到，这样的i=12，即此时已
 <pre class="example">
 掩码串D表征了模式串中以p1开始向前有多少个字符与文本T中以当前读入位置i为起始（包括i）向后有多少个字符是相等的。
 </pre>
+
 <p>
-初始时，T与p中没有一个字符是相等的，所以可以說D的初始值D0=00000000。
+考虑当前的D=00000010，从T中读入下一个字符，如何维护（更新）这个D呢？还是得抓D的定义，通过定义我们可以这样，先将D左移一位，这个动作即假设这个新读入的字符与模式串的当前是相等的。然后将左移后的D与从文本中新读入的字符在模式串中的位置做与运算，如果确是相等，代表当前字符匹配成功，D左移一位，否则匹配失败，D清零。如下面的例子
+</p>
+<pre class="example">
+T=a n n u a l _ a n n  o  u  n  c  e
+  1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+      |
+</pre>
+<p>
+此时读入T的第三个字符n，而n在字符串的位置表示串为00100110，此时D的确为00000010，表示前面有两个字符an匹配了。先将D左移一位：00000100，然后做与运算：
+</p>
+<pre class="example">
+  00100110
+= 00000100
+----------
+  00000100
+</pre>
+<p>
+也即新读入的n的确和模式串中的n匹配了。有了这些实例化的认识，现在可以引出优雅而简洁的公式了：
+</p>
+<pre class="example">
+D &lt;— ((D &lt;&lt; 1) | 1) &amp; B[c]
+</pre>
+<p>
+这便是著名的Shift-And算法的核心思想。其中c代表由文本读入的字符。注意到公式中不仅将D左移了一位还对1进行了或运算，这是为了处理一种边界条件：空字符串也是文本的后缀。
 </p>
 </div>
 </div>
 
+<div id="outline-container-org5146d99" class="outline-3">
+<h3 id="org5146d99"><span class="section-number-3">3.2</span> 伪码表示</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+下面的图展示了Shift-And的伪码表示：
+</p>
 
-<div id="outline-container-org12ea73e" class="outline-3">
-<h3 id="org12ea73e"><span class="section-number-3">3.2</span> 公式描述</h3>
+<div id="orgcdea19f" class="figure">
+<p><img src="./shift-and.png" alt="shift-and.png">
+</p>
+<p><span class="figure-number">Figure 1: </span>Shift-And算法伪码表示</p>
 </div>
-<div id="outline-container-org6b531c1" class="outline-3">
-<h3 id="org6b531c1"><span class="section-number-3">3.3</span> 伪码表示</h3>
 </div>
-<div id="outline-container-org3ac31f0" class="outline-3">
-<h3 id="org3ac31f0"><span class="section-number-3">3.4</span> C代码实现</h3>
+</div>
+<div id="outline-container-org1ce9d53" class="outline-3">
+<h3 id="org1ce9d53"><span class="section-number-3">3.3</span> C代码实现</h3>
+<div class="outline-text-3" id="text-3-3">
+<p>
+有了上面坚实的理解，下面可以给出Shift-And算法的C语言实现：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;string.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdio.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdlib.h&gt;</span>
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">preprocess</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">B</span>[], <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">pat</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">n</span>)
+{
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">shift</span> = 1;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 0; i &lt; n; i++)
+    {
+      B[ (<span style="color: #7CB8BB;">int</span>)pat[i] ] |= shift;
+      <span style="color: #5F7F5F;">// </span><span style="color: #7F9F7F;">printf("B[ %d ]: %u\n", (int)pat[i], B[ (int)pat[i] ]);</span>
+      shift &lt;&lt;= 1;
+    }
+  <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">and_match</span>(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">txt</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">pat</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">m</span> = strlen(txt) - 1, <span style="color: #DFAF8F;">n</span> = strlen(pat) - 1;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">B</span>[256], <span style="color: #DFAF8F;">D</span> = 0, <span style="color: #DFAF8F;">mask</span>;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 0; i &lt; 256; i++)
+        B[i] = 0;
+    preprocess(B, pat, n);
+
+    mask  = 1 &lt;&lt; (n - 1);
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 0; i &lt; m; i++)
+    {
+      D = (D &lt;&lt; 1 | 1) &amp; B[(<span style="color: #7CB8BB;">int</span>)txt[i]];
+      <span style="color: #F0DFAF; font-weight: bold;">if</span> (D &amp; mask)
+        printf(<span style="color: #CC9393;">"%d\n"</span>, i - n + 1);
+    }
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">convert</span>(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">filename</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">str</span>)
+{
+  <span style="color: #7CB8BB;">long</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 0;
+  <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">ch</span>;
+  <span style="color: #7CB8BB;">FILE</span> *<span style="color: #DFAF8F;">fp</span> = fopen(filename, <span style="color: #CC9393;">"r"</span>);
+
+  <span style="color: #F0DFAF; font-weight: bold;">while</span> ((ch = fgetc(fp)) != EOF)
+    {
+      str[i] = ch;
+      i++;
+    }
+
+  <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>()
+{
+  <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">txt</span> = (<span style="color: #7CB8BB;">char</span>*)malloc(3774 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">char</span>));
+  <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">pat</span> = (<span style="color: #7CB8BB;">char</span>*)malloc(10 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">char</span>));
+
+  convert(<span style="color: #CC9393;">"./largeEWD.txt"</span>, txt);
+  convert(<span style="color: #CC9393;">"./pat.txt"</span>, pat);
+
+  and_match(txt, pat);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+<p>
+注意代码中以文件的形式打开模式串和文本串，算法实现时操作字符串比操作文件来得容易，而在处理极大量文本的匹配时，文件存储比字符串又方便的多，为了统一这二者，我写了 <code>convert</code> 函数来完成这二者的转换。 KMP算法实现中也有类似处理手法，两个实现都有这种处理不仅是考虑到文件与字符串转换的方便，还有就是保证二者算法的时间比较尽量单纯干净。
+</p>
+
+<p>
+<code>preprocess</code> 是预处理函数，记录下了模式串中各个字符的位置。如果不能很理解这个函数可以打开打印注释观察输出结果。 <code>and_match</code> 函数是正式的匹配部分，使用了前文解释过的与公式，意义明了。
+</p>
+</div>
 </div>
 </div>
 
-<div id="outline-container-org9a19d5f" class="outline-2">
-<h2 id="org9a19d5f"><span class="section-number-2">4</span> 性能比较</h2>
+<div id="outline-container-orgc887b1b" class="outline-2">
+<h2 id="orgc887b1b"><span class="section-number-2">4</span> 性能比较</h2>
+<div class="outline-text-2" id="text-4">
 </div>
-<div id="outline-container-org0703a07" class="outline-2">
-<h2 id="org0703a07"><span class="section-number-2">5</span> 后记</h2>
+<div id="outline-container-orgbf94e48" class="outline-3">
+<h3 id="orgbf94e48"><span class="section-number-3">4.1</span> KMP算法</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+KMP算法利用模式串自身的特点而做到模式串本身不必逐个与文本进行比较，而是可以跳过某些字符，
+这样加快了比较过程。例如当前已匹配到：
+</p>
+<pre class="example">
+txt[] = "AAAAABAAABA" 
+pat[] = "AAAA"
+            |
+</pre>
+<p>
+下一次我们要比较时，不必从pat的第一个字母开始，因为我们已经知道pat的前三个字母与模式串匹配了，即这三个字母组成的子串即是pat的前缀又是txt的后缀，所以仅需从第四个字符开始与模式串进行比较。这里自然引出疑问，对于pat中的每个字符应该跳过多少个字符不做比较呢？
+</p>
+
+<p>
+KMP算法的预处理过程回答了这个问题，即针对模式串pat的每个字符，以不包括该字符本身的前缀字符串中，寻找最长的那一个，使得它既是pat的前缀又是pat的后缀。记录这个最长的长度，即是针对该字符应该跳过的个数。
+</p>
+
+<p>
+下面也给出KMP算法的实现：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdio.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;string.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdlib.h&gt;</span>
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">computeLPSArray</span>(<span style="color: #7CB8BB;">char</span>* <span style="color: #DFAF8F;">pat</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">M</span>, <span style="color: #7CB8BB;">int</span>* <span style="color: #DFAF8F;">lps</span>); 
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">KMPSearch</span>(<span style="color: #7CB8BB;">char</span>* <span style="color: #DFAF8F;">pat</span>, <span style="color: #7CB8BB;">char</span>* <span style="color: #DFAF8F;">txt</span>) 
+{ 
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">M</span> = strlen(pat) - 1; 
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">N</span> = strlen(txt) - 1;
+
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">lps</span>[M]; 
+
+  computeLPSArray(pat, M, lps); 
+
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 0;
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">j</span> = 0;
+  <span style="color: #F0DFAF; font-weight: bold;">while</span> (i &lt; N)
+    { 
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (pat[j] == txt[i])
+      { 
+        j++; 
+        i++; 
+      } 
+
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (j == M)
+      { 
+        printf(<span style="color: #CC9393;">"%d \n"</span>, i - j); 
+        j = lps[j - 1]; 
+      } 
+
+    <span style="color: #F0DFAF; font-weight: bold;">else</span> <span style="color: #F0DFAF; font-weight: bold;">if</span> (i &lt; N &amp;&amp; pat[j] != txt[i])
+      { 
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (j != 0) 
+          j = lps[j - 1]; 
+        <span style="color: #F0DFAF; font-weight: bold;">else</span>
+          i = i + 1; 
+      } 
+    }
+} 
+
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">computeLPSArray</span>(<span style="color: #7CB8BB;">char</span>* <span style="color: #DFAF8F;">pat</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">M</span>, <span style="color: #7CB8BB;">int</span>* <span style="color: #DFAF8F;">lps</span>) 
+{ 
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">len</span> = 0; 
+
+  lps[0] = 0; 
+
+
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 1; 
+  <span style="color: #F0DFAF; font-weight: bold;">while</span> (i &lt; M)
+    { 
+      <span style="color: #F0DFAF; font-weight: bold;">if</span> (pat[i] == pat[len])
+        { 
+          len++; 
+          lps[i] = len; 
+          i++; 
+        } 
+    <span style="color: #F0DFAF; font-weight: bold;">else</span>
+      { 
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (len != 0)
+          { 
+            len = lps[len - 1]; 
+          } 
+        <span style="color: #F0DFAF; font-weight: bold;">else</span>
+          { 
+            lps[i] = 0; 
+            i++; 
+          } 
+      } 
+    } 
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">convert</span>(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">filename</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">str</span>)
+{
+  <span style="color: #7CB8BB;">long</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span> = 0;
+  <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">ch</span>;
+  <span style="color: #7CB8BB;">FILE</span> *<span style="color: #DFAF8F;">fp</span> = fopen(filename, <span style="color: #CC9393;">"r"</span>);
+
+  <span style="color: #F0DFAF; font-weight: bold;">while</span> ((ch = fgetc(fp)) != EOF)
+    {
+      str[i] = ch;
+      i++;
+    }
+
+  <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>() 
+{
+  <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">txt</span> = (<span style="color: #7CB8BB;">char</span>*)malloc(3774 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">char</span>));
+  <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">pat</span> = (<span style="color: #7CB8BB;">char</span>*)malloc(10 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">char</span>));
+
+  convert(<span style="color: #CC9393;">"./largeEWD.txt"</span>, txt);
+  convert(<span style="color: #CC9393;">"./pat.txt"</span>, pat);
+
+  KMPSearch(pat, txt); 
+  <span style="color: #F0DFAF; font-weight: bold;">return</span> 0; 
+} 
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org7c2cb59" class="outline-3">
+<h3 id="org7c2cb59"><span class="section-number-3">4.2</span> 复杂度</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+Shift-And算法通过逐个扫描文本而完成匹配，预处理也只扫描一遍模式串故复杂度为O(m+n)。而KMP也是扫描一次文本串即可，时间复杂度也为O(m+n)，其中n为文本长度，m为模式串长度。
+</p>
+
+<p>
+根据代码实现可以看到，Shift-And算法在进行相等比较时应用的与运算，在模式串长度为一个机器字内时可以利用机器的位并行而加快速度，而KMP算法是直接判断相等，应该较慢，但实际作者测量时，
+300MB以下的文本数据它们的速度相差无几，我猜想编译器对这种相等判断进行了优化。
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgeabf42e" class="outline-2">
+<h2 id="orgeabf42e"><span class="section-number-2">5</span> 后记</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+研究模式串匹配算法，我总有一种不深刻的感觉，尽管也实现了，运行了，甚至与其它算法作比较了，
+但是我依然无法将其简单化，如你所见，这篇教程可能并没有让你感到简单明了而又深刻，那样的效果才是真正大师的水平。通常我不能非常简单的表达出一种思想时，代表我也不是完全深刻。
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-04-17 Wed 20:18</p>
+<p class="date">Created: 2019-04-18 Thu 22:40</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -89,10 +89,10 @@ int convert(char *filename, char *str)
 
 int main() 
 {
-	char *txt = (char*)malloc(377487360 * sizeof(char));
+	char *txt = (char*)malloc(3774 * sizeof(char));
 	char *pat = (char*)malloc(10 * sizeof(char));
 
-	convert("./leipzig1M.txt", txt);
+	convert("./largeEWD.txt", txt);
 	convert("./pat.txt", pat);
 
 	KMPSearch(pat, txt); 
