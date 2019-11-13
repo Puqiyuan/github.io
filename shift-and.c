@@ -2,59 +2,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <errno.h>
-
-off_t fsize(const char *filename)
+int preprocess(unsigned int B[], char *pat, int n)
 {
-	struct stat st;
+    unsigned int shift = 1;
 	
-	if (stat(filename, &st) == 0)
-		return st.st_size;
-
-	fprintf(stderr, "Cannot determine size of %s: %s\n",
-					filename, strerror(errno));
-	return -1;
-}
-
-void preprocess(unsigned int B[], char* T)
-{
-	unsigned int shift = 1;
-	char ch;
-	FILE *Tfp;
-	Tfp = fopen(T, "r");
-	
-	while ((ch = fgetc(Tfp)) != EOF)
+    for (int i = 0; i < n; i++)
 		{
-			B[(int)ch] |= shift;
+			B[ (int)pat[i] ] |= shift;
+			// printf("B[ %d ]: %u\n", (int)pat[i], B[ (int)pat[i] ]);
 			shift <<= 1;
 		}
+	return 0;
 }
 
-int shift_and(char *S, char *T)
+int and_match(char *txt, char *pat)
 {
-	FILE *Sfp;
-	unsigned int B[256], D = 0, mask;
-	char ch;
-	int i;
-
-	Sfp = fopen(S, "r");
+    int m = strlen(txt) - 1, n = strlen(pat) - 1;
+    unsigned int B[256], D = 0, mask;
 	
-	for (i = 0; i < 256; i++)
-		B[i] = 0;
-	preprocess(B, T);
+    for (int i = 0; i < 256; i++)
+        B[i] = 0;
+    preprocess(B, pat, n);
 
-	long int n = fsize(T);
-	mask  = 1 << (n - 2);
-
-	while ((ch = fgetc(Sfp)) != EOF)
+    mask  = 1 << (n - 1);
+    for (int i = 0; i < m; i++)
 		{
-			D = (D << 1 | 1) & B[(int)ch];
+			D = (D << 1 | 1) & B[(int)txt[i]];
 			if (D & mask)
-				{
-					printf("%ld\n", ftell(Sfp) - n + 2);
-				}
+				printf("%d\n", i - n + 1);
+		}
+
+    return 0;
+}
+
+int convert(char *filename, char *str)
+{
+	long int i = 0;
+	char ch;
+	FILE *fp = fopen(filename, "r");
+
+	while ((ch = fgetc(fp)) != EOF)
+		{
+			str[i] = ch;
+			i++;
 		}
 
 	return 0;
@@ -62,10 +52,13 @@ int shift_and(char *S, char *T)
 
 int main()
 {
-	char S[] = "./S.txt";
-	char T[] = "./T.txt";
+	char *txt = (char*)malloc(3774 * sizeof(char));
+	char *pat = (char*)malloc(10 * sizeof(char));
+
+	convert("./largeEWD.txt", txt);
+	convert("./pat.txt", pat);
+
+	and_match(txt, pat);
 	
-	shift_and(S, T);
-	
-	return 0;
+    return 0;
 }
