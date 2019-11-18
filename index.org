@@ -11,6 +11,7 @@
 * Linux系统管理
 - [[./pipe-redirection.html][管道与重定向]]
 * Linux系统开发
+- [[./thread.html][Linux线程之一]]。
 * Linux内核研究
 * 算法研究
 * 体系结构研究
