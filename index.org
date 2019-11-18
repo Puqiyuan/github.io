@@ -13,9 +13,8 @@
 * Linux系统开发
 * Linux内核研究
 * 算法研究
-- [[./shift-and.html][Shift-And]]字符串匹配算法。
 * 体系结构研究
 * 杂项
 - 一份较为详细的翻墙指南[[./html/][Bypass Guide]]。
-- 协程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
+- 微切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
 - 大学老师
