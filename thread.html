@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2019-11-19 Tue 22:14 -->
+<!-- 2019-11-19 Tue 22:20 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux线程之一</title>
@@ -63,10 +63,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org7df3f8c">1. 介绍</a></li>
-<li><a href="#org7f1497a">2. 基础概念</a></li>
-<li><a href="#orga6b2f2b">3. API</a></li>
-<li><a href="#orgd215383">4. 线程同步</a></li>
+<li><a href="#org13842e1">1. 介绍</a></li>
+<li><a href="#orge0687b8">2. 基础概念</a></li>
+<li><a href="#orgb818205">3. API</a></li>
+<li><a href="#org0c73d63">4. 线程同步</a></li>
 </ul>
 </div>
 </div>
@@ -74,16 +74,16 @@ for the JavaScript code in this tag.
 本文是讲述Linux线程系列文章的第一篇。
 </p>
 
-<div id="outline-container-org7df3f8c" class="outline-2">
-<h2 id="org7df3f8c"><span class="section-number-2">1</span> 介绍</h2>
+<div id="outline-container-org13842e1" class="outline-2">
+<h2 id="org13842e1"><span class="section-number-2">1</span> 介绍</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 在单个进程的环境里可以利用线程去执行多个任务，在单个进程的环境里，这些线程共享许多资源，包括文件描述符以及内存。本文先讲述一些线程的基本概念，然后是一些API介绍以及示例用法，有些程序被故意写的“不完美”，以使读者深刻线程中的种种陷阱。一旦涉及“共享”就存在同步与竞争问题，本文以线程同步结束，这是使用线程编程的一个最头疼的问题。
 </p>
 </div>
 </div>
-<div id="outline-container-org7f1497a" class="outline-2">
-<h2 id="org7f1497a"><span class="section-number-2">2</span> 基础概念</h2>
+<div id="outline-container-orge0687b8" class="outline-2">
+<h2 id="orge0687b8"><span class="section-number-2">2</span> 基础概念</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 传统的进程通常都是单线程的，使用多线程可以做到同时（单处理器不是严格的同时）处理多个任务。
@@ -97,23 +97,21 @@ for the JavaScript code in this tag.
 </ul>
 
 <p>
-某些人把多线程与多处理器（核）等同起来，认为只有多核系统才能充分利用多线程。这实际上是有
- 一定误解的。要理解多线程的本质： <b>将原本以单线程运行的程序，划分几部分出来后创建新的线程去执行。</b> 这种做法增加了操作系统调度到本程序的机会。即使有线程当前被阻塞了，也会有其它线程
- 被调度到继续执行。这样仍旧可以改善响应时间以及吞吐量， <b>只要程序中存在并行性或有阻塞部分都可以尝试多线程。</b>
+某些人把多线程与多处理器（核）等同起来，认为只有多核系统才能充分利用多线程。这实际上是有一定误解的。要理解多线程的本质： <b>将原本以单线程运行的程序，划分几部分出来后创建新的线程去执行。</b> 这种做法增加了操作系统调度到本程序的机会。即使有线程当前被阻塞了，也会有其它线程被调度到继续执行。这样仍旧可以改善响应时间以及吞吐量， <b>只要程序中存在并行性或有阻塞部分都可以尝试多线程。</b>
 </p>
 </div>
 </div>
 
-<div id="outline-container-orga6b2f2b" class="outline-2">
-<h2 id="orga6b2f2b"><span class="section-number-2">3</span> API</h2>
+<div id="outline-container-orgb818205" class="outline-2">
+<h2 id="orgb818205"><span class="section-number-2">3</span> API</h2>
 </div>
-<div id="outline-container-orgd215383" class="outline-2">
-<h2 id="orgd215383"><span class="section-number-2">4</span> 线程同步</h2>
+<div id="outline-container-org0c73d63" class="outline-2">
+<h2 id="org0c73d63"><span class="section-number-2">4</span> 线程同步</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2019-11-19 Tue 22:14</p>
+<p class="date">Created: 2019-11-19 Tue 22:20</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
