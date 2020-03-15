@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-03-15 Sun 11:01 -->
+<!-- 2020-03-15 Sun 11:02 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux线程之一</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3161fb1">1. 介绍</a></li>
-<li><a href="#org3ebe238">2. 基础概念</a></li>
-<li><a href="#org279318c">3. API</a></li>
-<li><a href="#orgde96383">4. 线程同步</a></li>
+<li><a href="#org40e3e55">1. 介绍</a></li>
+<li><a href="#orgb9edfed">2. 基础概念</a></li>
+<li><a href="#org2eee3b6">3. API</a></li>
+<li><a href="#org38ef44a">4. 线程同步</a></li>
 </ul>
 </div>
 </div>
@@ -73,8 +73,8 @@ for the JavaScript code in this tag.
 本文是讲述Linux线程系列文章的第一篇。
 </p>
 
-<div id="outline-container-org3161fb1" class="outline-2">
-<h2 id="org3161fb1"><span class="section-number-2">1</span> 介绍</h2>
+<div id="outline-container-org40e3e55" class="outline-2">
+<h2 id="org40e3e55"><span class="section-number-2">1</span> 介绍</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 在单个进程的环境里可以利用线程去执行多个任务，在单个进程的环境里，这些线程共享许多资源，包
@@ -84,8 +84,8 @@ for the JavaScript code in this tag.
 </p>
 </div>
 </div>
-<div id="outline-container-org3ebe238" class="outline-2">
-<h2 id="org3ebe238"><span class="section-number-2">2</span> 基础概念</h2>
+<div id="outline-container-orgb9edfed" class="outline-2">
+<h2 id="orgb9edfed"><span class="section-number-2">2</span> 基础概念</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 传统的进程通常都是单线程的，使用多线程可以做到同时（单处理器不是严格的同时）处理多个任务。
@@ -115,8 +115,8 @@ errno以及信号。在进程里的一切所有线程都是共享的，比如程
 </p>
 </div>
 </div>
-<div id="outline-container-org279318c" class="outline-2">
-<h2 id="org279318c"><span class="section-number-2">3</span> API</h2>
+<div id="outline-container-org2eee3b6" class="outline-2">
+<h2 id="org2eee3b6"><span class="section-number-2">3</span> API</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 接下来介绍用于操纵线程的POSIX标准API。这些API可以用宏 <code>_POSIX_THREADS</code> 以#ifdef的形式来测试是
@@ -125,13 +125,13 @@ errno以及信号。在进程里的一切所有线程都是共享的，比如程
 </div>
 </div>
 
-<div id="outline-container-orgde96383" class="outline-2">
-<h2 id="orgde96383"><span class="section-number-2">4</span> 线程同步</h2>
+<div id="outline-container-org38ef44a" class="outline-2">
+<h2 id="org38ef44a"><span class="section-number-2">4</span> 线程同步</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2020-03-15 Sun 11:01</p>
+<p class="date">Created: 2020-03-15 Sun 11:02</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
