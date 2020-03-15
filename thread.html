@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-03-15 Sun 10:54 -->
+<!-- 2020-03-15 Sun 10:59 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux线程之一</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgd644788">1. 介绍</a></li>
-<li><a href="#orga4640f0">2. 基础概念</a></li>
-<li><a href="#org583891e">3. API</a></li>
-<li><a href="#org8e2352d">4. 线程同步</a></li>
+<li><a href="#orgc56c6a3">1. 介绍</a></li>
+<li><a href="#org8ab16ff">2. 基础概念</a></li>
+<li><a href="#org04221c8">3. API</a></li>
+<li><a href="#org3154763">4. 线程同步</a></li>
 </ul>
 </div>
 </div>
@@ -73,8 +73,8 @@ for the JavaScript code in this tag.
 本文是讲述Linux线程系列文章的第一篇。
 </p>
 
-<div id="outline-container-orgd644788" class="outline-2">
-<h2 id="orgd644788"><span class="section-number-2">1</span> 介绍</h2>
+<div id="outline-container-orgc56c6a3" class="outline-2">
+<h2 id="orgc56c6a3"><span class="section-number-2">1</span> 介绍</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 在单个进程的环境里可以利用线程去执行多个任务，在单个进程的环境里，这些线程共享许多资源，包
@@ -84,8 +84,8 @@ for the JavaScript code in this tag.
 </p>
 </div>
 </div>
-<div id="outline-container-orga4640f0" class="outline-2">
-<h2 id="orga4640f0"><span class="section-number-2">2</span> 基础概念</h2>
+<div id="outline-container-org8ab16ff" class="outline-2">
+<h2 id="org8ab16ff"><span class="section-number-2">2</span> 基础概念</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 传统的进程通常都是单线程的，使用多线程可以做到同时（单处理器不是严格的同时）处理多个任务。
@@ -115,23 +115,23 @@ errno以及信号。在进程里的一切所有线程都是共享的，比如程
 </p>
 </div>
 </div>
-<div id="outline-container-org583891e" class="outline-2">
-<h2 id="org583891e"><span class="section-number-2">3</span> API</h2>
+<div id="outline-container-org04221c8" class="outline-2">
+<h2 id="org04221c8"><span class="section-number-2">3</span> API</h2>
 <div class="outline-text-2" id="text-3">
 <p>
-接下来介绍用于操纵线程的POSIX标准API。这些API可以用宏\<sub>POSIX</sub>\<sub>THREADS以</sub>#ifdef的形式来测试是
+接下来介绍用于操纵线程的POSIX标准API。这些API可以用宏 \<sub>POSIX</sub>\<sub>THREADS以</sub>#ifdef的形式来测试是
 否支持POSIX的线程相关的API，也可以调用sysconf在运行时来检测。
 </p>
 </div>
 </div>
 
-<div id="outline-container-org8e2352d" class="outline-2">
-<h2 id="org8e2352d"><span class="section-number-2">4</span> 线程同步</h2>
+<div id="outline-container-org3154763" class="outline-2">
+<h2 id="org3154763"><span class="section-number-2">4</span> 线程同步</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2020-03-15 Sun 10:54</p>
+<p class="date">Created: 2020-03-15 Sun 10:59</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
