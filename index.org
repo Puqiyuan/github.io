@@ -13,6 +13,7 @@
 * Linux系统开发
 - [[./thread.html][Linux线程之一]]。
 * Linux内核研究
+- [[./thread.html][内核进程调度]]。
 * 算法研究
 * 体系结构研究
 * 杂项

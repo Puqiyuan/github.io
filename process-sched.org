@@ -1,0 +1,6 @@
+#+TITLE: Kernel进程调度
+#+AUTHOR: Cauchy
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+
+本文阐述Kernel的进程调度。
