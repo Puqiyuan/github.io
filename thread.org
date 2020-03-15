@@ -30,7 +30,7 @@
 errno以及信号。在进程里的一切所有线程都是共享的，比如程序的代码段、全局与堆内存以及文件描述
 符。
 * API
-接下来介绍用于操纵线程的POSIX标准API。这些API可以用宏 \_POSIX\_THREADS以#ifdef的形式来测试是
+接下来介绍用于操纵线程的POSIX标准API。这些API可以用宏 =_POSIX_THREADS= 以#ifdef的形式来测试是
 否支持POSIX的线程相关的API，也可以调用sysconf在运行时来检测。
 
 * 线程同步
