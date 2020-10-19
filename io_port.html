@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-10-19 Mon 16:38 -->
+<!-- 2020-10-19 Mon 16:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关于驱动的一些内核接口介绍</title>
@@ -64,7 +64,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org370dd4c">1. 函数介绍</a></li>
+<li><a href="#org9cc28fc">1. 函数介绍</a></li>
 </ul>
 </div>
 </div>
@@ -76,20 +76,21 @@ for the JavaScript code in this tag.
 驱动和硬件进行沟通，采用IO端口的方式。内核提供了许多这样的函数来产生这样的端口。
 </p>
 
-<div id="outline-container-org370dd4c" class="outline-2">
-<h2 id="org370dd4c"><span class="section-number-2">1</span> 函数介绍</h2>
+<div id="outline-container-org9cc28fc" class="outline-2">
+<h2 id="org9cc28fc"><span class="section-number-2">1</span> 函数介绍</h2>
 <div class="outline-text-2" id="text-1">
 <ul class="org-ul">
-<li>request<sub>region</sub>：由内核提供，允许驱动去声明它需要的端口。
+<li>request\<sub>region</sub>：由内核提供，允许驱动去声明它需要的端口。从first开始的n个端口，name参数是设备的名字。
 <ul class="org-ul">
-<li>Header: #include &lt;linux/ioport.h&gt;</li>
+<li>头文件: #include &lt;linux/ioport.h&gt;</li>
 <li><p>
-Prototype:
+原型:
 </p>
 <div class="org-src-container">
 <pre class="src src-C"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">resource</span> *<span style="color: #93E0E3;">request_region</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">first</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">n</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">name</span>);
 </pre>
 </div></li>
+<li>返回值：成功非NULL，如果期待的端口不可提供，则返回NULL。</li>
 </ul></li>
 </ul>
 </div>
@@ -97,7 +98,7 @@ Prototype:
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy Cauchy</p>
-<p class="date">Created: 2020-10-19 Mon 16:38</p>
+<p class="date">Created: 2020-10-19 Mon 16:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
