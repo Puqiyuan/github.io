@@ -14,8 +14,9 @@
 - [[./thread.html][Linux线程之一]]。
 * Linux内核
 - [[./process-sched.html][内核进程调度]]。
-- [[./io_port.html][关于驱动的一些内核接口介绍]]
+- [[./io_port.html][关于驱动的一些内核接口介绍]]。
 * 算法与数据结构
+- [[./shiftand.html][Shift-And算法]]。
 * 体系架构
 * 编译器
 * 网络
