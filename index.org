@@ -14,6 +14,7 @@
 - [[./thread.html][Linux线程之一]]。
 * Linux内核
 - [[./process-sched.html][内核进程调度]]。
+- 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
 - [[./io_port.html][关于驱动的一些内核接口介绍]]。
 * 算法与数据结构
 - [[./shiftand.html][Shift-And算法]]。
@@ -23,6 +24,5 @@
 * 虚拟化技术
 * 杂项
 - 一份较为详细的翻墙指南[[./html/][Bypass Guide]]。
-- 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
 - 大学老师对于教育的[[./thoughts.html][看法]]。
 - Debian[[./install.html][安装指导]]。
