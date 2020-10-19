@@ -1,0 +1,13 @@
+#+TITLE:关于驱动的一些内核接口介绍                                                                                                                                        
+#+AUTHOR: Cauchy                                                                                                                                                          
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+
+本文介绍一些关于内核在使用IO硬件资源时会使用到的一些内核内部接口，在介绍完了这些接口后会给
+出一个完整的小例子。
+#+AUTHOR: Cauchy
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+
+本文介绍一些关于内核在使用IO硬件资源时会使用到的一些内核内部接口，在介绍完了这些接口后会给
+出一个完整的小例子。

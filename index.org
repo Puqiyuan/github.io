@@ -1,4 +1,4 @@
-#+TITLE: 计算机技术存档
+#+TITLE: Notes of Computer Technology
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css"> 
@@ -12,10 +12,14 @@
 - [[./pipe-redirection.html][管道与重定向]]。
 * Linux系统开发
 - [[./thread.html][Linux线程之一]]。
-* Linux内核研究
+* Linux内核
 - [[./process-sched.html][内核进程调度]]。
-* 算法研究
-* 体系结构研究
+- [[./io_port.html][关于驱动的一些内核接口介绍]]
+* 算法与数据结构
+* 体系架构
+* 编译器
+* 网络
+* 虚拟化技术
 * 杂项
 - 一份较为详细的翻墙指南[[./html/][Bypass Guide]]。
 - 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
