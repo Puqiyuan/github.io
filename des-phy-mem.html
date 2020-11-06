@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-11-06 Fri 22:58 -->
+<!-- 2020-11-06 Fri 23:19 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
@@ -62,7 +62,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org7b1fe95">1. </a></li>
+<li><a href="#org9401ae8">1. </a></li>
 </ul>
 </div>
 </div>
@@ -71,26 +71,31 @@ for the JavaScript code in this tag.
 </p>
 
 <p>
-Linux的内存管理适用于所有架构，所以内存管理必有它的一些跨架构的上层的通用概念（数据结构）。
-首先要区分下的是UMA（Uniform Memory Access）和（Non Uniform Memory Access）。前者的意义是，
-对于所有物理内存来说其被CPU访问访问的时间都是一样的。对于后者，却把内存划分为许多Bank（姑
-且理解为块），依据它们到物理内存的远近，其访问时间是不一样的。另外一些内存又可以划分为DMA
-的用途，也就是供给设备直接访问，从这个角度看，DMA和node（下文）是同等层次的概念。
+Linux的内存管理适用于所有架构，所以内存管理必有它的一些跨架构上层的通用概念（数据结构）。
+首先要区分下的是UMA（Uniform Memory Access）和NUMA（Non Uniform Memory Access）。前者的意
+义是，对于所有物理内存来说其被CPU访问访问的时间都是一样的。对于后者，却把内存划分为许多
+Bank（姑且理解为块），依据它们到物理内存的远近，其访问时间是不一样的。另外一些内存又可以划
+分为DMA的用途，也就是供给设备直接访问，从这个角度看，DMA和node（下文）是同等层次的概念。
 </p>
 
 <p>
-描述这样的一个bank，叫做节点（node），以数据结构pg<sub>data</sub><sub>t表示之</sub>。内存的统计信息和页面替换
-都是在node的层次上做的。在NUMA机器上，一个NUMA node就会有一个pg<sub>data</sub><sub>t结构体表示</sub>，而对于
-UMA机器，则是一个pg<sub>data</sub><sub>t结构体表示所有内存</sub>。
+描述这样的一个bank，叫做节点（node），以数据结构pg\<sub>data</sub>\<sub>t表示之</sub>。内存的统计信息和页面替换
+都是在node的层次上做的。在NUMA机器上，一个NUMA node就会有一个pg\<sub>data</sub>\<sub>t结构体表示</sub>，而对于
+UMA机器，则是一个pg\<sub>data</sub>\<sub>t结构体表示所有内存</sub>。
 </p>
 
-<div id="outline-container-org7b1fe95" class="outline-2">
-<h2 id="org7b1fe95"><span class="section-number-2">1</span> </h2>
+<p>
+node又往下分为很多的zones，在内核里用zone结构体表示。这些zone又划分为不同的类型，比如有
+ZONE\<sub>DMA</sub>，ZONE\<sub>NORMAL</sub>，ZONE\<sub>HIGHMEM</sub>。
+</p>
+
+<div id="outline-container-org9401ae8" class="outline-2">
+<h2 id="org9401ae8"><span class="section-number-2">1</span> </h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2020-11-06 Fri 22:58</p>
+<p class="date">Created: 2020-11-06 Fri 23:19</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
