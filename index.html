@@ -1,20 +1,19 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-10-19 Mon 16:26 -->
+<!-- 2020-11-06 Fri 22:44 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Notes of Computer Technology</title>
 <meta name="generator" content="Org mode">
 <meta name="author" content="Cauchy">
 <link rel="stylesheet" href="./org-manual.css" type="text/css">
-<style>code {font-family:Monospace; font-size:90%; background-color: #eee} body {font-size:14pt}</style>
 <script type="text/javascript">
 /*
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2018 Free Software Foundation, Inc.
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -63,72 +62,74 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org0c1f895">1. Linux系统管理</a></li>
-<li><a href="#orgc34bf1e">2. Linux系统开发</a></li>
-<li><a href="#orgdde56ca">3. Linux内核</a></li>
-<li><a href="#org1af5645">4. 算法与数据结构</a></li>
-<li><a href="#orgbe78b95">5. 体系架构</a></li>
-<li><a href="#org4889f86">6. 编译器</a></li>
-<li><a href="#org2915dc1">7. 网络</a></li>
-<li><a href="#org9c4c4a4">8. 虚拟化技术</a></li>
-<li><a href="#org57811a2">9. 杂项</a></li>
+<li><a href="#org36824b4">1. Linux系统管理</a></li>
+<li><a href="#org75d52ba">2. Linux系统开发</a></li>
+<li><a href="#org734e486">3. Linux内核</a></li>
+<li><a href="#orge264bae">4. 算法与数据结构</a></li>
+<li><a href="#org6ec119d">5. 体系架构</a></li>
+<li><a href="#org2cde24d">6. 编译器</a></li>
+<li><a href="#orge37912c">7. 网络</a></li>
+<li><a href="#orgcf7bfea">8. 虚拟化技术</a></li>
+<li><a href="#org829968d">9. 杂项</a></li>
 </ul>
 </div>
 </div>
 <p>
-这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。有任何想法请联系作者：pqy7172@gmail.com。理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，
+这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。有任何想法
+请联系作者：pqy7172@gmail.com。理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，
 无论技术多简单多复杂。热爱技术也热爱生活。:-)
 </p>
 
 
-<div id="outline-container-org0c1f895" class="outline-2">
-<h2 id="org0c1f895"><span class="section-number-2">1</span> Linux系统管理</h2>
+<div id="outline-container-org36824b4" class="outline-2">
+<h2 id="org36824b4"><span class="section-number-2">1</span> Linux系统管理</h2>
 <div class="outline-text-2" id="text-1">
 <ul class="org-ul">
 <li><a href="./pipe-redirection.html">管道与重定向</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgc34bf1e" class="outline-2">
-<h2 id="orgc34bf1e"><span class="section-number-2">2</span> Linux系统开发</h2>
+<div id="outline-container-org75d52ba" class="outline-2">
+<h2 id="org75d52ba"><span class="section-number-2">2</span> Linux系统开发</h2>
 <div class="outline-text-2" id="text-2">
 <ul class="org-ul">
 <li><a href="./thread.html">Linux线程之一</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgdde56ca" class="outline-2">
-<h2 id="orgdde56ca"><span class="section-number-2">3</span> Linux内核</h2>
+<div id="outline-container-org734e486" class="outline-2">
+<h2 id="org734e486"><span class="section-number-2">3</span> Linux内核</h2>
 <div class="outline-text-2" id="text-3">
 <ul class="org-ul">
 <li><a href="./process-sched.html">内核进程调度</a>。</li>
 <li>微线程切换在X86，X86-64，ARM，ARM64几种平台上的<a href="./switch-protected.html">实现</a>。</li>
 <li><a href="./io_port.html">关于驱动的一些内核接口介绍</a>。</li>
+<li><a href="./des-phy-mem.html">内存管理之描述物理内存</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org1af5645" class="outline-2">
-<h2 id="org1af5645"><span class="section-number-2">4</span> 算法与数据结构</h2>
+<div id="outline-container-orge264bae" class="outline-2">
+<h2 id="orge264bae"><span class="section-number-2">4</span> 算法与数据结构</h2>
 <div class="outline-text-2" id="text-4">
 <ul class="org-ul">
 <li><a href="./shiftand.html">Shift-And算法</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgbe78b95" class="outline-2">
-<h2 id="orgbe78b95"><span class="section-number-2">5</span> 体系架构</h2>
+<div id="outline-container-org6ec119d" class="outline-2">
+<h2 id="org6ec119d"><span class="section-number-2">5</span> 体系架构</h2>
 </div>
-<div id="outline-container-org4889f86" class="outline-2">
-<h2 id="org4889f86"><span class="section-number-2">6</span> 编译器</h2>
+<div id="outline-container-org2cde24d" class="outline-2">
+<h2 id="org2cde24d"><span class="section-number-2">6</span> 编译器</h2>
 </div>
-<div id="outline-container-org2915dc1" class="outline-2">
-<h2 id="org2915dc1"><span class="section-number-2">7</span> 网络</h2>
+<div id="outline-container-orge37912c" class="outline-2">
+<h2 id="orge37912c"><span class="section-number-2">7</span> 网络</h2>
 </div>
-<div id="outline-container-org9c4c4a4" class="outline-2">
-<h2 id="org9c4c4a4"><span class="section-number-2">8</span> 虚拟化技术</h2>
+<div id="outline-container-orgcf7bfea" class="outline-2">
+<h2 id="orgcf7bfea"><span class="section-number-2">8</span> 虚拟化技术</h2>
 </div>
-<div id="outline-container-org57811a2" class="outline-2">
-<h2 id="org57811a2"><span class="section-number-2">9</span> 杂项</h2>
+<div id="outline-container-org829968d" class="outline-2">
+<h2 id="org829968d"><span class="section-number-2">9</span> 杂项</h2>
 <div class="outline-text-2" id="text-9">
 <ul class="org-ul">
 <li>一份较为详细的翻墙指南<a href="./html/">Bypass Guide</a>。</li>
@@ -140,7 +141,7 @@ for the JavaScript code in this tag.
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2020-10-19 Mon 16:26</p>
+<p class="date">Created: 2020-11-06 Fri 22:44</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

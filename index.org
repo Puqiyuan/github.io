@@ -16,6 +16,7 @@
 - [[./process-sched.html][内核进程调度]]。
 - 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./switch-protected.html][实现]]。
 - [[./io_port.html][关于驱动的一些内核接口介绍]]。
+- [[./des-phy-mem.html][内存管理之描述物理内存]]
 * 算法与数据结构
 - [[./shiftand.html][Shift-And算法]]。
 * 体系架构
