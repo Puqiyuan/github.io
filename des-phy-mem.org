@@ -7,17 +7,11 @@
 本文介绍Linux内存管理的一部分，即Linux内核是如何描述物理内存的。
 
 Linux的内存管理适用于所有架构，所以内存管理必有它的一些跨架构上层的通用概念（数据结构）。
-首先要区分下的是UMA（Uniform Memory Access）和NUMA（Non Uniform Memory Access）。前者的意
-义是，对于所有物理内存来说其被CPU访问的时间都是一样的。对于后者，却把内存划分为许多
-Bank（姑且理解为块），依据它们到CPU的远近，其访问时间是不一样的。另外一些内存又可以划
-分为DMA的用途，也就是供给设备直接访问，从这个角度看，DMA和node（下文）是同等层次的概念。
+首先要区分下的是UMA（Uniform Memory Access）和NUMA（Non Uniform Memory Access）。前者的意义是，对于所有物理内存来说其被CPU访问的时间都是一样的。对于后者，却把内存划分为许多Bank（姑且理解为块），依据它们到CPU的远近，其访问时间是不一样的。另外一些内存又可以划分为DMA的用途，也就是供给设备直接访问，从这个角度看，DMA和node（下文）是同等层次的概念。
 
-描述这样的一个bank，叫做结点（node），以数据结构pg_data_t表示之。内存的统计信息和页面替换
-都是在node的层次上做的。在NUMA机器上，一个NUMA node就会有一个pg_data_t结构体表示，而对于
-UMA机器，则是一个pg_data_t结构体表示所有内存。
+描述这样的一个bank，叫做结点（node），以数据结构pg_data_t表示之。内存的统计信息和页面替换都是在node的层次上做的。在NUMA机器上，一个NUMA node就会有一个pg_data_t结构体表示，而对于UMA机器，则是一个pg_data_t结构体表示所有内存。
 
-node又往下分为很多的zones，在内核里用zone结构体表示。这些zone又划分为不同的类型，比如有
-ZONE_DMA，ZONE_NORMAL，ZONE_HIGHMEM。
+node又往下分为很多的zones，在内核里用zone结构体表示。这些zone又划分为不同的类型，比如有ZONE_DMA，ZONE_NORMAL，ZONE_HIGHMEM。
 
 大多数内存操作发生在ZONE_NORMAL类型的zone中，所以这种类型的zone对于系统性能的影响至关重要。
 ZONE向下又把内存划分为固定的page frame（页框）。页框由结构体page表示。
@@ -29,8 +23,7 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 [[./mem-struct-layout.png]]
 
 * 结点
-前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内
-核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
+前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
 pglist_data结构体中的一些成员了。
 #+begin_src C++ :includes <stdio.h>
 typedef struct pglist_data {

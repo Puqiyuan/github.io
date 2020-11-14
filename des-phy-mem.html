@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-11-14 Sat 17:17 -->
+<!-- 2020-11-14 Sat 17:48 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
@@ -62,7 +62,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org0be174c">1. 结点</a></li>
+<li><a href="#orgdf29c97">1. 结点</a></li>
 </ul>
 </div>
 </div>
@@ -72,21 +72,15 @@ for the JavaScript code in this tag.
 
 <p>
 Linux的内存管理适用于所有架构，所以内存管理必有它的一些跨架构上层的通用概念（数据结构）。
-首先要区分下的是UMA（Uniform Memory Access）和NUMA（Non Uniform Memory Access）。前者的意
-义是，对于所有物理内存来说其被CPU访问的时间都是一样的。对于后者，却把内存划分为许多
-Bank（姑且理解为块），依据它们到CPU的远近，其访问时间是不一样的。另外一些内存又可以划
-分为DMA的用途，也就是供给设备直接访问，从这个角度看，DMA和node（下文）是同等层次的概念。
+首先要区分下的是UMA（Uniform Memory Access）和NUMA（Non Uniform Memory Access）。前者的意义是，对于所有物理内存来说其被CPU访问的时间都是一样的。对于后者，却把内存划分为许多Bank（姑且理解为块），依据它们到CPU的远近，其访问时间是不一样的。另外一些内存又可以划分为DMA的用途，也就是供给设备直接访问，从这个角度看，DMA和node（下文）是同等层次的概念。
 </p>
 
 <p>
-描述这样的一个bank，叫做结点（node），以数据结构pg_data_t表示之。内存的统计信息和页面替换
-都是在node的层次上做的。在NUMA机器上，一个NUMA node就会有一个pg_data_t结构体表示，而对于
-UMA机器，则是一个pg_data_t结构体表示所有内存。
+描述这样的一个bank，叫做结点（node），以数据结构pg_data_t表示之。内存的统计信息和页面替换都是在node的层次上做的。在NUMA机器上，一个NUMA node就会有一个pg_data_t结构体表示，而对于UMA机器，则是一个pg_data_t结构体表示所有内存。
 </p>
 
 <p>
-node又往下分为很多的zones，在内核里用zone结构体表示。这些zone又划分为不同的类型，比如有
-ZONE_DMA，ZONE_NORMAL，ZONE_HIGHMEM。
+node又往下分为很多的zones，在内核里用zone结构体表示。这些zone又划分为不同的类型，比如有ZONE_DMA，ZONE_NORMAL，ZONE_HIGHMEM。
 </p>
 
 <p>
@@ -104,12 +98,11 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org0be174c" class="outline-2">
-<h2 id="org0be174c"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-orgdf29c97" class="outline-2">
+<h2 id="orgdf29c97"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
-前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内
-核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
+前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
 pglist_data结构体中的一些成员了。
 </p>
 <div class="org-src-container">
@@ -123,7 +116,7 @@ pglist_data结构体中的一些成员了。
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy</p>
-<p class="date">Created: 2020-11-14 Sat 17:17</p>
+<p class="date">Created: 2020-11-14 Sat 17:48</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
