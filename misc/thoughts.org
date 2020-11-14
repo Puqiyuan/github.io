@@ -9,7 +9,7 @@
 #+EXPORT_EXCLUDE_TAGS: noexport
 #+LINK_UP:   
 #+LINK_HOME:
-#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
 
 * 读书								   :noexport:
   - 发财 饭碗 黄金屋
