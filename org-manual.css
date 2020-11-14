@@ -467,7 +467,7 @@ div#postamble
 
 #postamble p.date
 {
-  width:100%;
+  width:50%;
   padding-left:0ex;
   float:left;
   text-align:left;
@@ -477,7 +477,7 @@ div#postamble
 #postamble p.author
 {
   clear:both;
-  width:100%;
+  width:50%;
   padding-right:0ex;
   float:right;
   font-size:0.8em;
