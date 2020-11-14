@@ -7,6 +7,7 @@
 请联系作者：pqy7172@gmail.com。理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，
 无论技术多简单多复杂。热爱技术也热爱生活。:-)
 
+For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 
 * Linux系统管理
 - [[./pipe-redirection.html][管道与重定向]]。
