@@ -469,21 +469,17 @@ div#postamble
 {
   width:100%;
   padding-left:0ex;
-  float:left;
   text-align:center;
   font-size:0.8em;
   color:#999999;
 }
 #postamble p.author
 {
-  clear:both;
   width:100%;
   padding-right:0ex;
-  float:right;
   font-size:1em;
   color:#999999;
   text-align:center;
-  white-space:nowrap;
 }
 
 #postamble p.validation
