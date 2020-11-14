@@ -20,3 +20,4 @@ node又往下分为很多的zones，在内核里用zone结构体表示。这些z
 ZONE_DMA，ZONE_NORMAL，ZONE_HIGHMEM。
 
 * 结点
+前文已述，内存中的每个结点
