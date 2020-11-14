@@ -4,9 +4,9 @@
 #+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css"> 
 
 这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。
-#+BEGIN_CENTER
+#+BEGIN_QUOTE
 这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。
-#+END_CENTER
+#+END_QUOTE
 
 有任何想法
 请联系作者：pqy7172@gmail.com。理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，
