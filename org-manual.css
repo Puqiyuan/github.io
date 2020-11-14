@@ -467,22 +467,22 @@ div#postamble
 
 #postamble p.date
 {
-  width:50%;
+  width:100%;
   padding-left:0ex;
   float:left;
-  text-align:left;
+  text-align:center;
   font-size:0.8em;
   color:#999999;
 }
 #postamble p.author
 {
   clear:both;
-  width:50%;
+  width:100%;
   padding-right:0ex;
   float:right;
   font-size:0.8em;
   color:#999999;
-  text-align:right;
+  text-align:center;
   white-space:nowrap;
 }
 

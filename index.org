@@ -1,5 +1,5 @@
 #+TITLE: Notes of Computer Technology
-#+AUTHOR: pqy7172@gmail.com
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css"> 
 
