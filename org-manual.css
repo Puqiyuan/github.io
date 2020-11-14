@@ -27,6 +27,10 @@ body {
     text-align: center;
 }
 
+.org-center {
+    text-align: center;
+}
+
 #orgquote {
     position: fixed;
     display: none;
