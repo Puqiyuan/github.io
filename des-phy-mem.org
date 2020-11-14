@@ -33,7 +33,7 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
 pglist_data结构体中的一些成员了。
 #+begin_src C++ :includes <stdio.h>
-  int a=1;
-  int b=1;
-  printf("%d\n", a+b);
+typedef struct pglist_data {
+struct zone node_zones[MAX_NR_ZONES];
+}
 #+end_src
