@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-11-14 Sat 23:21 -->
+<!-- 2020-11-15 Sun 00:17 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
 <meta name="generator" content="Org mode">
-<meta name="author" content="Cauchy">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
 <link rel="stylesheet" href="../../org-manual.css" type="text/css">
 <script type="text/javascript">
 /*
@@ -62,7 +62,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org6ccac65">1. 结点</a></li>
+<li><a href="#org1b626a1">1. 结点</a></li>
 </ul>
 </div>
 </div>
@@ -98,8 +98,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org6ccac65" class="outline-2">
-<h2 id="org6ccac65"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-org1b626a1" class="outline-2">
+<h2 id="org1b626a1"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
@@ -115,8 +115,8 @@ pglist_data结构体中的一些成员了。
 </div>
 </div>
 <div id="postamble" class="status">
-<p class="author">Author: Cauchy</p>
-<p class="date">Created: 2020-11-14 Sat 23:21</p>
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2020-11-15 Sun 00:17</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

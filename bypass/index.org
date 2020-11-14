@@ -1,5 +1,5 @@
 #+TITLE: Bypass Guide
-#+AUTHOR: Qiyuan Pu(pqy7172@gmail.com)
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
 #+OPTIONS: num:nil
@@ -90,14 +90,14 @@ the initial run.
 
 #+CAPTION: Picture of Shadowsocks initial run
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
-#+attr_latex: :width 250px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 [[./images/androidPhone1.jpg]]
 
 Then click the + symbol in the top right corner. After clicking it looks like this:
 #+CAPTION: Picture of after click + symbol
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/androidPhone2.jpg]]
 
@@ -106,7 +106,7 @@ server. Other methods can be tried after you are familiar with this software. Af
 clicking it looks like this:
 #+CAPTION: Picture of after click "Manual Setting"
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/androidPhone3.jpg]]
 
@@ -115,7 +115,7 @@ to the server parameters assumed [[param][here]]. Parameters not mentioned in th
 need to be modified. The figure after modifying the parameters is as follows.
 #+CAPTION: Picture of after modified parameters
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/androidPhone4.jpg]]
 
@@ -123,7 +123,7 @@ Then click the small tick in the upper right corner to complete the parameter
 configuration. Return to the main interface after completion.
 #+CAPTION: Picture of completion of config
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/androidPhone5.jpg]]
 
@@ -131,7 +131,7 @@ Then click on the server entry 192.168.1.1. Makes it has a green bar on the left
 achieve the purpose of selecting this server. Like the figure:
 #+CAPTION: Picture of running a server
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/androidPhone6.jpg]]
 
@@ -139,7 +139,7 @@ Of course, now you can't see the delay. That's because this server is our hypoth
 one. It doesn't work. If it is a normal working server you should see something like this:
 #+CAPTION: Picture of running a server in that a working  server
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/androidPhone7.jpg]]
 
@@ -159,7 +159,7 @@ store. After downloading and running as shown:
 
 #+CAPTION: Initial running of "shadowbroken"
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/ios1.jpg]]
 
@@ -168,7 +168,7 @@ Configuration is similar to Andorid client. Click the "+" button in the picture 
 picture shows:
 #+CAPTION: After click "+" button
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 250px
+#+ATTR_HTML: :align centering :width 20% :height 20%
 #+attr_latex: :width 250px
 [[./images/ios3.jpg]]
 
@@ -201,7 +201,8 @@ The Windows installation package is in the form of zip. Check [[https://github.c
 like below picture:
 #+CAPTION: Download for Windows install package
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 500px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 5000px
 [[./images/windows1.jpg]]
 
@@ -211,7 +212,8 @@ the Windows system will prompt you to upgrade, you only need to follow the promp
 upgrade. The interface after starting the running is shown below.
 #+CAPTION: Initial running interface
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 350px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 350px
 [[./images/windows2.jpg]]
 
@@ -222,7 +224,8 @@ first click on the "添加" before configuration at lower left corner. Last clic
 
 #+CAPTION: Complete the configuration
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 350px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 350xp
 [[./images/windows3.jpg]]
 
@@ -230,7 +233,8 @@ After completion, there will be a small aircraft symbol in the lower right corne
 screen. Click it and configure it as shown in the figure below.
 #+CAPTION: Enable proxy in PAC mode
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 350px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 350xp
 [[./images/windows4.jpg]]
 
@@ -248,7 +252,8 @@ as picture shows:
 
 #+CAPTION: SwitchyOmega Chromium.crx
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 600px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 600xp
 [[./images/debian1.png]]
 
@@ -262,14 +267,16 @@ Save "example.json" as shown:
 
 #+CAPTION: json configuration
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 300px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 300xp
 [[./images/debian2.png]]
 
 SwitchyOmega need to be configure as shown:
 #+CAPTION: SwitchOmega configuration
 #+NAME:   fig:SED-HR4049
-#+attr_html: :width 800px
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
 #+attr_latex: :width 800xp
 [[./images/debian3.png]]
 

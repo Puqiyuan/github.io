@@ -1,5 +1,5 @@
 #+TITLE: 内存管理之描述物理内存
-#+AUTHOR: Cauchy
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">

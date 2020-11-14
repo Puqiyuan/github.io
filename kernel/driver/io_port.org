@@ -1,5 +1,5 @@
 #+TITLE:关于驱动的一些内核接口介绍
-#+AUTHOR:Cauchy
+#+AUTHOR:Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
