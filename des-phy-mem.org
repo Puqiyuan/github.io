@@ -3,8 +3,6 @@
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
-#+attr_html: :width 50px
-#+attr_latex: :width 50px
 
 本文介绍Linux内存管理的一部分，即Linux内核是如何描述物理内存的。
 
@@ -26,7 +24,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 
 所有这些结构体的关系如下图：
 #+CAPTION: 内存管理的各结构体如何组织
-#+NAME:   fig:SED-HR4049
+#+ATTR_HTML: :align center
+#+ATTR_HTML: :width 50% :height 50%
 [[./mem-struct-layout.png]]
 
 * 结点
