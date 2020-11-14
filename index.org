@@ -9,6 +9,10 @@
 
 For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 
+#+BEGIN_CENTER
+For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
+#+END_CENTER
+
 * Linux系统管理
 - [[./pipe-redirection.html][管道与重定向]]。
 * Linux系统开发
