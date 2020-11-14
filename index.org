@@ -36,5 +36,5 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 * 虚拟化技术
 * 杂项
 - 一份较为详细的翻墙指南[[./bypass/index.html][Bypass Guide]]。
-- 大学老师对于教育的[[./thoughts.html][看法]]。
-- Debian[[./install.html][安装指导]]。
+- 大学老师对于教育的[[./misc/thoughts.html][看法]]。
+- Debian[[./misc/install.html][安装指导]]。
