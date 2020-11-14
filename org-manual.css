@@ -27,15 +27,15 @@ body {
     text-align: center;
 }
 
-.org-center {
+#org-center {
     text-align: center;
 }
 
 #orgquote {
-    position: fixed;
+    /*position: fixed;*/
     display: none;
     top: 77px;
-    padding: 5pt;
+    /*padding: 5pt;*/
     text-align: center;
     background-color: black;
     width: 100%;
