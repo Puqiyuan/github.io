@@ -19,12 +19,12 @@ UMA机器，则是一个pg_data_t结构体表示所有内存。
 node又往下分为很多的zones，在内核里用zone结构体表示。这些zone又划分为不同的类型，比如有
 ZONE_DMA，ZONE_NORMAL，ZONE_HIGHMEM。
 
-大多数内存操作发生在ZONE\_NORMAL类型的zone中，所以这种类型的zone对于系统性能的影响至关重要。
+大多数内存操作发生在ZONE_NORMAL类型的zone中，所以这种类型的zone对于系统性能的影响至关重要。
 ZONE向下又把内存划分为固定的page frame（页框）。页框由结构体page表示。
 
 所有这些结构体的关系如下图：
 #+CAPTION: 内存管理的各结构体如何组织
-#+ATTR_HTML: :align center
+#+ATTR_HTML: :align centering
 #+ATTR_HTML: :width 50% :height 50%
 [[./mem-struct-layout.png]]
 
