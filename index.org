@@ -12,7 +12,7 @@
 #+END_CENTER
 
 #+BEGIN_CENTER
-有任何想法请联系作者：pqy7172@gmail.com。
+有任何想法请联系作者Cauchy(Qiyuan Pu)：pqy7172@gmail.com。
 #+END_CENTER
 
 #+BEGIN_CENTER

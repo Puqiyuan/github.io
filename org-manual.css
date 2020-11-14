@@ -471,7 +471,7 @@ div#postamble
   padding-left:0ex;
   float:left;
   text-align:left;
-  font-size:0.7em;
+  font-size:0.8em;
   color:#999999;
 }
 #postamble p.author
@@ -480,9 +480,21 @@ div#postamble
   width:40%;
   padding-right:0ex;
   float:right;
-  font-size:0.7em;
+  font-size:0.8em;
   color:#999999;
   text-align:right;
+  white-space:nowrap;
+}
+
+#postamble p.validation
+{
+  clear:both;
+  width:100%;
+  padding-right:0ex;
+  float:right;
+  font-size:0.8em;
+  color:#999999;
+  text-align:center;
   white-space:nowrap;
 }
 
