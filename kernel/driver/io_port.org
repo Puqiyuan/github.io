@@ -1,7 +1,8 @@
 #+TITLE:关于驱动的一些内核接口介绍
-#+AUTHOR:Cauchy                                                             #+OPTIONS: ^:nil
+#+AUTHOR:Cauchy
+#+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
 
 本文介绍一些关于内核在使用IO硬件资源时会使用到的一些内核内部接口，在介绍完了这些接口后会给
 出一个完整的小例子。
@@ -11,7 +12,7 @@
 TODO：https://www.quora.com/Linux-Kernel-What-is-the-difference-between-request_mem_region-and-request_region
 
 * 函数介绍
-- request\_region：由内核提供，允许驱动去声明它需要的端口。从first开始的n个端口，name参数
+- request_region：由内核提供，允许驱动去声明它需要的端口。从first开始的n个端口，name参数
   是设备的名字。
   - 头文件: #include <linux/ioport.h>
   - 原型:
@@ -20,11 +21,3 @@ TODO：https://www.quora.com/Linux-Kernel-What-is-the-difference-between-request
     #+end_src
   - 返回值：成功非NULL，如果期待的端口不可提供，则返回NULL。
 所有已经分配的端口可以在/proc/ioports里查看。
-
-
-#+AUTHOR: Cauchy
-#+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
-
-本文介绍一些关于内核在使用IO硬件资源时会使用到的一些内核内部接口，在介绍完了这些接口后会给
-出一个完整的小例子。

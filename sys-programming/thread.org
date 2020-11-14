@@ -1,7 +1,7 @@
 #+TITLE: Linux线程之一
 #+AUTHOR: Cauchy
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
 
 本文是讲述Linux线程系列文章的第一篇。
 
