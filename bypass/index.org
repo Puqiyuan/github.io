@@ -202,7 +202,7 @@ like below picture:
 #+CAPTION: Download for Windows install package
 #+NAME:   fig:SED-HR4049
 #+ATTR_HTML: :align centering
-#+ATTR_HTML: :width 20% :height 20%
+#+ATTR_HTML: :width 40% :height 40%
 #+attr_latex: :width 5000px
 [[./images/windows1.jpg]]
 
@@ -253,7 +253,7 @@ as picture shows:
 #+CAPTION: SwitchyOmega Chromium.crx
 #+NAME:   fig:SED-HR4049
 #+ATTR_HTML: :align centering
-#+ATTR_HTML: :width 20% :height 20%
+#+ATTR_HTML: :width 40% :height 40%
 #+attr_latex: :width 600xp
 [[./images/debian1.png]]
 
@@ -276,7 +276,7 @@ SwitchyOmega need to be configure as shown:
 #+CAPTION: SwitchOmega configuration
 #+NAME:   fig:SED-HR4049
 #+ATTR_HTML: :align centering
-#+ATTR_HTML: :width 20% :height 20%
+#+ATTR_HTML: :width 40% :height 40%
 #+attr_latex: :width 800xp
 [[./images/debian3.png]]
 
