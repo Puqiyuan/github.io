@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2020-11-16 Mon 22:13 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>编译器优化对数组和指针的性能影响</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">编译器优化对数组和指针的性能影响</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgafb891e">1. 优化</a></li>
+<li><a href="#org86a7fbc">2. 应用</a></li>
+<li><a href="#orgb9f27c3">3. 原理</a></li>
+<li><a href="#org548e004">4. 验证</a>
+<ul>
+<li><a href="#orga70aaf2">4.1. 编码</a></li>
+<li><a href="#org5147150">4.2. 数据</a>
+<ul>
+<li><a href="#org537ecc7">4.2.1. gcc</a></li>
+<li><a href="#orgccc73fd">4.2.2. clang</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org20bb8ab">5. 实践</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文用实验说明数组和指针对于C程序的性能影响，总体结论是：数组和指针确有性能差别，不过编译优化的级别会对这种差别产生颠覆性的影响，并且不同的编译器、不同的优化级别表现效果不一样。
+</p>
+
+<p>
+本文先简单介绍下这种数组替代指针的优化，然后通过编码一个具体的程序来验证，最后给出结论和工程实践的一般做法。
+</p>
+
+
+<div id="outline-container-orgafb891e" class="outline-2">
+<h2 id="orgafb891e"><span class="section-number-2">1</span> 优化</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+尽量使用数组而不是指针。
+</p>
+</div>
+</div>
+<div id="outline-container-org86a7fbc" class="outline-2">
+<h2 id="org86a7fbc"><span class="section-number-2">2</span> 应用</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+32位和64位程序都可以应用。
+</p>
+</div>
+</div>
+<div id="outline-container-orgb9f27c3" class="outline-2">
+<h2 id="orgb9f27c3"><span class="section-number-2">3</span> 原理</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+访问数组的元素时，C语言允许数组操作符（[]）和指针两种形式。然而使用C指针使得编译的优化工作更难。如果没有细致的分析，编译器可以认为指针可以指向任何内存单元，比如*p和*q可以指向相同的内存位置，然而x[0]和x[2]却是代表不同的内存位置。这样使用指针容易引起 <b>别名</b> 问题：同一个内存位置可以以多种方式访问。通过减少 <b>别名</b> ，使得编译的优化工作更加容易进行。
+</p>
+</div>
+</div>
+<div id="outline-container-org548e004" class="outline-2">
+<h2 id="org548e004"><span class="section-number-2">4</span> 验证</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+本节会提出一个程序，用来比较数组和指针操作的性能。xform_pointer和xform_array分别被函数t_xform_pointer和t_xform_array测试性能，xform_pointer和xform_array这两个函数的操作结果是一样的，函数原型除了函数名其它都一样。这两个函数输入一个一维浮点数组v，和一个二维浮点数组m，将v和m中的每一行按行序相乘然后求和存到一个一维数组res中。注意我们说一维、二维这些都是编译器（编程语言）级别的概念（抽象）。在物理内存里，内存地址永远是线性顺序排列。所以在xform_array中我们看到m首先被转换为matrix结构体，里面是二维数组，体现了逻辑的二维。而在xform_pointer中，却是以直接的一维逻辑取数据，假定内存是按行优先顺序存放，即每四个便一行。
+</p>
+</div>
+<div id="outline-container-orga70aaf2" class="outline-3">
+<h3 id="orga70aaf2"><span class="section-number-3">4.1</span> 编码</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+程序如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdio.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdlib.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;time.h&gt;</span>
+
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">N</span> 1000000000
+
+<span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> {
+    <span style="color: #7CB8BB;">float</span> <span style="color: #DFAF8F;">x</span>, <span style="color: #DFAF8F;">y</span>, <span style="color: #DFAF8F;">z</span>, <span style="color: #DFAF8F;">w</span>;
+} <span style="color: #7CB8BB;">vertex</span>;
+
+<span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> {
+    <span style="color: #7CB8BB;">float</span> <span style="color: #DFAF8F;">m</span>[4][4];
+} <span style="color: #7CB8BB;">matrix</span>;
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">display_res</span>(<span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">res</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 4; i++)
+        printf(<span style="color: #CC9393;">"%.2f "</span>, res[i]);
+    printf(<span style="color: #CC9393;">"\n"</span>);
+}
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">xform_pointer</span>(<span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">res</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">m</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">numverts</span>) {
+    <span style="color: #7CB8BB;">float</span> <span style="color: #DFAF8F;">dp</span>;
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">vertex</span> *<span style="color: #DFAF8F;">vv</span> = (<span style="color: #7CB8BB;">vertex</span> *) v;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; numverts; i++) {
+        dp =  vv-&gt;x * *m++;
+        dp += vv-&gt;y * *m++;
+        dp += vv-&gt;z * *m++;
+        dp += vv-&gt;w * *m++;
+        *res++ = dp;
+
+        dp =  vv-&gt;x * *m++;
+        dp += vv-&gt;y * *m++;
+        dp += vv-&gt;z * *m++;
+        dp += vv-&gt;w * *m++;
+        *res++ = dp;
+
+        dp =  vv-&gt;x * *m++;
+        dp += vv-&gt;y * *m++;
+        dp += vv-&gt;z * *m++;
+        dp += vv-&gt;w * *m++;
+        *res++ = dp;
+
+        dp =  vv-&gt;x * *m++;
+        dp += vv-&gt;y * *m++;
+        dp += vv-&gt;z * *m++;
+        dp += vv-&gt;w * *m++;
+        *res++ = dp;
+
+        ++vv;
+        m -= 16;
+    }
+    <span style="color: #5F7F5F;">//</span><span style="color: #7F9F7F;">display_res(res-4);</span>
+}
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">xform_array</span>(<span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">res</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">m</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">numverts</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">vertex</span> *<span style="color: #DFAF8F;">vv</span> = (<span style="color: #7CB8BB;">vertex</span> *)v;
+    <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">matrix</span> *<span style="color: #DFAF8F;">mm</span> = (<span style="color: #7CB8BB;">matrix</span> *)m;
+    <span style="color: #7CB8BB;">vertex</span> *<span style="color: #DFAF8F;">rr</span> = (<span style="color: #7CB8BB;">vertex</span> *)res;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; numverts; i++) {
+        rr-&gt;x = vv-&gt;x * mm-&gt;m[0][0] + vv-&gt;y * mm-&gt;m[0][1] +
+            vv-&gt;z * mm-&gt;m[0][2] + vv-&gt;w * mm-&gt;m[0][3];
+
+        rr-&gt;y = vv-&gt;x * mm-&gt;m[1][0] + vv-&gt;y * mm-&gt;m[1][1] +
+            vv-&gt;z * mm-&gt;m[1][2] + vv-&gt;w * mm-&gt;m[1][3];
+
+        rr-&gt;z = vv-&gt;x * mm-&gt;m[2][0] + vv-&gt;y * mm-&gt;m[2][1] +
+            vv-&gt;z * mm-&gt;m[2][2] + vv-&gt;w * mm-&gt;m[2][3];
+
+        rr-&gt;w = vv-&gt;x * mm-&gt;m[3][0] + vv-&gt;y * mm-&gt;m[3][1] +
+            vv-&gt;z * mm-&gt;m[3][2] + vv-&gt;w * mm-&gt;m[3][3];
+    }
+    <span style="color: #5F7F5F;">//</span><span style="color: #7F9F7F;">display_res(res);</span>
+}
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">t_xform_array</span>(<span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">res</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">m</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">numverts</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #7CB8BB;">clock_t</span> <span style="color: #DFAF8F;">begin</span>, <span style="color: #DFAF8F;">end</span>;
+    <span style="color: #7CB8BB;">double</span> <span style="color: #DFAF8F;">time_spent</span>;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 4; i++)
+        *(res + i) = 0;
+
+    time_spent = 0.0;
+    begin = clock();
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; N; i++)
+        xform_array(res, v, m, numverts);
+    end = clock();
+    time_spent += (<span style="color: #7CB8BB;">double</span>)(end - begin) / CLOCKS_PER_SEC;
+    printf(<span style="color: #CC9393;">"array spent: %f\n"</span>, time_spent);
+}
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">t_xform_pointer</span>(<span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">res</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">m</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">numverts</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #7CB8BB;">clock_t</span> <span style="color: #DFAF8F;">begin</span>, <span style="color: #DFAF8F;">end</span>;
+    <span style="color: #7CB8BB;">double</span> <span style="color: #DFAF8F;">time_spent</span>;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 4; i++)
+        *(res + i) = 0;
+
+    time_spent = 0.0;
+    begin = clock();
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; N; i++)
+        xform_pointer(res, v, m, numverts);
+    end = clock();
+    time_spent += (<span style="color: #7CB8BB;">double</span>)(end - begin) / CLOCKS_PER_SEC;
+    printf(<span style="color: #CC9393;">"pointer spent: %f\n"</span>, time_spent);
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">res</span> = (<span style="color: #7CB8BB;">float</span>*)malloc(4 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">float</span>));
+    <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">m</span> = (<span style="color: #7CB8BB;">float</span>*)malloc( 16 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">float</span>));
+    <span style="color: #7CB8BB;">float</span> *<span style="color: #DFAF8F;">v</span> = (<span style="color: #7CB8BB;">float</span>*)malloc(  4 * <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">float</span>));
+
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 4; i++)
+        *(v + i) = i + 0.5;
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 16;i++)
+        *(m + i) = i + 0.5;
+
+    t_xform_array(res, v, m, 1);
+    t_xform_pointer(res, v, m, 1);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org5147150" class="outline-3">
+<h3 id="org5147150"><span class="section-number-3">4.2</span> 数据</h3>
+<div class="outline-text-3" id="text-4-2">
+<p>
+下面给出各种数据。
+</p>
+</div>
+<div id="outline-container-org537ecc7" class="outline-4">
+<h4 id="org537ecc7"><span class="section-number-4">4.2.1</span> gcc</h4>
+<div class="outline-text-4" id="text-4-2-1">
+<p>
+指令数：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-right">
+
+<col  class="org-right">
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">&#xa0;</th>
+<th scope="col" class="org-right">array</th>
+<th scope="col" class="org-right">pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">O0</td>
+<td class="org-right">504</td>
+<td class="org-right">800</td>
+</tr>
+
+<tr>
+<td class="org-left">O2</td>
+<td class="org-right">396</td>
+<td class="org-right">281</td>
+</tr>
+</tbody>
+</table>
+<p>
+运行时间：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-right">
+
+<col  class="org-right">
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">&#xa0;</th>
+<th scope="col" class="org-right">array</th>
+<th scope="col" class="org-right">pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">O0</td>
+<td class="org-right">19.9</td>
+<td class="org-right">39.9</td>
+</tr>
+
+<tr>
+<td class="org-left">O2</td>
+<td class="org-right">8.4</td>
+<td class="org-right">7.5</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div id="outline-container-orgccc73fd" class="outline-4">
+<h4 id="orgccc73fd"><span class="section-number-4">4.2.2</span> clang</h4>
+<div class="outline-text-4" id="text-4-2-2">
+<p>
+指令数：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-right">
+
+<col  class="org-left">
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">&#xa0;</th>
+<th scope="col" class="org-right">array</th>
+<th scope="col" class="org-left">pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">O0</td>
+<td class="org-right">444</td>
+<td class="org-left">830</td>
+</tr>
+
+<tr>
+<td class="org-left">O2</td>
+<td class="org-right">255</td>
+<td class="org-left"><b>863</b></td>
+</tr>
+</tbody>
+</table>
+<p>
+运行时间：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-right">
+
+<col  class="org-right">
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">&#xa0;</th>
+<th scope="col" class="org-right">array</th>
+<th scope="col" class="org-right">pointer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">O0</td>
+<td class="org-right">19.9</td>
+<td class="org-right">39.9</td>
+</tr>
+
+<tr>
+<td class="org-left">O2</td>
+<td class="org-right">5.7</td>
+<td class="org-right">7.9</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org20bb8ab" class="outline-2">
+<h2 id="org20bb8ab"><span class="section-number-2">5</span> 实践</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+如前所述，数组和指针在O2优化时性能差距是很小的，然而对于clang这样的编译器来说数组优化提升可以有37%，这个数字是很大的。所以工程上的做法可以是编写指针和数组两套实现，然后在具体的编
+译器下测试它们的性能。这里也可以说clang O2对于指针性能优化应该还可以做的更好，因为clang O2的array方式时间少很多，指令数上也可以看到clang对于指针别名问题可以说比较糟糕，优化后指令数
+反而比O0更多。可以比较、理解clang O2的二进制和gcc O2的二进制有何区别，然后修改clang编译器相关的优化阶段。而gcc的O2对pointer的优化还稍微优一点，从这个方面说，gcc优秀。
+</p>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2020-11-16 Mon 22:13</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
