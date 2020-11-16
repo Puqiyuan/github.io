@@ -32,6 +32,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构
 * 编译器
+- [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
 * 网络
 * 虚拟化技术
 * 杂项
