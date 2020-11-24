@@ -28,6 +28,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 - 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
 - [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
 - [[./kernel/mm/des-phy-mem.html][内存管理之描述物理内存]]。
+- [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2020-11-24 Tue 22:09 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一个简单的字符驱动程序</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">一个简单的字符驱动程序</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org34962f0">1. 背景知识</a>
+<ul>
+<li><a href="#org3dff81d">1.1. 主设备号和次设备号</a></li>
+</ul>
+</li>
+<li><a href="#org1fe02aa">2. 代码实现</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文将详细介绍在Linux平台的一个简单字符驱动程序的编写。它操作的是一片内存，把内存当作设备，这样可以不依赖于具体的硬件设备。
+</p>
+
+<div id="outline-container-org34962f0" class="outline-2">
+<h2 id="org34962f0"><span class="section-number-2">1</span> 背景知识</h2>
+<div class="outline-text-2" id="text-1">
+</div>
+<div id="outline-container-org3dff81d" class="outline-3">
+<h3 id="org3dff81d"><span class="section-number-3">1.1</span> 主设备号和次设备号</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+访问设备要通过文件系统中的名称。这些文件都很特殊，叫做设备文件，通常位于/dev目录下，用ls -l可以看到字符设备第一列是c字母开头，而块设备是b开头，同时可以看到有两个数字由逗号隔开，如下图：
+</p>
+
+<div class="figure">
+<p><img src="./img/ls-l.png" alt="ls-l.png" width="30%" height="30%" align="centering">
+</p>
+<p><span class="figure-number">Figure 1: </span>ls -l /dev的部分输出</p>
+</div>
+
+<p>
+前一个数字就是所谓的主设备号, 后一个是次设备号. 所谓主设备号, 它标识了设备对应的驱动程序,而次设备号用来确定具体的设备文件所指的设备. 不同的设备文件可由同一个驱动程序来进行管理, 比如图中的vcsu5和vcsu6由驱动程序7管理, 但次设备号69, 70区分了是哪个设备.
+</p>
+
+<p>
+在内核内部, 用dev_t的类型来表示设备编号: 即包括主设备编号又包括次设备编号. 如下位于linux内核中的代码:
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #7CB8BB;">u32</span> <span style="color: #7CB8BB;">__kernel_dev_t</span>;
+<span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #7CB8BB;">__kernel_dev_t</span>      <span style="color: #7CB8BB;">dev_t</span>;
+</pre>
+</div>
+<p>
+可以看到dev_t实际是一个32位的数. 其中的高12位用来表示主设备号, 而低20位用来表示次设备号. 当然这种情况可能不是未来一直都正确. 所以内核提供了操作dev_t类型的宏:
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">MINORBITS</span>   20
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">MINORMASK</span>   ((1U &lt;&lt; MINORBITS) - 1)
+
+<span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">MAJOR</span>(<span style="color: #DFAF8F;">dev</span>)  ((<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span>) ((dev) &gt;&gt; MINORBITS))
+<span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">MINOR</span>(<span style="color: #DFAF8F;">dev</span>)  ((<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span>) ((dev) &amp; MINORMASK))
+</pre>
+</div>
+<p>
+MAJOR用于获得主设备号, 而MINOR用于获得次设备号. 可以稍微注意下这里的代码技巧, 首先定义了MINORBITS为20, dev右移20位丢弃低20位的数据即得高12位的major number, 为了获的minor number是先获得了MINORMASK, 即1先左移20位, 相当于1后跟20个0, 然后再减1, 这样20个0变成20个1, 再相与于dev即得低20位的minor number.
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-org1fe02aa" class="outline-2">
+<h2 id="org1fe02aa"><span class="section-number-2">2</span> 代码实现</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2020-11-24 Tue 22:09</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
