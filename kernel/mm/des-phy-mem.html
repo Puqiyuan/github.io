@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-11-15 Sun 00:17 -->
+<!-- 2020-11-28 Sat 12:53 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
@@ -62,7 +62,8 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org1b626a1">1. 结点</a></li>
+<li><a href="#orgc55144a">1. 结点</a></li>
+<li><a href="#org478a0c5">2. 区域</a></li>
 </ul>
 </div>
 </div>
@@ -98,8 +99,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org1b626a1" class="outline-2">
-<h2 id="org1b626a1"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-orgc55144a" class="outline-2">
+<h2 id="orgc55144a"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
@@ -108,15 +109,62 @@ pglist_data结构体中的一些成员了。
 <div class="org-src-container">
 <pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pglist_data</span> {
 <span style="color: #F0DFAF; font-weight: bold;">struct</span> zone node_zones[MAX_NR_ZONES];
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> <span style="color: #DFAF8F;">node_zonelists</span>[MAX_ZONELISTS];
+<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nr_zones</span>;
 }
 </pre>
 </div>
+
+<p>
+现在仅介绍这几个简单的成员, 未来随着深入的学习会介绍更多. node_zones就是包含在当前结点中的所有zone. zonelist是所有结点的所有zone. 而nr_zones是结点的个数.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org478a0c5" class="outline-2">
+<h2 id="org478a0c5"><span class="section-number-2">2</span> 区域</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+每个结点里会有多个区域(zone), 本节介绍区域.
+</p>
+
+<p>
+zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. 下面简单的看下它的几个成员:
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> {
+<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">_watermark</span>[NR_WMARK];
+<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">watermark_boost</span>;
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pglist_data</span>  *<span style="color: #DFAF8F;">zone_pgdat</span>;
+<span style="color: #7CB8BB;">atomic_long_t</span>       <span style="color: #DFAF8F;">managed_pages</span>;
+<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>       <span style="color: #DFAF8F;">spanned_pages</span>;
+<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>       <span style="color: #DFAF8F;">present_pages</span>;
+<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span>      *<span style="color: #DFAF8F;">name</span>;
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">free_area</span>    <span style="color: #DFAF8F;">free_area</span>[MAX_ORDER];
+<span style="color: #7CB8BB;">spinlock_t</span>      <span style="color: #DFAF8F;">lock</span>;
+
+}
+</pre>
+</div>
+<p>
+解释下这几个成员的意义:
+</p>
+<ul class="org-ul">
+<li>前两个是水印相关的, 这个实际上是控制内存紧张时的一种刻度, 后面小节细讲.</li>
+<li>lock主要用来保护对free_area的访问.</li>
+<li>spanned_pages: 该结点中的所有page, 包括在hols里的. 即是spanned_pages = zone_end_pfn - zone_start_pfn, 就是跨越整个zone.</li>
+<li>present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes).</li>
+<li>managed_pages: 由伙伴系统(后文介绍)管理的页面, 即是managed_pages = present_pages - reserved_pages.</li>
+<li>name: zone的字符串名, 比如DMA, Normal, HighMem这种.</li>
+<li>lock: 用来保护对free_area区域的访问.</li>
+<li>free_area: 伙伴分配系统用来分配的.</li>
+</ul>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-11-15 Sun 00:17</p>
+<p class="date">Created: 2020-11-28 Sat 12:53</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

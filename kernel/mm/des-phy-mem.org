@@ -28,5 +28,37 @@ pglist_data结构体中的一些成员了。
 #+begin_src C++ :includes <stdio.h>
 typedef struct pglist_data {
 struct zone node_zones[MAX_NR_ZONES];
+struct zonelist node_zonelists[MAX_ZONELISTS];
+int nr_zones;
 }
 #+end_src
+
+现在仅介绍这几个简单的成员, 未来随着深入的学习会介绍更多. node_zones就是包含在当前结点中的所有zone. zonelist是所有结点的所有zone. 而nr_zones是结点的个数.
+
+* 区域
+每个结点里会有多个区域(zone), 本节介绍区域.
+
+zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. 下面简单的看下它的几个成员:
+#+begin_src C++ :includes <stdio.h>
+struct zone {
+unsigned long _watermark[NR_WMARK];
+unsigned long watermark_boost;
+struct pglist_data	*zone_pgdat;
+atomic_long_t		managed_pages;
+unsigned long		spanned_pages;
+unsigned long		present_pages;
+const char		*name;
+struct free_area	free_area[MAX_ORDER];
+spinlock_t		lock;
+
+}
+#+end_src
+解释下这几个成员的意义:
+- 前两个是水印相关的, 这个实际上是控制内存紧张时的一种刻度, 后面小节细讲.
+- lock主要用来保护对free_area的访问.
+- spanned_pages: 该结点中的所有page, 包括在hols里的. 即是spanned_pages = zone_end_pfn - zone_start_pfn, 就是跨越整个zone.
+- present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes). 
+- managed_pages: 由伙伴系统(后文介绍)管理的页面, 即是managed_pages = present_pages - reserved_pages.
+- name: zone的字符串名, 比如DMA, Normal, HighMem这种.
+- lock: 用来保护对free_area区域的访问.
+- free_area: 伙伴分配系统用来分配的.
