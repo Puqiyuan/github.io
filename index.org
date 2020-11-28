@@ -32,6 +32,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构
+- AMD64(X86-64)架构下的一些系统寄存器[[./arch/amd64-sys-regs.html][介绍]].
 * 编译器
 - [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
 * 网络
