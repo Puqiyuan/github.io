@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2020-11-29 Sun 22:56 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>unroll小循环对性能的影响</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">unroll小循环对性能的影响</h1>
+<p>
+本文通过一个实例演示, 通过展开一个小的循环, 程序性能会有所提升. 至于原因, eh&#x2026;详细了解编译器后端优化再来回答了;-)
+</p>
+
+<p>
+程序代码如下:
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;stdio.h&gt;</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;time.h&gt;</span>
+
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">N</span> 1000000000
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">multiple_loop</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">m</span>[][4], <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">res</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>, <span style="color: #DFAF8F;">j</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 4; ++i) {
+        res[i] = 0;
+        <span style="color: #F0DFAF; font-weight: bold;">for</span> (j = 0; j &lt; 4; ++j) {
+            res[i] += m[j][i] * v[j];
+        }
+    }
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">t_multiple_loop</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">m</span>[][4], <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">res</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #7CB8BB;">clock_t</span> <span style="color: #DFAF8F;">begin</span>, <span style="color: #DFAF8F;">end</span>;
+    <span style="color: #7CB8BB;">double</span> <span style="color: #DFAF8F;">time_spent</span>;
+
+    time_spent = 0.0;
+    begin = clock();
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; N; ++i)
+        multiple_loop(m, v, res);
+    end = clock();
+    time_spent += (<span style="color: #7CB8BB;">double</span>)(end - begin) / CLOCKS_PER_SEC;
+    printf(<span style="color: #CC9393;">"loop spent: %f\n"</span>, time_spent);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">multiple_unroll</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">m</span>[][4], <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">res</span>)
+{
+    res[0] = m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2] + m[3][0] * v[3];
+    res[1] = m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2] + m[3][1] * v[3];
+    res[2] = m[0][2] * v[0] + m[1][2] * v[1] + m[2][2] * v[2] + m[3][2] * v[3];
+    res[3] = m[0][3] * v[0] + m[1][3] * v[1] + m[2][3] * v[2] + m[3][3] * v[3];
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">t_multiple_unroll</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">m</span>[][4], <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">v</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">res</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+    <span style="color: #7CB8BB;">clock_t</span> <span style="color: #DFAF8F;">begin</span>, <span style="color: #DFAF8F;">end</span>;
+    <span style="color: #7CB8BB;">double</span> <span style="color: #DFAF8F;">time_spent</span>;
+
+    time_spent = 0.0;
+    begin = clock();
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; N; ++i)
+        multiple_unroll(m, v, res);
+    end = clock();
+    time_spent += (<span style="color: #7CB8BB;">double</span>)(end - begin) / CLOCKS_PER_SEC;
+    printf(<span style="color: #CC9393;">"unroll spent: %f\n"</span>, time_spent);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">display</span>(<span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">res</span>)
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+
+    <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; 4; ++i)
+        printf(<span style="color: #CC9393;">"%d "</span>, res[i]);
+    printf(<span style="color: #CC9393;">"\n"</span>);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+
+}
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">m</span>[4][4] = {
+        {0,   1,  2, 3},
+        {4,   5,  6, 7},
+        {8,   9, 10, 11},
+        {12, 13, 14, 15}
+    };
+
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">v</span>[4] = {0, 1, 2, 3}, <span style="color: #DFAF8F;">res</span>[4];
+
+    <span style="color: #5F7F5F;">//</span><span style="color: #7F9F7F;">multiple_loop(m, v, res);</span>
+    <span style="color: #5F7F5F;">//</span><span style="color: #7F9F7F;">multiple_unroll(m, v, res);</span>
+    <span style="color: #5F7F5F;">//</span><span style="color: #7F9F7F;">display(res);</span>
+    t_multiple_loop(m, v, res);
+    t_multiple_unroll(m, v, res);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+下面给出实验数据:
+</p>
+
+<div class="figure">
+<p><img src="./img/unroll.png" alt="unroll.png" width="20%" height="20%" align="centering">
+</p>
+</div>
+
+<p>
+可以看到不论是O0还是O2, 程序性能都会有所提升, 而且提升还不小. 所以以后编码注意把小循环展开为普通代码.
+</p>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2020-11-29 Sun 22:56</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

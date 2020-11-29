@@ -1,0 +1,17 @@
+#+TITLE: unroll小循环对性能的影响
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+本文通过一个实例演示, 通过展开一个小的循环, 程序性能会有所提升. 至于原因, eh...详细了解编译器后端优化再来回答了;-)
+
+程序代码如下:
+#+INCLUDE: "./unroll_loop.c" src c
+
+下面给出实验数据:
+#+CAPTION: 
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 20% :height 20%
+[[./img/unroll.png]]
+
+可以看到不论是O0还是O2, 程序性能都会有所提升, 而且提升还不小. 所以以后编码注意把小循环展开为普通代码.

@@ -35,6 +35,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 - AMD64(X86-64)架构下的一些系统寄存器[[./arch/amd64-sys-regs.html][介绍]].
 * 编译器
 - [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
+- [[./compiler/unroll_loop.html][unroll小循环对性能的提升]].
 * 网络
 * 虚拟化技术
 * 杂项
