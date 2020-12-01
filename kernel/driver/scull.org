@@ -4,17 +4,17 @@
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
 
-本文将详细介绍在Linux平台的一个简单字符驱动程序的编写。它操作的是一片内存，把内存当作设备，这样可以不依赖于具体的硬件设备。
+本文将详细介绍在Linux平台的一个简单字符驱动程序的编写。它操作的是一片内存，把内存当作设备，这样可以不依赖于具体的硬件设备, 就把这个简单字符驱动程序叫s_driver吧.
 
 * 背景知识
 ** 主设备号和次设备号
-访问设备要通过文件系统中的名称。这些文件都很特殊，叫做设备文件，通常位于/dev目录下，用ls -l可以看到字符设备第一列是c字母开头，而块设备是b开头，同时可以看到有两个数字由逗号隔开，如下图：
+访问设备要通过文件系统中的设备文件。Linux把设备抽象成文件，访问设备也就是访问文件。这些文件都很特殊，通常位于/dev目录下，用ls -l可以看到字符设备第一列是c字母开头，而块设备是b开头，同时可以看到有两个数字由逗号隔开，如下图：
 #+CAPTION: ls -l /dev的部分输出
 #+ATTR_HTML: :align centering
 #+ATTR_HTML: :width 30% :height 30%
 [[./img/ls-l.png]]
 
-前一个数字就是所谓的主设备号, 后一个是次设备号. 所谓主设备号, 它标识了设备对应的驱动程序,而次设备号用来确定具体的设备文件所指的设备. 不同的设备文件可由同一个驱动程序来进行管理, 比如图中的vcsu5和vcsu6由驱动程序7管理, 但次设备号69, 70区分了是哪个设备.
+前一个数字就是所谓的主设备号, 后一个是次设备号. 所谓主设备号, 它标识了设备对应的驱动程序, 而次设备号用来确定具体的设备文件所指的设备. 不同的设备文件可由同一个驱动程序来进行管理, 比如图中的vcsu5和vcsu6由驱动程序7管理, 但次设备号69, 70区分了是哪个设备.
 
 在内核内部, 用dev_t的类型来表示设备编号: 即包括主设备编号又包括次设备编号. 如下位于linux内核中的代码:
 #+begin_src C++ :includes <stdio.h>
@@ -30,4 +30,27 @@ typedef __kernel_dev_t		dev_t;
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #+end_src
 MAJOR用于获得主设备号, 而MINOR用于获得次设备号. 可以稍微注意下这里的代码技巧, 首先定义了MINORBITS为20, dev右移20位丢弃低20位的数据即得高12位的major number, 为了获的minor number是先获得了MINORMASK, 即1先左移20位, 相当于1后跟20个0, 然后再减1, 这样20个0变成20个1, 再相与于dev即得低20位的minor number.
+
+理解了这些宏, 下面的MKDEV要做的啥工作就很简单了:
+#+begin_src C++ :includes <stdio.h>
+#define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
+#+end_src
+** 分配和释放设备编号
+如前面的图, 设备都有编号, 自然我们的简单字符驱动程序s_driver也需要设备编号, 内核提供两个函数用来分配设备编号:
+- register_chrdev_region(dev_t first, unsigned int count, char *name)
+- alloc_chrdev_region(dev_t *dev, unsigned int firstminor, unsigned int count, char *name)
+
+两个函数的参数count和name的意义是一样的, count是所请求的连续设备编号的个数. name是和该设备编号范围相关的字符串名, 它会出现在/proc/devices中. 前一个函数中，first是要分配的设备编号范围的起始值。 而第二个函数用于动态的分配设备编号，其输出的设备编号会存在第一个参数dev中。
+
+在使用完后，要予以释放：
+- void unregister_chrdev_region(dev_t first, unsigned count)
+
+通常在模块清除函数中调用这个函数。
+
+前述已讲到，操作设备其实还是是操作文件，只不过是一类特殊的设备文件。创建这些设备文件使用mknod命令，使用mknod命令创建设备文件时需要知道设备的主设备号作为参数，不过若选择alloc_chrdev_region方式来分配设备号，设备号是动态的，我们无法预先知道。这里有个方法是在加载了模块后，alloc_chrdev_region函数作为模块初始化的一部分，就注册好了设备号，在文件/proc/devices中可以看到，使用awk命令稍微处理下这个文本就可以得到major number了。如下取自s_driver_load.sh脚本中的部分代码所示：
+#+begin_src bash :includes <stdio.h>
+insmod ./$module.ko $* || exit 1
+major=$(awk "\$2==\"$module\" {print \$1}" /proc/devices)
+mknod /dev/${device}0 c $major 0
+#+end_src
 * 代码实现
