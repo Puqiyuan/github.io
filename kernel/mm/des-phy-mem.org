@@ -39,7 +39,7 @@ int nr_zones;
 每个结点里会有多个区域(zone), 本节介绍区域.
 
 zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. 下面简单的看下它的几个成员:
-#+begin_src C++ :includes <stdio.h>
+#+begin_src C :includes <stdio.h>
 struct zone {
 unsigned long _watermark[NR_WMARK];
 unsigned long watermark_boost;
@@ -54,7 +54,21 @@ spinlock_t		lock;
 }
 #+end_src
 解释下这几个成员的意义:
-- 前两个是水印相关的, 这个实际上是控制内存紧张时的一种刻度, 后面小节细讲.
+- 前两个是水印相关的, 这个实际上是控制内存紧张时的一种刻度，其中watermark_boost作为水印的基准，什么叫水印的基准呢？看看下面几行来自mmzone.h的代码可知：
+  #+begin_src C :includes <stdio.h>
+enum zone_watermarks {
+	WMARK_MIN,
+	WMARK_LOW,
+	WMARK_HIGH,
+	NR_WMARK
+};
+
+#define min_wmark_pages(z) (z->_watermark[WMARK_MIN] + z->watermark_boost)
+#define low_wmark_pages(z) (z->_watermark[WMARK_LOW] + z->watermark_boost)
+#define high_wmark_pages(z) (z->_watermark[WMARK_HIGH] + z->watermark_boost)
+}
+#+end_src
+ 关于水印后面还有小节会讲述到。
 - lock主要用来保护对free_area的访问.
 - spanned_pages: 该结点中的所有page, 包括在hols里的. 即是spanned_pages = zone_end_pfn - zone_start_pfn, 就是跨越整个zone.
 - present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes). 
@@ -62,3 +76,16 @@ spinlock_t		lock;
 - name: zone的字符串名, 比如DMA, Normal, HighMem这种.
 - lock: 用来保护对free_area区域的访问.
 - free_area: 伙伴分配系统用来分配的.
+
+** Zone水印
+当系统中可用的内存较少时，守护程序kswapd（pageout daemon）就会被唤醒去释放页面。每个zone中
+都有三个水印：
+1) _watermark[WMARK_MIN]
+2) _watermark[WMARK_LOW]
+3) _watermark[WMARK_HIGH]
+
+它们三者的关系如下图所示：
+#+CAPTION: min，low，high三者水印的关系
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 40% :height 40%
+[[./img/watermark_relationship.png]]
