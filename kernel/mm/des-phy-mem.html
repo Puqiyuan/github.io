@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-04 Fri 22:12 -->
+<!-- 2020-12-04 Fri 22:45 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3e3b1d0">1. 结点</a></li>
-<li><a href="#orgd5bf896">2. 区域</a>
+<li><a href="#org00f1a37">1. 结点</a></li>
+<li><a href="#org775cb8d">2. 区域</a>
 <ul>
-<li><a href="#org4860d97">2.1. Zone水印</a></li>
+<li><a href="#org2b3283b">2.1. Zone水印</a></li>
 </ul>
 </li>
 </ul>
@@ -103,8 +103,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org3e3b1d0" class="outline-2">
-<h2 id="org3e3b1d0"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-org00f1a37" class="outline-2">
+<h2 id="org00f1a37"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
@@ -125,8 +125,8 @@ pglist_data结构体中的一些成员了。
 </div>
 </div>
 
-<div id="outline-container-orgd5bf896" class="outline-2">
-<h2 id="orgd5bf896"><span class="section-number-2">2</span> 区域</h2>
+<div id="outline-container-org775cb8d" class="outline-2">
+<h2 id="org775cb8d"><span class="section-number-2">2</span> 区域</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 每个结点里会有多个区域(zone), 本节介绍区域.
@@ -184,8 +184,8 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </ul>
 </div>
 
-<div id="outline-container-org4860d97" class="outline-3">
-<h3 id="org4860d97"><span class="section-number-3">2.1</span> Zone水印</h3>
+<div id="outline-container-org2b3283b" class="outline-3">
+<h3 id="org2b3283b"><span class="section-number-3">2.1</span> Zone水印</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 当系统中可用的内存较少时，守护程序kswapd（pageout daemon）就会被唤醒去释放页面。每个zone中
@@ -206,13 +206,26 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </p>
 <p><span class="figure-number">Figure 2: </span>min，low，high三者水印的关系</p>
 </div>
+
+<p>
+注意真正对这三个水印的访问不是图中标记的zone_t-&gt;page_high，较新的内核zone中直接的是没有这些成员的，而是通过zone-&gt;_watermark[WMARK_MIN]等。_watermark[WMARK_MIN]是通过函数free_area_init_core依据一定比例算出来的。
+</p>
+
+<p>
+而在不同的水印处，会采用不同的行为来解决内存紧张问题：
+</p>
+<ol class="org-ol">
+<li>_watermark[WMARK_MIN]：当可用的pages到达这个值时，kswapd就会被唤醒去释放一些页。</li>
+<li>_watermark[WMARK_MIN]：到达这个值时，说明内存极其紧张了。kswapd以一种synchronous（后文细讲）的方式工作，也叫做direct-reclaim路径。</li>
+<li>对于zone水位在_watermark[WMARK_HIGH]的，kswpad不会释放其中的page了，这时kswapd继续睡眠了。</li>
+</ol>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-04 Fri 22:12</p>
+<p class="date">Created: 2020-12-04 Fri 22:45</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

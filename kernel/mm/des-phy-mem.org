@@ -89,3 +89,10 @@ enum zone_watermarks {
 #+ATTR_HTML: :align centering
 #+ATTR_HTML: :width 40% :height 40%
 [[./img/watermark_relationship.png]]
+
+注意真正对这三个水印的访问不是图中标记的zone_t->page_high，较新的内核zone中直接的是没有这些成员的，而是通过zone->_watermark[WMARK_MIN]等。_watermark[WMARK_MIN]是通过函数free_area_init_core依据一定比例算出来的。
+
+而在不同的水印处，会采用不同的行为来解决内存紧张问题：
+1) _watermark[WMARK_MIN]：当可用的pages到达这个值时，kswapd就会被唤醒去释放一些页。
+2) _watermark[WMARK_MIN]：到达这个值时，说明内存极其紧张了。kswapd以一种synchronous（后文细讲）的方式工作，也叫做direct-reclaim路径。
+3) 对于zone水位在_watermark[WMARK_HIGH]的，kswpad不会释放其中的page了，这时kswapd继续睡眠了。
