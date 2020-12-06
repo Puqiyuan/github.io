@@ -1,0 +1,18 @@
+#+TITLE: LWN文档翻译、学习
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+
+本页面列举了我学习https://lwn.net/Kernel/Index/ 文章的记录，这个网站有很多内核相关的文档，从两千年左右到现在（一直更新的现在）几乎都有，比起直接啃内核代码，这些资料的详细阅读、学习会教会我内核各代码的来龙去脉，大体轮廓以及为什么会出现一个东西（一段代码），而不是一开始就陷入到内核代码的细节中，迷失了自我。；-）
+
+但是这些文档都是英文的，在我学习、研究的过程中随手把它翻译成中文，有利于加深我的记忆和理解，也做个学习的记录。
+
+* 调度器（Scheduler）
+* 内存管理（Memory management）
+* 块层（Block layer）
+* 容器（Containers）
+* 设备驱动（Device drivers）
+* 安全（Security）
+* 文件系统（Filesystems）
+* 网络（Networking）
+* 虚拟化（Virtualization）

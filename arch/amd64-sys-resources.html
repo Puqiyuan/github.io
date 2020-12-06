@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-11-28 Sat 17:22 -->
+<!-- 2020-12-06 Sun 22:16 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AMD64(X86-64)系统寄存器介绍</title>
+<title>AMD64(X86-64)系统资源</title>
 <meta name="generator" content="Org mode">
 <meta name="author" content="Cauchy(pqy7172@gmail.com)">
 <link rel="stylesheet" href="../org-manual.css" type="text/css">
@@ -57,14 +57,14 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="content">
-<h1 class="title">AMD64(X86-64)系统寄存器介绍</h1>
+<h1 class="title">AMD64(X86-64)系统资源</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb85b247">1. 系统控制寄存器</a>
+<li><a href="#org187ea1a">1. 系统控制寄存器</a>
 <ul>
-<li><a href="#org9d66159">1.1. CR0寄存器</a></li>
+<li><a href="#org4d291f8">1.1. CR0寄存器</a></li>
 </ul>
 </li>
 </ul>
@@ -75,8 +75,8 @@ for the JavaScript code in this tag.
 </p>
 
 
-<div id="outline-container-orgb85b247" class="outline-2">
-<h2 id="orgb85b247"><span class="section-number-2">1</span> 系统控制寄存器</h2>
+<div id="outline-container-org187ea1a" class="outline-2">
+<h2 id="org187ea1a"><span class="section-number-2">1</span> 系统控制寄存器</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 AMD64处理器包含常见的下列系统寄存器:
@@ -100,14 +100,48 @@ AMD64处理器包含常见的下列系统寄存器:
 </p>
 </div>
 
-<div id="outline-container-org9d66159" class="outline-3">
-<h3 id="org9d66159"><span class="section-number-3">1.1</span> CR0寄存器</h3>
+<div id="outline-container-org4d291f8" class="outline-3">
+<h3 id="org4d291f8"><span class="section-number-3">1.1</span> CR0寄存器</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+下面的图展示了CR0寄存器，legacy CR0寄存器和下图中的低32位一样。
+</p>
+
+<div class="figure">
+<p><img src="./img/cr0.png" alt="cr0.png" width="40%" height="40%" align="centering">
+</p>
+<p><span class="figure-number">Figure 1: </span>CR0寄存器</p>
+</div>
+
+<p>
+下面简单介绍下各bit域的作用：
+</p>
+<ul class="org-ul">
+<li>Procted-Mode Enable(PE) Bit。比特0，这个比特主要用来控制处理器是否运行在保护模式，为1代表在保护模式，为0不是保护模式。如果处理器在保护模式下运行的话，分段保护机制也是打开的。</li>
+<li><p>
+Monitor Coprocessor(MP) Bit。比特1，对于WAIT/FWAIT指令的执行，有可能会引起
+device-not-available异常，是否会，这主要由Monitor Coprocessor比特和task-switched control
+bit（CR0.TS）来决定：
+</p>
+<ol class="org-ol">
+<li>如果Monitor Coprocessor比特和task-switched control比特都设置为1的话（CR0.MP = 1以及
+CR0.TS = 1），执行WAIT/FWAIT指令就会触发device-not-available异常。</li>
+<li>如果CR0.MP或CR0.TS中的任意一个设置为0，WAIT/FWAIT指令的执行不会触发异常。</li>
+</ol>
+<p>
+对于支持x87指令的处理器，软件都应该将MP设置为1，这样在任务切换时，CR0.TS就可以完全自主的控制何时可以保存x87指令的上下文。
+</p></li>
+<li>Emulate Coprocessor(EM) Bit。比特2，如果这个比特被设置为1，所有x87指令的执行都会引起device-not-available异常。同样的，这样的设置也会导致除了FXSAVE和FXRSTOR之外的其它多媒体指令的执行引起invalid-opcode异常。而异常句柄函数可以模拟这些指令的作用。</li>
+<li>Task Switched(TS) Bit。比特3，TS = 1时，尝试执行x87或多媒体指令时都会引起device-not-available异常，软件可以利用这一机制来达到一种优化效果，就是只有必要的时候保存x87和多媒体指令的上下文。</li>
+<li>Extension Type (ET) Bit。比特4，早期x86寄存器会用到。</li>
+</ul>
+</div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-11-28 Sat 17:22</p>
+<p class="date">Created: 2020-12-06 Sun 22:16</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

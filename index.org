@@ -24,6 +24,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 * Linux系统开发
 - [[./sys-programming/thread.html][Linux线程之一]]。
 * Linux内核
+- LWN内核文档学习[[./kernel/lwn/lwn.html][记录]]。
 - [[./kernel/process-management/process-sched.html][内核进程调度]]。
 - 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
 - [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
@@ -32,7 +33,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构
-- AMD64(X86-64)架构下的一些系统寄存器[[./arch/amd64-sys-regs.html][介绍]].
+- AMD64(X86-64)架构下的系统资源[[./arch/amd64-sys-resources.html][介绍]]。
 * 编译器
 - [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
 - [[./compiler/unroll_loop.html][unroll小循环对性能的提升]].
