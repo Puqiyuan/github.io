@@ -9,10 +9,19 @@
 
 * 调度器（Scheduler）
 * 内存管理（Memory management）
-* 块层（Block layer）
+* 中断（Interrupts）
+* 控制组（Control groups）
 * 容器（Containers）
+* 虚拟化（Virtualization）
+* 块层（Block layer）
 * 设备驱动（Device drivers）
 * 安全（Security）
 * 文件系统（Filesystems）
 * 网络（Networking）
-* 虚拟化（Virtualization）
+* 延迟（Latency）
+* 模块（Modules）
+* 命名空间（Namespaces）
+* 电源管理（Power management）
+* 实时（Realtime）
+* Tracing
+* Ftrace

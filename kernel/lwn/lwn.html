@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-06 Sun 21:51 -->
+<!-- 2020-12-06 Sun 22:30 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LWN文档翻译、学习</title>
@@ -62,15 +62,24 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb121a0c">1. 调度器（Scheduler）</a></li>
-<li><a href="#org06e683b">2. 内存管理（Memory management）</a></li>
-<li><a href="#org3f0641a">3. 块层（Block layer）</a></li>
-<li><a href="#org9838729">4. 容器（Containers）</a></li>
-<li><a href="#orga7fc409">5. 设备驱动（Device drivers）</a></li>
-<li><a href="#org8db20ef">6. 安全（Security）</a></li>
-<li><a href="#orgfc75463">7. 文件系统（Filesystems）</a></li>
-<li><a href="#org5563c99">8. 网络（Networking）</a></li>
-<li><a href="#org018ed50">9. 虚拟化（Virtualization）</a></li>
+<li><a href="#org15daec9">1. 调度器（Scheduler）</a></li>
+<li><a href="#org01d73d4">2. 内存管理（Memory management）</a></li>
+<li><a href="#org975da03">3. 中断（Interrupts）</a></li>
+<li><a href="#orgea96550">4. 控制组（Control groups）</a></li>
+<li><a href="#org5bf3344">5. 容器（Containers）</a></li>
+<li><a href="#org0cae9f1">6. 虚拟化（Virtualization）</a></li>
+<li><a href="#org17e304f">7. 块层（Block layer）</a></li>
+<li><a href="#orgaaf5c1f">8. 设备驱动（Device drivers）</a></li>
+<li><a href="#orgc7f7ff1">9. 安全（Security）</a></li>
+<li><a href="#org0a0701b">10. 文件系统（Filesystems）</a></li>
+<li><a href="#org909c5be">11. 网络（Networking）</a></li>
+<li><a href="#org030beb0">12. 延迟（Latency）</a></li>
+<li><a href="#orgacaa771">13. 模块（Modules）</a></li>
+<li><a href="#orge14ba8f">14. 命名空间（Namespaces）</a></li>
+<li><a href="#org66ccb1e">15. 电源管理（Power management）</a></li>
+<li><a href="#orgf81a3bc">16. 实时（Realtime）</a></li>
+<li><a href="#org9d1ebea">17. Tracing</a></li>
+<li><a href="#orgcc7f8e3">18. Ftrace</a></li>
 </ul>
 </div>
 </div>
@@ -82,37 +91,64 @@ for the JavaScript code in this tag.
 但是这些文档都是英文的，在我学习、研究的过程中随手把它翻译成中文，有利于加深我的记忆和理解，也做个学习的记录。
 </p>
 
-<div id="outline-container-orgb121a0c" class="outline-2">
-<h2 id="orgb121a0c"><span class="section-number-2">1</span> 调度器（Scheduler）</h2>
+<div id="outline-container-org15daec9" class="outline-2">
+<h2 id="org15daec9"><span class="section-number-2">1</span> 调度器（Scheduler）</h2>
 </div>
-<div id="outline-container-org06e683b" class="outline-2">
-<h2 id="org06e683b"><span class="section-number-2">2</span> 内存管理（Memory management）</h2>
+<div id="outline-container-org01d73d4" class="outline-2">
+<h2 id="org01d73d4"><span class="section-number-2">2</span> 内存管理（Memory management）</h2>
 </div>
-<div id="outline-container-org3f0641a" class="outline-2">
-<h2 id="org3f0641a"><span class="section-number-2">3</span> 块层（Block layer）</h2>
+<div id="outline-container-org975da03" class="outline-2">
+<h2 id="org975da03"><span class="section-number-2">3</span> 中断（Interrupts）</h2>
 </div>
-<div id="outline-container-org9838729" class="outline-2">
-<h2 id="org9838729"><span class="section-number-2">4</span> 容器（Containers）</h2>
+<div id="outline-container-orgea96550" class="outline-2">
+<h2 id="orgea96550"><span class="section-number-2">4</span> 控制组（Control groups）</h2>
 </div>
-<div id="outline-container-orga7fc409" class="outline-2">
-<h2 id="orga7fc409"><span class="section-number-2">5</span> 设备驱动（Device drivers）</h2>
+<div id="outline-container-org5bf3344" class="outline-2">
+<h2 id="org5bf3344"><span class="section-number-2">5</span> 容器（Containers）</h2>
 </div>
-<div id="outline-container-org8db20ef" class="outline-2">
-<h2 id="org8db20ef"><span class="section-number-2">6</span> 安全（Security）</h2>
+<div id="outline-container-org0cae9f1" class="outline-2">
+<h2 id="org0cae9f1"><span class="section-number-2">6</span> 虚拟化（Virtualization）</h2>
 </div>
-<div id="outline-container-orgfc75463" class="outline-2">
-<h2 id="orgfc75463"><span class="section-number-2">7</span> 文件系统（Filesystems）</h2>
+<div id="outline-container-org17e304f" class="outline-2">
+<h2 id="org17e304f"><span class="section-number-2">7</span> 块层（Block layer）</h2>
 </div>
-<div id="outline-container-org5563c99" class="outline-2">
-<h2 id="org5563c99"><span class="section-number-2">8</span> 网络（Networking）</h2>
+<div id="outline-container-orgaaf5c1f" class="outline-2">
+<h2 id="orgaaf5c1f"><span class="section-number-2">8</span> 设备驱动（Device drivers）</h2>
 </div>
-<div id="outline-container-org018ed50" class="outline-2">
-<h2 id="org018ed50"><span class="section-number-2">9</span> 虚拟化（Virtualization）</h2>
+<div id="outline-container-orgc7f7ff1" class="outline-2">
+<h2 id="orgc7f7ff1"><span class="section-number-2">9</span> 安全（Security）</h2>
+</div>
+<div id="outline-container-org0a0701b" class="outline-2">
+<h2 id="org0a0701b"><span class="section-number-2">10</span> 文件系统（Filesystems）</h2>
+</div>
+<div id="outline-container-org909c5be" class="outline-2">
+<h2 id="org909c5be"><span class="section-number-2">11</span> 网络（Networking）</h2>
+</div>
+<div id="outline-container-org030beb0" class="outline-2">
+<h2 id="org030beb0"><span class="section-number-2">12</span> 延迟（Latency）</h2>
+</div>
+<div id="outline-container-orgacaa771" class="outline-2">
+<h2 id="orgacaa771"><span class="section-number-2">13</span> 模块（Modules）</h2>
+</div>
+<div id="outline-container-orge14ba8f" class="outline-2">
+<h2 id="orge14ba8f"><span class="section-number-2">14</span> 命名空间（Namespaces）</h2>
+</div>
+<div id="outline-container-org66ccb1e" class="outline-2">
+<h2 id="org66ccb1e"><span class="section-number-2">15</span> 电源管理（Power management）</h2>
+</div>
+<div id="outline-container-orgf81a3bc" class="outline-2">
+<h2 id="orgf81a3bc"><span class="section-number-2">16</span> 实时（Realtime）</h2>
+</div>
+<div id="outline-container-org9d1ebea" class="outline-2">
+<h2 id="org9d1ebea"><span class="section-number-2">17</span> Tracing</h2>
+</div>
+<div id="outline-container-orgcc7f8e3" class="outline-2">
+<h2 id="orgcc7f8e3"><span class="section-number-2">18</span> Ftrace</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-06 Sun 21:51</p>
+<p class="date">Created: 2020-12-06 Sun 22:30</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
