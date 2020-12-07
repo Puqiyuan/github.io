@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2020-12-07 Mon 21:35 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中断与异常</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">中断与异常</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org4c94c50">1. 中断信号的作用</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文讲述Linux的中断和异常。
+</p>
+
+<p>
+中断通常定义为可以修改指令流的事件。这些事件都对应着电信号，电信号的可以来自CPU芯片内部或外部。
+</p>
+
+<p>
+中断通常可以划分为两类，同步与异步，所谓同/异步：
+</p>
+<ul class="org-ul">
+<li>同步中断：
+<ol class="org-ol">
+<li>由CPU控制单元发出。</li>
+<li>在指令执行结束时调用。</li>
+</ol></li>
+<li>异步中断：
+<ol class="org-ol">
+<li>由其它硬件生成。</li>
+<li>相对于CPU的时钟来说，其发生时机是任意的。</li>
+</ol></li>
+</ul>
+
+<p>
+中断由CPU内部定时器或I/O设备发出，比如用户敲击键盘就会产生中断。
+</p>
+
+<p>
+异常就是由程序异常或其它异常条件发生时产生。前一种情况，内核发送信号给产生异常的进程。而后一种比如有Page faule或经由int(sysenter)指令来请求内核服务，这时内核会执行 <b>一系列步骤</b> 然后从 <b>异常中恢复</b> 。
+</p>
+
+<div id="outline-container-org4c94c50" class="outline-2">
+<h2 id="org4c94c50"><span class="section-number-2">1</span> 中断信号的作用</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+中断信号提供了一种能力，它可以使得CPU转移(divert)出正常的指令执行流。中断信号到来时，CPU必
+须停下它正在做的事情并切换到新的代码路径上。这通过以下两点做到：
+</p>
+<ol class="org-ol">
+<li>把当前的程序计数器（PC，program counter）存到内核态栈上（Kernel Mode stack）。</li>
+<li>放置与引起中断相关的服务例程到PC里。</li>
+</ol>
+
+<p>
+这些文字可能会让我们联想到进程切换，不过中断处理和进程切换是完全不同的：
+</p>
+<ol class="org-ol">
+<li>执行中断/异常的代码可不是进程的代码。</li>
+<li>它是一种控制路径（control path），当中断发生时，代表进程执行。</li>
+<li>这种control path比起进程，它更加轻量，具有更少的上下文和处理时间。</li>
+</ol>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2020-12-07 Mon 21:35</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

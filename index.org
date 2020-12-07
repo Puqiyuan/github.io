@@ -25,6 +25,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 - [[./sys-programming/thread.html][Linux线程之一]]。
 * Linux内核
 - LWN内核文档学习[[./kernel/lwn/lwn.html][记录]]。
+- 内核[[./kernel/interrupts/interrupts.html][中断与异常]]。
 - [[./kernel/process-management/process-sched.html][内核进程调度]]。
 - 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
 - [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
