@@ -53,4 +53,42 @@ insmod ./$module.ko $* || exit 1
 major=$(awk "\$2==\"$module\" {print \$1}" /proc/devices)
 mknod /dev/${device}0 c $major 0
 #+end_src
+
+** 一些重要的数据结构
+很多基本的驱动操作都涉及到三个重要的内核数据结构，分别是file_operations，file以及inode，下面依次来看看。
+
+*** 文件操作数据结构（file_operations）
+到目前为止，我们预留了设备号，但还没有将这些设备号与驱动操作联系起来，file_operations结构体正是设定这种连接。每一个打开的文件都有file结构体表示（后面会讲到），其内有一个file_operations类型的成员f_op指向了设备（驱动）的操作函数，这些操作也是对应相应的系统调用比如read，open等。可以把文件当作一个对象，而这些函数（file_operations）当作方法，这就是面向对象编程的术语了，其实内核中有很多这样的面向对象思想，以后还会看到。
+
+下面可以先直观的看下file和file_operations结构体：
+#+begin_src c :includes <stdio.h>
+struct file {
+	union {
+		struct llist_node	fu_llist;
+		struct rcu_head 	fu_rcuhead;
+	} f_u;
+	struct path		f_path;
+	struct inode		*f_inode;	/* cached value */
+	const struct file_operations	*f_op;
+    ...
+}
+#+end_src
+#+begin_src c :includes <stdio.h>
+struct file_operations {
+	struct module *owner;
+	loff_t (*llseek) (struct file *, loff_t, int);
+	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
+	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
+	int (*iopoll)(struct kiocb *kiocb, bool spin);
+	int (*iterate) (struct file *, struct dir_context *);
+	int (*iterate_shared) (struct file *, struct dir_context *);
+	__poll_t (*poll) (struct file *, struct poll_table_struct *);
+    ...
+}
+#+end_src
+
+通常，file_operations结构体或者指向file_operations结构体的指针叫做fops，每一个在结构体中的
+指针指向驱动里实现的具体的函数。而对于留NULL的指针，内核精确的行为有所不同。
 * 代码实现
