@@ -89,6 +89,5 @@ struct file_operations {
 }
 #+end_src
 
-通常，file_operations结构体或者指向file_operations结构体的指针叫做fops，每一个在结构体中的
-指针指向驱动里实现的具体的函数。而对于留NULL的指针，内核精确的行为有所不同。
+通常，file_operations结构体或者指向file_operations结构体的指针叫做fops，每一个在结构体中的指针指向驱动里实现的具体的函数。而对于留NULL的指针，内核精确的行为有所不同。下面的列表介绍了可以对device调用的操作。
 * 代码实现

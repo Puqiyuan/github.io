@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-08 Tue 22:47 -->
+<!-- 2020-12-08 Tue 22:54 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>一个简单的字符驱动程序</title>
@@ -62,18 +62,18 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org2ed83c8">1. 背景知识</a>
+<li><a href="#orgb134c05">1. 背景知识</a>
 <ul>
-<li><a href="#org1dd9bb2">1.1. 主设备号和次设备号</a></li>
-<li><a href="#orgd174718">1.2. 分配和释放设备编号</a></li>
-<li><a href="#orge92b5c5">1.3. 一些重要的数据结构</a>
+<li><a href="#org74f55fe">1.1. 主设备号和次设备号</a></li>
+<li><a href="#orgdead55f">1.2. 分配和释放设备编号</a></li>
+<li><a href="#orgb18784d">1.3. 一些重要的数据结构</a>
 <ul>
-<li><a href="#org13ea2ed">1.3.1. 文件操作数据结构（file_operations）</a></li>
+<li><a href="#org61d8075">1.3.1. 文件操作数据结构（file_operations）</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#orged77e9a">2. 代码实现</a></li>
+<li><a href="#org3d0e728">2. 代码实现</a></li>
 </ul>
 </div>
 </div>
@@ -81,12 +81,12 @@ for the JavaScript code in this tag.
 本文将详细介绍在Linux平台的一个简单字符驱动程序的编写。它操作的是一片内存，把内存当作设备，这样可以不依赖于具体的硬件设备, 就把这个简单字符驱动程序叫s_driver吧.
 </p>
 
-<div id="outline-container-org2ed83c8" class="outline-2">
-<h2 id="org2ed83c8"><span class="section-number-2">1</span> 背景知识</h2>
+<div id="outline-container-orgb134c05" class="outline-2">
+<h2 id="orgb134c05"><span class="section-number-2">1</span> 背景知识</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-org1dd9bb2" class="outline-3">
-<h3 id="org1dd9bb2"><span class="section-number-3">1.1</span> 主设备号和次设备号</h3>
+<div id="outline-container-org74f55fe" class="outline-3">
+<h3 id="org74f55fe"><span class="section-number-3">1.1</span> 主设备号和次设备号</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 访问设备要通过文件系统中的设备文件。Linux把设备抽象成文件，访问设备也就是访问文件。这些文件都很特殊，通常位于/dev目录下，用ls -l可以看到字符设备第一列是c字母开头，而块设备是b开头，同时可以看到有两个数字由逗号隔开，如下图：
@@ -134,8 +134,8 @@ MAJOR用于获得主设备号, 而MINOR用于获得次设备号. 可以稍微注
 </div>
 </div>
 </div>
-<div id="outline-container-orgd174718" class="outline-3">
-<h3 id="orgd174718"><span class="section-number-3">1.2</span> 分配和释放设备编号</h3>
+<div id="outline-container-orgdead55f" class="outline-3">
+<h3 id="orgdead55f"><span class="section-number-3">1.2</span> 分配和释放设备编号</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 如前面的图, 设备都有编号, 自然我们的简单字符驱动程序s_driver也需要设备编号, 内核提供两个函数用来分配设备编号:
@@ -172,16 +172,16 @@ mknod /dev/${<span style="color: #DFAF8F;">device</span>}0 c $<span style="color
 </div>
 </div>
 
-<div id="outline-container-orge92b5c5" class="outline-3">
-<h3 id="orge92b5c5"><span class="section-number-3">1.3</span> 一些重要的数据结构</h3>
+<div id="outline-container-orgb18784d" class="outline-3">
+<h3 id="orgb18784d"><span class="section-number-3">1.3</span> 一些重要的数据结构</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 很多基本的驱动操作都涉及到三个重要的内核数据结构，分别是file_operations，file以及inode，下面依次来看看。
 </p>
 </div>
 
-<div id="outline-container-org13ea2ed" class="outline-4">
-<h4 id="org13ea2ed"><span class="section-number-4">1.3.1</span> 文件操作数据结构（file_operations）</h4>
+<div id="outline-container-org61d8075" class="outline-4">
+<h4 id="org61d8075"><span class="section-number-4">1.3.1</span> 文件操作数据结构（file_operations）</h4>
 <div class="outline-text-4" id="text-1-3-1">
 <p>
 到目前为止，我们预留了设备号，但还没有将这些设备号与驱动操作联系起来，file_operations结构体正是设定这种连接。每一个打开的文件都有file结构体表示（后面会讲到），其内有一个file_operations类型的成员f_op指向了设备（驱动）的操作函数，这些操作也是对应相应的系统调用比如read，open等。可以把文件当作一个对象，而这些函数（file_operations）当作方法，这就是面向对象编程的术语了，其实内核中有很多这样的面向对象思想，以后还会看到。
@@ -221,20 +221,19 @@ mknod /dev/${<span style="color: #DFAF8F;">device</span>}0 c $<span style="color
 </div>
 
 <p>
-通常，file_operations结构体或者指向file_operations结构体的指针叫做fops，每一个在结构体中的
-指针指向驱动里实现的具体的函数。而对于留NULL的指针，内核精确的行为有所不同。
+通常，file_operations结构体或者指向file_operations结构体的指针叫做fops，每一个在结构体中的指针指向驱动里实现的具体的函数。而对于留NULL的指针，内核精确的行为有所不同。下面的列表介绍了可以对device调用的操作。
 </p>
 </div>
 </div>
 </div>
 </div>
-<div id="outline-container-orged77e9a" class="outline-2">
-<h2 id="orged77e9a"><span class="section-number-2">2</span> 代码实现</h2>
+<div id="outline-container-org3d0e728" class="outline-2">
+<h2 id="org3d0e728"><span class="section-number-2">2</span> 代码实现</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-08 Tue 22:47</p>
+<p class="date">Created: 2020-12-08 Tue 22:54</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
