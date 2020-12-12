@@ -39,4 +39,42 @@ AMD64处理器包含常见的下列系统寄存器:
 - Emulate Coprocessor(EM) Bit。比特2，如果这个比特被设置为1，所有x87指令的执行都会引起device-not-available异常。同样的，这样的设置也会导致除了FXSAVE和FXRSTOR之外的其它多媒体指令的执行引起invalid-opcode异常。而异常句柄函数可以模拟这些指令的作用。
 - Task Switched(TS) Bit。比特3，TS = 1时，尝试执行x87或多媒体指令时都会引起device-not-available异常，软件可以利用这一机制来达到一种优化效果，就是只有必要的时候保存x87和多媒体指令的上下文。
 - Extension Type (ET) Bit。比特4，早期x86寄存器会用到。
+- Numeric Error(NE) Bit。指明是内部还是外部控制x87的浮点异常，对于软件来说，推荐将它设置为1，这样性能有一定优化。
+- Write Protect(WP) Bit。控制着超级用户是否能写read-only的页面，1的话意味着不能写，0可以写。
+- Alignment Check(AM) Bit。Bit 18。通过AM比特和RFLAGS.AC一起决定是否自动检查对齐，当CPL=3时，对于未对齐的内存访问会引起AC异常。
+- Not Writethrough(NW) Bit。Bit 29，忽略了，仅在legacy mode中使用。
+- Cache Disable(CD) Bit。比特30，CD=0时，内部缓存开启。CD=1时，数据和指令不会加载到内部缓
+  存，除了以下两种情况：
+  1) 读命中时，就会从内部cache中返回数据并且报告cache命中。
+  2) 写命中时，就会使得数据写入到下一级存储中，报告命中且无效cache。
+- Pageing Enable(PG)比特。比特31，为1使能页翻译，但同时CR0.PE也要为1，也就是在保护模式下。
+- Reserved Bits。比特28：19，17，15：6以及63：32是保留比特。对于这些比特的操作应该和前一次读出来的值相同。而在long mode下，63：32比特必须保持0。
+** CR2和CR3寄存器
+CR2(page-fault linear address)和CR3(page-translateion-table base address)主要用于页翻译机
+制。CR3用来指出最高级别的页翻译表，如下的图：
+#+CAPTION: legacy mode的CR2寄存器
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr2-legacy-mode.png]]
 
+#+CAPTION: long mode的CR2寄存器
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr2-long-mode.png]]
+
+#+CAPTION: legacy mode的CR3寄存器（non-pae）
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr3-legacy-mode-non-pae.png]]
+
+#+CAPTION: legacy mode的CR3寄存器（pae）
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr3-legacy-mode-with-pae.png]]
+
+#+CAPTION: long mode的CR3寄存器
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr3-long-mode.png]]
+
+在后面介绍分页机制时还会更详细的介绍这两个寄存器。
