@@ -90,4 +90,14 @@ struct file_operations {
 #+end_src
 
 通常，file_operations结构体或者指向file_operations结构体的指针叫做fops，每一个在结构体中的指针指向驱动里实现的具体的函数。而对于留NULL的指针，内核精确的行为有所不同。下面的列表介绍了可以对device调用的操作。
+
+1) struct module *owner
+   
+   指向拥有file_operations的模块，这个成员用来防止模块正在操作时却被unload了。它一般被初始化为THIS_MODULE。
+2) loff_t (*llseek) (struct file *, loff_t, int)
+
+   loff_t实际上是一个long long型。这个函数用来改变当前文件的读写位置，新的位置由一个返回的正数值表示，负值代表出错。如果这个函数是NULL，对llseek的调用将会以一种不可预知的方式修改file文件结构体的位置计数器（后文介绍）。
+3) ssize_t (*read) (struct file *, char __user *, size_t, loff_t *)
+
+   ssize_t通常就是目标平台的整数类型。该函数用来从设备中读取内容，返回的正数值表示了实际读了多少字节，如果为NULL的话，read系统调用返回-EINVAL。
 * 代码实现
