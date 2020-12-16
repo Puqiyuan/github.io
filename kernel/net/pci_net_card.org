@@ -1,0 +1,15 @@
+#+TITLE: PCI层与网卡
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+
+本文总体介绍下PCI，再结合网卡初始化的具体流程来详细理解PCI层的功能。
+
+PCI层存在的意义是：
+- 对于PCI设备提供一些通用的公共函数接口。
+- 对于内核来说也更容易收集与维护PCI设备的信息，比如统计等。
+
+下面介绍下PCI层的几个关键数据结构，后面会用网卡这个具体的例子来解释这些关键的数据结构是如何被初始化的。
+
+* 关键数据结构
