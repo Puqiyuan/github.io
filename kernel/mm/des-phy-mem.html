@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-04 Fri 22:45 -->
+<!-- 2020-12-18 Fri 22:39 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
@@ -62,10 +62,11 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org00f1a37">1. 结点</a></li>
-<li><a href="#org775cb8d">2. 区域</a>
+<li><a href="#orgfdcaf42">1. 结点</a></li>
+<li><a href="#org7893e73">2. 区域</a>
 <ul>
-<li><a href="#org2b3283b">2.1. Zone水印</a></li>
+<li><a href="#orgb92b6d9">2.1. Zone水印</a></li>
+<li><a href="#org0edb07c">2.2. Page</a></li>
 </ul>
 </li>
 </ul>
@@ -103,8 +104,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org00f1a37" class="outline-2">
-<h2 id="org00f1a37"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-orgfdcaf42" class="outline-2">
+<h2 id="orgfdcaf42"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
@@ -125,8 +126,8 @@ pglist_data结构体中的一些成员了。
 </div>
 </div>
 
-<div id="outline-container-org775cb8d" class="outline-2">
-<h2 id="org775cb8d"><span class="section-number-2">2</span> 区域</h2>
+<div id="outline-container-org7893e73" class="outline-2">
+<h2 id="org7893e73"><span class="section-number-2">2</span> 区域</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 每个结点里会有多个区域(zone), 本节介绍区域.
@@ -184,8 +185,8 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </ul>
 </div>
 
-<div id="outline-container-org2b3283b" class="outline-3">
-<h3 id="org2b3283b"><span class="section-number-3">2.1</span> Zone水印</h3>
+<div id="outline-container-orgb92b6d9" class="outline-3">
+<h3 id="orgb92b6d9"><span class="section-number-3">2.1</span> Zone水印</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 当系统中可用的内存较少时，守护程序kswapd（pageout daemon）就会被唤醒去释放页面。每个zone中
@@ -221,11 +222,14 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </ol>
 </div>
 </div>
+<div id="outline-container-org0edb07c" class="outline-3">
+<h3 id="org0edb07c"><span class="section-number-3">2.2</span> Page</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-04 Fri 22:45</p>
+<p class="date">Created: 2020-12-18 Fri 22:39</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
