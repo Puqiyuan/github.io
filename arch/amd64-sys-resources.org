@@ -78,3 +78,21 @@ CR2(page-fault linear address)和CR3(page-translateion-table base address)主要
 [[./img/cr3-long-mode.png]]
 
 在后面介绍分页机制时还会更详细的介绍这两个寄存器。
+** CR4寄存器
+下图表示了CR4寄存器的内容：
+#+CAPTION: cr4寄存器
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr41.png]]
+
+#+CAPTION: cr4寄存器
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/cr42.png]]
+
+下面挑几个简单介绍下这些bit所控制的作用，其它具体的可以参考手册：
+- Time-Stamp Disable(TSD)：Bit 2，控制哪个权限可以访问time-stamp counter，为0时代表任何权限的指令都可以访问（即执行rdtsc或rdtscp指令），为1时，只有在0权限级的软件才能执行rdtsc或rdtscp指令。
+- Page-Size Extensions(PSE)：Bit 4，设置为1表示开启4-Mbyte物理页面。
+- Machine-Check Enable(MCE)：Bit 6，设为1表示开启机器检查异常。
+- Page-Global Enable(PGE)：Bit 7，页翻译机制开启时，通过使得某些页翻译对所有的任务和函数都是全局的（global），系统软件的性能可以得到提升。
+** RFLAGS寄存器
