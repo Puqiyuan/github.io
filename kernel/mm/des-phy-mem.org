@@ -97,4 +97,26 @@ enum zone_watermarks {
 2) _watermark[WMARK_MIN]：到达这个值时，说明内存极其紧张了。kswapd以一种synchronous（后文细讲）的方式工作，也叫做direct-reclaim路径。
 3) 对于zone水位在_watermark[WMARK_HIGH]的，kswpad不会释放其中的page了，这时kswapd继续睡眠了。
 ** Page
-系统中的每个物理页面都有一个page结构体来表示（管理）。
+系统中的每个物理页面都有一个page结构体来表示（管理）。现在看看几个简单的成员：
+#+begin_src C :includes <stdio.h>
+struct page {
+	unsigned long flags;
+    union {
+        struct list_head lru;
+        struct address_space *mapping;
+        pgoff_t index;
+        atomic_t _refcount;
+    }
+}
+#+end_src
+下面简单介绍下这几个成员：
+- flags：描述page的状态，可能的值在page-flags.h文件中的pageflags类型可以看到。对于这些
+  flags中的bit的操作是通过一组宏来实现的，而不是直接操作它，比如有SetPageUptodate，这个函
+  数再往下是架构定义提供的了。flags可能有哪些值呢？简单看下：
+  1) PG_uptodate：说明页的内容是否有效。
+  2)
+  3)
+  4)
+              
+  
+注意上述结构体省略了一些成员，page结构体是一个复合的复杂结构体，本次就先只研究这些成员。

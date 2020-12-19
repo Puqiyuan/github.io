@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-18 Fri 22:43 -->
+<!-- 2020-12-19 Sat 17:03 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
@@ -62,11 +62,11 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9b4a969">1. 结点</a></li>
-<li><a href="#org7898043">2. 区域</a>
+<li><a href="#orgfdf83d0">1. 结点</a></li>
+<li><a href="#org9309d0c">2. 区域</a>
 <ul>
-<li><a href="#org5849611">2.1. Zone水印</a></li>
-<li><a href="#org57df549">2.2. Page</a></li>
+<li><a href="#org00e40ba">2.1. Zone水印</a></li>
+<li><a href="#org3858fc1">2.2. Page</a></li>
 </ul>
 </li>
 </ul>
@@ -104,8 +104,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org9b4a969" class="outline-2">
-<h2 id="org9b4a969"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-orgfdf83d0" class="outline-2">
+<h2 id="orgfdf83d0"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
@@ -126,8 +126,8 @@ pglist_data结构体中的一些成员了。
 </div>
 </div>
 
-<div id="outline-container-org7898043" class="outline-2">
-<h2 id="org7898043"><span class="section-number-2">2</span> 区域</h2>
+<div id="outline-container-org9309d0c" class="outline-2">
+<h2 id="org9309d0c"><span class="section-number-2">2</span> 区域</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 每个结点里会有多个区域(zone), 本节介绍区域.
@@ -185,8 +185,8 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </ul>
 </div>
 
-<div id="outline-container-org5849611" class="outline-3">
-<h3 id="org5849611"><span class="section-number-3">2.1</span> Zone水印</h3>
+<div id="outline-container-org00e40ba" class="outline-3">
+<h3 id="org00e40ba"><span class="section-number-3">2.1</span> Zone水印</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 当系统中可用的内存较少时，守护程序kswapd（pageout daemon）就会被唤醒去释放页面。每个zone中
@@ -222,11 +222,44 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </ol>
 </div>
 </div>
-<div id="outline-container-org57df549" class="outline-3">
-<h3 id="org57df549"><span class="section-number-3">2.2</span> Page</h3>
+<div id="outline-container-org3858fc1" class="outline-3">
+<h3 id="org3858fc1"><span class="section-number-3">2.2</span> Page</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
-系统中的每个物理页面都有一个page结构体来表示（管理）。
+系统中的每个物理页面都有一个page结构体来表示（管理）。现在看看几个简单的成员：
+</p>
+<div class="org-src-container">
+<pre class="src src-C"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> {
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">flags</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">union</span> {
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">list_head</span> <span style="color: #DFAF8F;">lru</span>;
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">address_space</span> *<span style="color: #DFAF8F;">mapping</span>;
+        <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">index</span>;
+        <span style="color: #7CB8BB;">atomic_t</span> <span style="color: #DFAF8F;">_refcount</span>;
+    }
+}
+</pre>
+</div>
+<p>
+下面简单介绍下这几个成员：
+</p>
+<ul class="org-ul">
+<li>flags：描述page的状态，可能的值在page-flags.h文件中的pageflags类型可以看到。对于这些
+flags中的bit的操作是通过一组宏来实现的，而不是直接操作它，比如有SetPageUptodate，这个函
+数再往下是架构定义提供的了。flags可能有哪些值呢？简单看下：
+<ol class="org-ol">
+<li>PG_uptodate：说明页的内容是否有效。</li>
+<li></li>
+
+<li></li>
+
+<li></li>
+</ol></li>
+</ul>
+
+
+<p>
+注意上述结构体省略了一些成员，page结构体是一个复合的复杂结构体，本次就先只研究这些成员。
 </p>
 </div>
 </div>
@@ -234,7 +267,7 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-18 Fri 22:43</p>
+<p class="date">Created: 2020-12-19 Sat 17:03</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
