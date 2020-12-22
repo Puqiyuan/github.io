@@ -100,4 +100,16 @@ struct file_operations {
 3) ssize_t (*read) (struct file *, char __user *, size_t, loff_t *)
 
    ssize_t通常就是目标平台的整数类型。该函数用来从设备中读取内容，返回的正数值表示了实际读了多少字节，如果为NULL的话，read系统调用返回-EINVAL。
+
+4) ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *)
+
+   给设备发送数据。如果为NULL，就返回-EINVAL给调用程序。返回值如果非负，代表成功写入的字节数。
+
+5) __poll_t (*poll) (struct file *, struct poll_table_struct *)
+
+   这个函数是poll、epoll以及select的下层实现，这些函数的功能是：查询对于一个（或多个）文件描述符的读写是否会阻塞。该函数返回一个bit mask来表明是否一个非阻塞的读写操作是可能的（设备可以被立即读写，无需等待）。这也会提供给内核一些信息来决定是否应该将进程放入睡眠状态，直到I/O操作变得可能。如果这个函数是null，则是假定设备是可以无阻塞的读写的。
+
+6) int (*mmap) (struct file *, struct vm_area_struct *)
+
+   mmap用来将设备的内存映射到进程的地址空间，如果这个函数是null，mmap就返回-ENODEV。
 * 代码实现
