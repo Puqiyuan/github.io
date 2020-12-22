@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-21 Mon 21:36 -->
+<!-- 2020-12-22 Tue 21:25 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>中断与异常</title>
@@ -62,11 +62,11 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org370de87">1. 中断信号的作用</a></li>
-<li><a href="#orge94ed35">2. 中断、异常对比</a></li>
-<li><a href="#org328874b">3. IRQ与中断</a>
+<li><a href="#orgdc16f17">1. 中断信号的作用</a></li>
+<li><a href="#org3713610">2. 中断、异常对比</a></li>
+<li><a href="#orgf5b99e7">3. IRQ与中断</a>
 <ul>
-<li><a href="#org0cdbcfe">3.1. 高级可编程中断控制器（APIC）</a></li>
+<li><a href="#org73b6d06">3.1. 高级可编程中断控制器（APIC）</a></li>
 </ul>
 </li>
 </ul>
@@ -101,11 +101,11 @@ for the JavaScript code in this tag.
 </p>
 
 <p>
-异常就是由程序异常或其它异常条件发生时产生。前一种情况，内核发送信号给产生异常的进程。而后一种比如有Page faule或经由int(sysenter)指令来请求内核服务，这时内核会执行 <b>一系列步骤</b> 然后从 <b>异常中恢复</b> 。
+异常就是由程序异常或其它异常条件发生时产生。前一种情况，内核发送信号给产生异常的进程。而后一种比如有Page fault或经由int(sysenter)指令来请求内核服务，这时内核会执行 <b>一系列步骤</b> 然后从 <b>异常中恢复</b> 。
 </p>
 
-<div id="outline-container-org370de87" class="outline-2">
-<h2 id="org370de87"><span class="section-number-2">1</span> 中断信号的作用</h2>
+<div id="outline-container-orgdc16f17" class="outline-2">
+<h2 id="orgdc16f17"><span class="section-number-2">1</span> 中断信号的作用</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 中断信号提供了一种能力，它可以使得CPU转移(divert)出正常的指令执行流。中断信号到来时，CPU必
@@ -127,8 +127,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orge94ed35" class="outline-2">
-<h2 id="orge94ed35"><span class="section-number-2">2</span> 中断、异常对比</h2>
+<div id="outline-container-org3713610" class="outline-2">
+<h2 id="org3713610"><span class="section-number-2">2</span> 中断、异常对比</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 英特尔文档对中断和异常做如下的归类：
@@ -202,8 +202,8 @@ Aborts
 </ol>
 </div>
 </div>
-<div id="outline-container-org328874b" class="outline-2">
-<h2 id="org328874b"><span class="section-number-2">3</span> IRQ与中断</h2>
+<div id="outline-container-orgf5b99e7" class="outline-2">
+<h2 id="orgf5b99e7"><span class="section-number-2">3</span> IRQ与中断</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 每一个可以发出中断的硬件（控制器）都有一个与之关联的输出线：Interrupt ReQuest(IRQ)线。所有
@@ -239,14 +239,14 @@ disable/enable IRQ都是针对某个具体的IRQ线，而对eflags寄存器的IF
 一起，所以总的可用的IRQ线其实只有15条。
 </p>
 </div>
-<div id="outline-container-org0cdbcfe" class="outline-3">
-<h3 id="org0cdbcfe"><span class="section-number-3">3.1</span> 高级可编程中断控制器（APIC）</h3>
+<div id="outline-container-org73b6d06" class="outline-3">
+<h3 id="org73b6d06"><span class="section-number-3">3.1</span> 高级可编程中断控制器（APIC）</h3>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-21 Mon 21:36</p>
+<p class="date">Created: 2020-12-22 Tue 21:25</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
