@@ -13,3 +13,46 @@ PCI层存在的意义是：
 下面介绍下PCI层的几个关键数据结构，后面会用网卡这个具体的例子来解释这些关键的数据结构是如何被初始化的。
 
 * 关键数据结构
+下面来看看几个在PCI层使用的关键数据结构。
+- pci_device_id
+
+  根据PCI标准定义的设备标识符。
+
+- pci_dev
+
+  如同网卡设备有net_device结构体，每个PCI设备也有一个pci_dev结构体实例。
+
+- pci_driver
+
+  pci层与设备驱动的接口，这个结构体主要是由函数指针组成，所有的PCI设备都会使用它。这些函数指针由对应的设备驱动设置将它们指向恰当的函数实现。下面简单介绍下这个结构体中的一些主要的成员：
+  1) name
+
+     驱动的名字。
+
+  2) const struct pci_device_id *id_table
+
+     指向一个设备ID表，这个表是这个驱动所关心的。
+
+  3) int  (*probe)(struct pci_dev *dev, const struct pci_device_id *id)
+
+     当设备id和id_table中的匹配并且对应的设备正在寻找驱动，就会由pci层调用。这个函数会使能硬件，分配net_device结构体（对于网络设备的初始化），并且初始化和注册新设备。在这个函数里，驱动也会分配其它的数据结构，比如ring buffer用来接收和传送数据。
+
+  4) void (*remove)(struct pci_dev *dev)
+
+     当驱动unregister或可插拔设备被移除时就会调用此函数，它是与probe函数相对的一个函数，会clean up任何数据结构和状态。它是在进程上下文环境调用的，因此可以睡眠。
+
+     网络设备通常使用这个函数来释放分配的I/O端口、I/O memory，unregister一个设备，释放net_device以及其它在probe函数分配的辅助结构体。
+
+  5) int  (*suspend)(struct pci_dev *dev, pm_message_t state)
+     
+     int  (*resume)(struct pci_dev *dev)
+
+     suspend用来将设备置于低功耗状态，resume则是将设备从低功耗状态中唤醒，多用于电源管理中。
+
+  6) struct pci_dynids	dynids
+
+     动态ID，后文介绍。
+
+
+* 注册一个PCI NIC设备驱动
+     

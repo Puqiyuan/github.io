@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-16 Wed 21:45 -->
+<!-- 2020-12-23 Wed 21:45 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PCI层与网卡</title>
@@ -62,7 +62,8 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org04d989c">1. 关键数据结构</a></li>
+<li><a href="#orgad1dd12">1. 关键数据结构</a></li>
+<li><a href="#orgab9e865">2. 注册一个PCI NIC设备驱动</a></li>
 </ul>
 </div>
 </div>
@@ -82,13 +83,105 @@ PCI层存在的意义是：
 下面介绍下PCI层的几个关键数据结构，后面会用网卡这个具体的例子来解释这些关键的数据结构是如何被初始化的。
 </p>
 
-<div id="outline-container-org04d989c" class="outline-2">
-<h2 id="org04d989c"><span class="section-number-2">1</span> 关键数据结构</h2>
+<div id="outline-container-orgad1dd12" class="outline-2">
+<h2 id="orgad1dd12"><span class="section-number-2">1</span> 关键数据结构</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+下面来看看几个在PCI层使用的关键数据结构。
+</p>
+<ul class="org-ul">
+<li><p>
+pci_device_id
+</p>
+
+<p>
+根据PCI标准定义的设备标识符。
+</p></li>
+
+<li><p>
+pci_dev
+</p>
+
+<p>
+如同网卡设备有net_device结构体，每个PCI设备也有一个pci_dev结构体实例。
+</p></li>
+
+<li><p>
+pci_driver
+</p>
+
+<p>
+pci层与设备驱动的接口，这个结构体主要是由函数指针组成，所有的PCI设备都会使用它。这些函数指针由对应的设备驱动设置将它们指向恰当的函数实现。下面简单介绍下这个结构体中的一些主要的成员：
+</p>
+<ol class="org-ol">
+<li><p>
+name
+</p>
+
+<p>
+驱动的名字。
+</p></li>
+
+<li><p>
+const struct pci_device_id *id_table
+</p>
+
+<p>
+指向一个设备ID表，这个表是这个驱动所关心的。
+</p></li>
+
+<li><p>
+int  (*probe)(struct pci_dev *dev, const struct pci_device_id *id)
+</p>
+
+<p>
+当设备id和id_table中的匹配并且对应的设备正在寻找驱动，就会由pci层调用。这个函数会使能硬件，分配net_device结构体（对于网络设备的初始化），并且初始化和注册新设备。在这个函数里，驱动也会分配其它的数据结构，比如ring buffer用来接收和传送数据。
+</p></li>
+
+<li><p>
+void (*remove)(struct pci_dev *dev)
+</p>
+
+<p>
+当驱动unregister或可插拔设备被移除时就会调用此函数，它是与probe函数相对的一个函数，会clean up任何数据结构和状态。它是在进程上下文环境调用的，因此可以睡眠。
+</p>
+
+<p>
+网络设备通常使用这个函数来释放分配的I/O端口、I/O memory，unregister一个设备，释放net_device以及其它在probe函数分配的辅助结构体。
+</p></li>
+
+<li><p>
+int  (*suspend)(struct pci_dev *dev, pm_message_t state)
+</p>
+
+<p>
+int  (*resume)(struct pci_dev *dev)
+</p>
+
+<p>
+suspend用来将设备置于低功耗状态，resume则是将设备从低功耗状态中唤醒，多用于电源管理中。
+</p></li>
+
+<li><p>
+struct pci_dynids dynids
+</p>
+
+<p>
+动态ID，后文介绍。
+</p></li>
+</ol></li>
+</ul>
+</div>
+</div>
+
+
+<div id="outline-container-orgab9e865" class="outline-2">
+<h2 id="orgab9e865"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-16 Wed 21:45</p>
+<p class="date">Created: 2020-12-23 Wed 21:45</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
