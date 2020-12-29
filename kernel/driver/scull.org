@@ -112,4 +112,24 @@ struct file_operations {
 6) int (*mmap) (struct file *, struct vm_area_struct *)
 
    mmap用来将设备的内存映射到进程的地址空间，如果这个函数是null，mmap就返回-ENODEV。
+
+7) int (*open) (struct inode *, struct file *)
+
+   打开设备文件，如果这个函数是NULL，打开设备总是成功，但是驱动不会被通知。
+
+8) int (*release) (struct inode *, struct file *)
+
+   当file结构体被释放时，该方法就会被调用，如同open，release也可是NULL。
+
+9) int (*fsync) (struct file *, loff_t, loff_t, int datasync)
+
+   本函数是fsync系统调用的后端实现，用户调用fsync时，就会同步所有数据。如果本函数是NULL，调用它就会返回-EINVAL。
+
+10) int (*fasync) (int, struct file *, int)
+
+    如果设备的FASYNC标志有所改变，本函数可以用来通知。
+
+11) int (*lock) (struct file *, int, struct file_lock *)
+
+    用来实现文件锁，文件锁机制对于常规文件是不可或缺的，不过对于设备驱动来说几乎不会实现这个函数。
 * 代码实现
