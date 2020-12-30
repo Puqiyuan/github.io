@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-23 Wed 21:45 -->
+<!-- 2020-12-30 Wed 23:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PCI层与网卡</title>
@@ -62,8 +62,8 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgad1dd12">1. 关键数据结构</a></li>
-<li><a href="#orgab9e865">2. 注册一个PCI NIC设备驱动</a></li>
+<li><a href="#org00977c9">1. 关键数据结构</a></li>
+<li><a href="#org0147964">2. 注册一个PCI NIC设备驱动</a></li>
 </ul>
 </div>
 </div>
@@ -83,8 +83,8 @@ PCI层存在的意义是：
 下面介绍下PCI层的几个关键数据结构，后面会用网卡这个具体的例子来解释这些关键的数据结构是如何被初始化的。
 </p>
 
-<div id="outline-container-orgad1dd12" class="outline-2">
-<h2 id="orgad1dd12"><span class="section-number-2">1</span> 关键数据结构</h2>
+<div id="outline-container-org00977c9" class="outline-2">
+<h2 id="org00977c9"><span class="section-number-2">1</span> 关键数据结构</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 下面来看看几个在PCI层使用的关键数据结构。
@@ -175,13 +175,27 @@ struct pci_dynids dynids
 </div>
 
 
-<div id="outline-container-orgab9e865" class="outline-2">
-<h2 id="orgab9e865"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
+<div id="outline-container-org0147964" class="outline-2">
+<h2 id="org0147964"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+PCI设备通过几个组合在一起的参数来唯一确定，包括vendor等。这些参数在内核里由pci_device_id结构体确定。它的定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pci_device_id</span> {
+    <span style="color: #7CB8BB;">__u32</span> <span style="color: #DFAF8F;">vendor</span>, <span style="color: #DFAF8F;">device</span>;       <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Vendor and device ID or PCI_ANY_ID</span><span style="color: #5F7F5F;">*/</span>
+    <span style="color: #7CB8BB;">__u32</span> <span style="color: #DFAF8F;">subvendor</span>, <span style="color: #DFAF8F;">subdevice</span>; <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Subsystem ID's or PCI_ANY_ID</span><span style="color: #5F7F5F;"> */</span>
+    <span style="color: #7CB8BB;">__u32</span> <span style="color: #F0DFAF; font-weight: bold;">class</span>, class_mask;    <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">(class,subclass,prog-if) triplet</span><span style="color: #5F7F5F;"> */</span>
+    <span style="color: #7CB8BB;">kernel_ulong_t</span> <span style="color: #DFAF8F;">driver_data</span>; <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Data private to the driver</span><span style="color: #5F7F5F;"> */</span>
+}&#65307;
+</pre>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-23 Wed 21:45</p>
+<p class="date">Created: 2020-12-30 Wed 23:00</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

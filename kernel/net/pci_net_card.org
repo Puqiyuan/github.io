@@ -55,4 +55,12 @@ PCI层存在的意义是：
 
 
 * 注册一个PCI NIC设备驱动
-     
+PCI设备通过几个组合在一起的参数来唯一确定，包括vendor等。这些参数在内核里由pci_device_id结构体确定。它的定义如下：
+#+begin_src C++ :includes <stdio.h>
+struct pci_device_id {
+	__u32 vendor, device;		/* Vendor and device ID or PCI_ANY_ID*/
+	__u32 subvendor, subdevice;	/* Subsystem ID's or PCI_ANY_ID */
+	__u32 class, class_mask;	/* (class,subclass,prog-if) triplet */
+	kernel_ulong_t driver_data;	/* Data private to the driver */
+}；
+#+end_src
