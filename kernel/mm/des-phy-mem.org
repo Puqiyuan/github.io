@@ -105,18 +105,25 @@ struct page {
         struct list_head lru;
         struct address_space *mapping;
         pgoff_t index;
-        atomic_t _refcount;
     }
+    atomic_t _refcount;
 }
 #+end_src
 下面简单介绍下这几个成员：
-- flags：描述page的状态，可能的值在page-flags.h文件中的pageflags类型可以看到。对于这些
-  flags中的bit的操作是通过一组宏来实现的，而不是直接操作它，比如有SetPageUptodate，这个函
-  数再往下是架构定义提供的了。flags可能有哪些值呢？简单看下：
-  1) PG_uptodate：说明页的内容是否有效。
-  2)
-  3)
-  4)
-              
-  
+- flags：描述page的状态，可能的值在page-flags.h文件中的pageflags类型可以看到。对于这些flags中的bit的操作是通过一组宏来实现的，而不是直接操作它，比如有SetPageUptodate，这个函数再往下是架构定义提供的了。flags可能有哪些值呢？简单看下：
+  1) PG_uptodate：说明页的内容是否有效。如果一个页面从磁盘中读出且没有错误时, 这个标志就会被设置.
+  2) PG_reserved: 预留给特定的作用的页, 比如kernel image(包括vDSO). 这些页面绝不会被swap out出去.
+  3) PG_hwpoison: 在kexec和kdump环境中分配的页等.
+  4) PG_active: 如果页面在active list中就设置该比特, 否则清零.
+  5) PG_arch_1: 这是一个架构相关的页面状态比特. 当页面第一次进入页面缓存时, 通用代码会确保这个比特被清除. 该比特可以延迟D-cache的刷新直到页面被一个进程映射.
+  6) PG_checked: 由ext2文件系统使用.
+  7) PG_dirty: 该比特表示一个页面是否需要刷新(flush)到磁盘. 页面被写后, 并不是立即刷新到磁盘, 该比特需要保证页面在被写入到磁盘之前不会被释放掉.
+  8) PG_error: 在进行磁盘I/O操作时如果发生了错误, 这个比特就会被设置.
+  9) PG_locked: 在进行磁盘I/O时, 这个比特就会被设置.
+  10) PG_lru: 当页面在active_list或inactive_list时, 这个比特就会被设置.
+  11) PG_slab: 如果一个页面被slab分配器使用, 这个标志就会被设置.
+- lru: 说明页面的替换策略. 对于要被换出的页面要么在active_list和inactive_list中, lru是Least Recently Used(LRU) 列表的头.
+- mapping: 当文件或者设备映射到内存时, 它们的inode都有与之关联的一个address_space. 如果页面属于这个文件, 这个成员(mapping)就会指向这片地址空间. 如果该页面是匿名的而mapping域又被设置了, 该片地址空间(address_space)就是swapper_space, 管理着swap地址空间.
+- index: page的状态决定了该域有两个作用. 如果页面是属于文件映射出来的, 该域代表了在文件中的偏移. 如果page是属于交换空间(swap space)的, 该域就是交换空间中的偏移. 另外, 如果一个进程释放了一些页面, 被释放页面数的阶(被释放页面数目的2的指数)就存放在该域中.
+- _refcount: 引用到该页面的数目. 如果它减少到0了, 页面就可能被释放了. 如果大于0, 代表有一个或多个进程在使用该页面.
 注意上述结构体省略了一些成员，page结构体是一个复合的复杂结构体，本次就先只研究这些成员。
