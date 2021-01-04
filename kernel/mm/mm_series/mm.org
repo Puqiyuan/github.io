@@ -1,0 +1,33 @@
+#+TITLE: Linux内存管理
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+本文分三大部分来介绍Linux内存管理, 主要针对的平台是80x86.
+
+* 内存寻址
+** 内存地址
+在80x86下要区分三种地址:
+1) 逻辑地址
+
+   在机器指令中出现的地址, 指明一个操作数或其它指令的地址. 每个逻辑地址都由一个segment和offest组成, 偏移(offset)指明了实际的地址离段的开始处有多远.
+2) 线性地址
+
+   一个32-bit的无符号整数可以索引4GB的地址空间, 也就是4294967296个内存单元. 线性地址通常由
+   十六进制表示, 也就是从0x00000000到0xffffffff.
+
+3) 物理地址
+
+   用来在内存芯片中索引某个内存单元, 其实就是一些会从微处理器发送到内存总线上的电信号. 物
+   理地址由32或36比特的无符号整数来代表.
+
+MMU会将逻辑地址转换为物理地址, 其流程如下:
+
+#+CAPTION: 逻辑地址如何被MMU转化成物理地址
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/process-trans.png]]
+
+在多处理器中, 所有的CPU共享内存, 这意味着RAM芯片或许会被多个独立的芯片并发访问, 
+* 内存管理
+* 进程地址空间

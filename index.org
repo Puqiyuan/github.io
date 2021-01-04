@@ -32,6 +32,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
 - [[./kernel/mm/des-phy-mem.html][内存管理之描述物理内存]]。
 - [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
 - [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
+- [[./kernel/mm/mm_series/mm.html][80x86内存管理]].
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构

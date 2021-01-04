@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-01-04 Mon 22:43 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux内存管理</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Linux内存管理</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orge96932e">1. 内存寻址</a>
+<ul>
+<li><a href="#org75f22cf">1.1. 内存地址</a></li>
+</ul>
+</li>
+<li><a href="#orgc471e2a">2. 内存管理</a></li>
+<li><a href="#org1ea0081">3. 进程地址空间</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文分三大部分来介绍Linux内存管理, 主要针对的平台是80x86.
+</p>
+
+<div id="outline-container-orge96932e" class="outline-2">
+<h2 id="orge96932e"><span class="section-number-2">1</span> 内存寻址</h2>
+<div class="outline-text-2" id="text-1">
+</div>
+<div id="outline-container-org75f22cf" class="outline-3">
+<h3 id="org75f22cf"><span class="section-number-3">1.1</span> 内存地址</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+在80x86下要区分三种地址:
+</p>
+<ol class="org-ol">
+<li><p>
+逻辑地址
+</p>
+
+<p>
+在机器指令中出现的地址, 指明一个操作数或其它指令的地址. 每个逻辑地址都由一个segment和offest组成, 偏移(offset)指明了实际的地址离段的开始处有多远.
+</p></li>
+<li><p>
+线性地址
+</p>
+
+<p>
+一个32-bit的无符号整数可以索引4GB的地址空间, 也就是4294967296个内存单元. 线性地址通常由
+十六进制表示, 也就是从0x00000000到0xffffffff.
+</p></li>
+
+<li><p>
+物理地址
+</p>
+
+<p>
+用来在内存芯片中索引某个内存单元, 其实就是一些会从微处理器发送到内存总线上的电信号. 物
+理地址由32或36比特的无符号整数来代表.
+</p></li>
+</ol>
+
+<p>
+MMU会将逻辑地址转换为物理地址, 其流程如下:
+</p>
+
+
+<div class="figure">
+<p><img src="./img/process-trans.png" alt="process-trans.png" width="50%" height="50%" align="centering">
+</p>
+<p><span class="figure-number">Figure 1: </span>逻辑地址如何被MMU转化成物理地址</p>
+</div>
+
+<p>
+在多处理器中, 所有的CPU共享内存, 这意味着RAM芯片或许会被多个独立的芯片并发访问, 
+</p>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc471e2a" class="outline-2">
+<h2 id="orgc471e2a"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-org1ea0081" class="outline-2">
+<h2 id="org1ea0081"><span class="section-number-2">3</span> 进程地址空间</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-01-04 Mon 22:43</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
