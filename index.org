@@ -16,7 +16,7 @@
 #+END_CENTER
 
 #+BEGIN_CENTER
-For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io
+For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟踪了我的所有学习记录, 每天进步一点. ;-)
 #+END_CENTER
 
 * Linux系统管理
