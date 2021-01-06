@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-30 Wed 23:00 -->
+<!-- 2021-01-06 Wed 22:06 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PCI层与网卡</title>
@@ -62,8 +62,9 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org00977c9">1. 关键数据结构</a></li>
-<li><a href="#org0147964">2. 注册一个PCI NIC设备驱动</a></li>
+<li><a href="#org7cce03c">1. 关键数据结构</a></li>
+<li><a href="#org3707c29">2. 注册一个PCI NIC设备驱动</a></li>
+<li><a href="#org470297b">3. 电源管理与Wake-on-LAN</a></li>
 </ul>
 </div>
 </div>
@@ -83,8 +84,8 @@ PCI层存在的意义是：
 下面介绍下PCI层的几个关键数据结构，后面会用网卡这个具体的例子来解释这些关键的数据结构是如何被初始化的。
 </p>
 
-<div id="outline-container-org00977c9" class="outline-2">
-<h2 id="org00977c9"><span class="section-number-2">1</span> 关键数据结构</h2>
+<div id="outline-container-org7cce03c" class="outline-2">
+<h2 id="org7cce03c"><span class="section-number-2">1</span> 关键数据结构</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 下面来看看几个在PCI层使用的关键数据结构。
@@ -175,8 +176,8 @@ struct pci_dynids dynids
 </div>
 
 
-<div id="outline-container-org0147964" class="outline-2">
-<h2 id="org0147964"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
+<div id="outline-container-org3707c29" class="outline-2">
+<h2 id="org3707c29"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 PCI设备通过几个组合在一起的参数来唯一确定，包括vendor等。这些参数在内核里由pci_device_id结构体确定。它的定义如下：
@@ -190,12 +191,57 @@ PCI设备通过几个组合在一起的参数来唯一确定，包括vendor等�
 }&#65307;
 </pre>
 </div>
+
+<p>
+通常vendor和device用来标识设备已经足够了. subvendor和subdevice很少使用, 一般被设置成
+PCI_ANY_ID. class和class_mask指明了设备所属的类别, 网卡设备一般是NETWORK类. driver_data是由驱动程序使用的私有数据. 
+</p>
+
+<p>
+一般来说, 设备驱动程序都会向内核注册一个pci_device_id向量表, 里面存放都是这个设备所能处理的pci id.
+</p>
+
+<p>
+pci设备驱动的注册和取消注册通过函数pci_register_driver和pci_unregister_driver. 通过pci_driver中的id_table, 内核就知道驱动能够管理哪些设备. 并且由于pci_driver中的函数指针, 内核就可以和设备进行交互, 给内核提供了一层统一的接口.
+</p>
+
+<p>
+/sys文件系统会导出系统总线的信息, 这些信息包括各种各样的设备以及它们之间的关系. 除了使用pci_driver中由驱动注册的ID(id_table), 对于一个给定的设备, 系统管理员也可以配置新的ID给一个设备.
+</p>
+
+<p>
+关于probing这里有两种方式:
+</p>
+<ol class="org-ol">
+<li><p>
+static
+</p>
+
+<p>
+给出一个pci id, 内核可以查找到正确的pci驱动.
+</p></li>
+<li><p>
+dynamic
+</p>
+
+<p>
+通过用户配置的ID来查询, 实践中是很少使用的, 仅作为调试的目的. 动态的意思是系统管理员可以添加ID, 而不是说在运行过程中ID会改变.
+</p></li>
+</ol>
+
+<p>
+注意动态的方式要在内核编译为支持可热插拔时才有效.
+</p>
 </div>
+</div>
+
+<div id="outline-container-org470297b" class="outline-2">
+<h2 id="org470297b"><span class="section-number-2">3</span> 电源管理与Wake-on-LAN</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-30 Wed 23:00</p>
+<p class="date">Created: 2021-01-06 Wed 22:06</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

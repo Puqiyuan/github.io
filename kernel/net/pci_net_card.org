@@ -64,3 +64,24 @@ struct pci_device_id {
 	kernel_ulong_t driver_data;	/* Data private to the driver */
 }；
 #+end_src
+
+通常vendor和device用来标识设备已经足够了. subvendor和subdevice很少使用, 一般被设置成
+PCI_ANY_ID. class和class_mask指明了设备所属的类别, 网卡设备一般是NETWORK类. driver_data是由驱动程序使用的私有数据. 
+
+一般来说, 设备驱动程序都会向内核注册一个pci_device_id向量表, 里面存放都是这个设备所能处理的pci id.
+
+pci设备驱动的注册和取消注册通过函数pci_register_driver和pci_unregister_driver. 通过pci_driver中的id_table, 内核就知道驱动能够管理哪些设备. 并且由于pci_driver中的函数指针, 内核就可以和设备进行交互, 给内核提供了一层统一的接口.
+
+/sys文件系统会导出系统总线的信息, 这些信息包括各种各样的设备以及它们之间的关系. 除了使用pci_driver中由驱动注册的ID(id_table), 对于一个给定的设备, 系统管理员也可以配置新的ID给一个设备.
+
+关于probing这里有两种方式:
+1) static
+   
+   给出一个pci id, 内核可以查找到正确的pci驱动.
+2) dynamic
+   
+   通过用户配置的ID来查询, 实践中是很少使用的, 仅作为调试的目的. 动态的意思是系统管理员可以添加ID, 而不是说在运行过程中ID会改变.
+
+注意动态的方式要在内核编译为支持可热插拔时才有效.
+
+* 电源管理与Wake-on-LAN
