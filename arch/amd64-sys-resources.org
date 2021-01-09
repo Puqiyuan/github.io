@@ -96,3 +96,37 @@ CR2(page-fault linear address)和CR3(page-translateion-table base address)主要
 - Machine-Check Enable(MCE)：Bit 6，设为1表示开启机器检查异常。
 - Page-Global Enable(PGE)：Bit 7，页翻译机制开启时，通过使得某些页翻译对所有的任务和函数都是全局的（global），系统软件的性能可以得到提升。
 ** RFLAGS寄存器
+rflags寄存器包含两种类型的信息:
+1) 控制比特
+
+   用来给系统软件提供控制信息或指明字符串操作的方向信息, 其中某些比特的访问需要较高的权限才能进行.
+
+2) 状态比特
+
+   提供关于逻辑与算术操作结果的状态信息. 这些比特由处理器写入, 任何权限的软件都可以读.
+
+下面看看rflags寄存器的格式:
+
+#+CAPTION: rflags寄存器
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/rflags.png]]
+
+下面来看看这些比特, 状态比特这里不介绍了, 其主要是进位等逻辑运算结果标志. 这里主要介绍系统控制比特:
+
+1) Trap Flag(TF)比特
+
+   比特8, 在进行单步调试时, 将该比特设置为1.
+
+2) Interrupt Flag(IF)比特
+
+   比特9, 设置为1时, 就使能可屏蔽中断. 为0时, 处理器会忽略可屏蔽中断的请求. 不过IF比特不会影响到不可屏蔽中断, 软中断指令以及异常.
+
+   修改IF比特要看以下的几种情况:
+
+   1) 当前权限级(CPL)
+   2) I/O权限级(rflags.iopl)
+   参见下一个比特, iopl.
+
+3) I/O权限域
+   

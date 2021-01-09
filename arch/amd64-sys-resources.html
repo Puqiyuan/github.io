@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2020-12-19 Sat 21:59 -->
+<!-- 2021-01-09 Sat 19:47 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AMD64(X86-64)系统资源</title>
@@ -62,12 +62,12 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9d22166">1. 系统控制寄存器</a>
+<li><a href="#org443ade0">1. 系统控制寄存器</a>
 <ul>
-<li><a href="#org482f989">1.1. CR0寄存器</a></li>
-<li><a href="#orgc6b8724">1.2. CR2和CR3寄存器</a></li>
-<li><a href="#org1fb4617">1.3. CR4寄存器</a></li>
-<li><a href="#org17926f0">1.4. RFLAGS寄存器</a></li>
+<li><a href="#org2f12fbc">1.1. CR0寄存器</a></li>
+<li><a href="#orgb016caf">1.2. CR2和CR3寄存器</a></li>
+<li><a href="#org1b7deab">1.3. CR4寄存器</a></li>
+<li><a href="#org7f1a55d">1.4. RFLAGS寄存器</a></li>
 </ul>
 </li>
 </ul>
@@ -78,8 +78,8 @@ for the JavaScript code in this tag.
 </p>
 
 
-<div id="outline-container-org9d22166" class="outline-2">
-<h2 id="org9d22166"><span class="section-number-2">1</span> 系统控制寄存器</h2>
+<div id="outline-container-org443ade0" class="outline-2">
+<h2 id="org443ade0"><span class="section-number-2">1</span> 系统控制寄存器</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 AMD64处理器包含常见的下列系统寄存器:
@@ -103,8 +103,8 @@ AMD64处理器包含常见的下列系统寄存器:
 </p>
 </div>
 
-<div id="outline-container-org482f989" class="outline-3">
-<h3 id="org482f989"><span class="section-number-3">1.1</span> CR0寄存器</h3>
+<div id="outline-container-org2f12fbc" class="outline-3">
+<h3 id="org2f12fbc"><span class="section-number-3">1.1</span> CR0寄存器</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的图展示了CR0寄存器，legacy CR0寄存器和下图中的低32位一样。
@@ -152,8 +152,8 @@ CR0.TS = 1），执行WAIT/FWAIT指令就会触发device-not-available异常。<
 </ul>
 </div>
 </div>
-<div id="outline-container-orgc6b8724" class="outline-3">
-<h3 id="orgc6b8724"><span class="section-number-3">1.2</span> CR2和CR3寄存器</h3>
+<div id="outline-container-orgb016caf" class="outline-3">
+<h3 id="orgb016caf"><span class="section-number-3">1.2</span> CR2和CR3寄存器</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 CR2(page-fault linear address)和CR3(page-translateion-table base address)主要用于页翻译机
@@ -199,8 +199,8 @@ CR2(page-fault linear address)和CR3(page-translateion-table base address)主要
 </p>
 </div>
 </div>
-<div id="outline-container-org1fb4617" class="outline-3">
-<h3 id="org1fb4617"><span class="section-number-3">1.3</span> CR4寄存器</h3>
+<div id="outline-container-org1b7deab" class="outline-3">
+<h3 id="org1b7deab"><span class="section-number-3">1.3</span> CR4寄存器</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 下图表示了CR4寄存器的内容：
@@ -230,14 +230,83 @@ CR2(page-fault linear address)和CR3(page-translateion-table base address)主要
 </ul>
 </div>
 </div>
-<div id="outline-container-org17926f0" class="outline-3">
-<h3 id="org17926f0"><span class="section-number-3">1.4</span> RFLAGS寄存器</h3>
+<div id="outline-container-org7f1a55d" class="outline-3">
+<h3 id="org7f1a55d"><span class="section-number-3">1.4</span> RFLAGS寄存器</h3>
+<div class="outline-text-3" id="text-1-4">
+<p>
+rflags寄存器包含两种类型的信息:
+</p>
+<ol class="org-ol">
+<li><p>
+控制比特
+</p>
+
+<p>
+用来给系统软件提供控制信息或指明字符串操作的方向信息, 其中某些比特的访问需要较高的权限才能进行.
+</p></li>
+
+<li><p>
+状态比特
+</p>
+
+<p>
+提供关于逻辑与算术操作结果的状态信息. 这些比特由处理器写入, 任何权限的软件都可以读.
+</p></li>
+</ol>
+
+<p>
+下面看看rflags寄存器的格式:
+</p>
+
+
+<div class="figure">
+<p><img src="./img/rflags.png" alt="rflags.png" width="50%" height="50%" align="centering">
+</p>
+<p><span class="figure-number">Figure 9: </span>rflags寄存器</p>
+</div>
+
+<p>
+下面来看看这些比特, 状态比特这里不介绍了, 其主要是进位等逻辑运算结果标志. 这里主要介绍系统控制比特:
+</p>
+
+<ol class="org-ol">
+<li><p>
+Trap Flag(TF)比特
+</p>
+
+<p>
+比特8, 在进行单步调试时, 将该比特设置为1.
+</p></li>
+
+<li><p>
+Interrupt Flag(IF)比特
+</p>
+
+<p>
+比特9, 设置为1时, 就使能可屏蔽中断. 为0时, 处理器会忽略可屏蔽中断的请求. 不过IF比特不会影响到不可屏蔽中断, 软中断指令以及异常.
+</p>
+
+<p>
+修改IF比特要看以下的几种情况:
+</p>
+
+<ol class="org-ol">
+<li>当前权限级(CPL)</li>
+<li>I/O权限级(rflags.iopl)</li>
+</ol>
+<p>
+参见下一个比特, iopl.
+</p></li>
+
+<li>I/O权限域</li>
+</ol>
+</div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2020-12-19 Sat 21:59</p>
+<p class="date">Created: 2021-01-09 Sat 19:47</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
