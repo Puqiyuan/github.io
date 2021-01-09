@@ -2,7 +2,7 @@
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
 
 本文介绍Linux内存管理的一部分，即Linux内核是如何描述物理内存的。
 
@@ -71,7 +71,7 @@ enum zone_watermarks {
  关于水印后面还有小节会讲述到。
 - lock主要用来保护对free_area的访问.
 - spanned_pages: 该结点中的所有page, 包括在hols里的. 即是spanned_pages = zone_end_pfn - zone_start_pfn, 就是跨越整个zone.
-- present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes). 
+- present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes, 所谓hole就是这个页面并没有对应的真正的物理地址). 
 - managed_pages: 由伙伴系统(后文介绍)管理的页面, 即是managed_pages = present_pages - reserved_pages.
 - name: zone的字符串名, 比如DMA, Normal, HighMem这种.
 - lock: 用来保护对free_area区域的访问.
@@ -93,7 +93,7 @@ enum zone_watermarks {
 注意真正对这三个水印的访问不是图中标记的zone_t->page_high，较新的内核zone中直接的是没有这些成员的，而是通过zone->_watermark[WMARK_MIN]等。_watermark[WMARK_MIN]是通过函数free_area_init_core依据一定比例算出来的。
 
 而在不同的水印处，会采用不同的行为来解决内存紧张问题：
-1) _watermark[WMARK_MIN]：当可用的pages到达这个值时，kswapd就会被唤醒去释放一些页。
+1) _watermark[WMARK_LOW]：当可用的pages到达这个值时，kswapd就会被唤醒去释放一些页。
 2) _watermark[WMARK_MIN]：到达这个值时，说明内存极其紧张了。kswapd以一种synchronous（后文细讲）的方式工作，也叫做direct-reclaim路径。
 3) 对于zone水位在_watermark[WMARK_HIGH]的，kswpad不会释放其中的page了，这时kswapd继续睡眠了。
 ** Page
@@ -128,3 +128,4 @@ struct page {
 - _refcount: 引用到该页面的数目. 如果它减少到0了, 页面就可能被释放了. 如果大于0, 代表有一个或多个进程在使用该页面.
 注意上述结构体省略了一些成员，page结构体是一个复合的复杂结构体，本次就先只研究这些成员。
 
+关于内存管理的总体架构就先介绍到这里了, 一次不宜太长. 下一篇会介绍下[[./ptm.html][页表管理]].

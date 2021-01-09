@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-02 Sat 21:39 -->
+<!-- 2021-01-09 Sat 13:05 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之描述物理内存</title>
 <meta name="generator" content="Org mode">
 <meta name="author" content="Cauchy(pqy7172@gmail.com)">
-<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<link rel="stylesheet" href="../../../org-manual.css" type="text/css">
 <script type="text/javascript">
 /*
 @licstart  The following is the entire license notice for the
@@ -62,11 +62,11 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org81ed6ec">1. 结点</a></li>
-<li><a href="#org9219161">2. 区域</a>
+<li><a href="#orga843402">1. 结点</a></li>
+<li><a href="#org5c14e91">2. 区域</a>
 <ul>
-<li><a href="#org886ffab">2.1. Zone水印</a></li>
-<li><a href="#org98e03a2">2.2. Page</a></li>
+<li><a href="#org613f269">2.1. Zone水印</a></li>
+<li><a href="#org8b55913">2.2. Page</a></li>
 </ul>
 </li>
 </ul>
@@ -104,8 +104,8 @@ ZONE向下又把内存划分为固定的page frame（页框）。页框由结构
 <p><span class="figure-number">Figure 1: </span>内存管理的各结构体如何组织</p>
 </div>
 
-<div id="outline-container-org81ed6ec" class="outline-2">
-<h2 id="org81ed6ec"><span class="section-number-2">1</span> 结点</h2>
+<div id="outline-container-orga843402" class="outline-2">
+<h2 id="orga843402"><span class="section-number-2">1</span> 结点</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 前文已述，内存中的每个结点都由pg_data_t（pglist_data）数据结构来表示，当分配一个page时，内核采用结点就近原则，离运行CPU最近那个结点中的页面将会被用来分配page。现在我们可以来看看
@@ -126,8 +126,8 @@ pglist_data结构体中的一些成员了。
 </div>
 </div>
 
-<div id="outline-container-org9219161" class="outline-2">
-<h2 id="org9219161"><span class="section-number-2">2</span> 区域</h2>
+<div id="outline-container-org5c14e91" class="outline-2">
+<h2 id="org5c14e91"><span class="section-number-2">2</span> 区域</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 每个结点里会有多个区域(zone), 本节介绍区域.
@@ -177,7 +177,7 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </p></li>
 <li>lock主要用来保护对free_area的访问.</li>
 <li>spanned_pages: 该结点中的所有page, 包括在hols里的. 即是spanned_pages = zone_end_pfn - zone_start_pfn, 就是跨越整个zone.</li>
-<li>present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes).</li>
+<li>present_pages: 在zone中物理上存在的页面, 即是present_pages = spanned_pages - absent_pages(pages in holes, 所谓hole就是这个页面并没有对应的真正的物理地址).</li>
 <li>managed_pages: 由伙伴系统(后文介绍)管理的页面, 即是managed_pages = present_pages - reserved_pages.</li>
 <li>name: zone的字符串名, 比如DMA, Normal, HighMem这种.</li>
 <li>lock: 用来保护对free_area区域的访问.</li>
@@ -185,8 +185,8 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 </ul>
 </div>
 
-<div id="outline-container-org886ffab" class="outline-3">
-<h3 id="org886ffab"><span class="section-number-3">2.1</span> Zone水印</h3>
+<div id="outline-container-org613f269" class="outline-3">
+<h3 id="org613f269"><span class="section-number-3">2.1</span> Zone水印</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 当系统中可用的内存较少时，守护程序kswapd（pageout daemon）就会被唤醒去释放页面。每个zone中
@@ -216,14 +216,14 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 而在不同的水印处，会采用不同的行为来解决内存紧张问题：
 </p>
 <ol class="org-ol">
-<li>_watermark[WMARK_MIN]：当可用的pages到达这个值时，kswapd就会被唤醒去释放一些页。</li>
+<li>_watermark[WMARK_LOW]：当可用的pages到达这个值时，kswapd就会被唤醒去释放一些页。</li>
 <li>_watermark[WMARK_MIN]：到达这个值时，说明内存极其紧张了。kswapd以一种synchronous（后文细讲）的方式工作，也叫做direct-reclaim路径。</li>
 <li>对于zone水位在_watermark[WMARK_HIGH]的，kswpad不会释放其中的page了，这时kswapd继续睡眠了。</li>
 </ol>
 </div>
 </div>
-<div id="outline-container-org98e03a2" class="outline-3">
-<h3 id="org98e03a2"><span class="section-number-3">2.2</span> Page</h3>
+<div id="outline-container-org8b55913" class="outline-3">
+<h3 id="org8b55913"><span class="section-number-3">2.2</span> Page</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 系统中的每个物理页面都有一个page结构体来表示（管理）。现在看看几个简单的成员：
@@ -266,13 +266,17 @@ zone由结构体zone表示. zone结构体统计了页面(page)的使用情况. �
 <p>
 注意上述结构体省略了一些成员，page结构体是一个复合的复杂结构体，本次就先只研究这些成员。
 </p>
+
+<p>
+关于内存管理的总体架构就先介绍到这里了, 一次不宜太长. 下一篇会介绍下<a href="./ptm.html">页表管理</a>.
+</p>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-02 Sat 21:39</p>
+<p class="date">Created: 2021-01-09 Sat 13:05</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -1,0 +1,7 @@
+#+TITLE: 内存管理之页表管理
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+
+本文讲述Linux的页表管理, 在它的上一篇讲述了mm模块[[./des-phy-mem.html][如何描述物理内存]].
