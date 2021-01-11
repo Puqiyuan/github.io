@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-04 Mon 22:43 -->
+<!-- 2021-01-11 Mon 22:15 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux内存管理</title>
@@ -62,26 +62,46 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge96932e">1. 内存寻址</a>
+<li><a href="#org17cf7ad">1. 内存寻址</a>
 <ul>
-<li><a href="#org75f22cf">1.1. 内存地址</a></li>
+<li><a href="#orgd03cf24">1.1. 内存地址</a></li>
+<li><a href="#orgb34ffd9">1.2. 硬件上的分段</a>
+<ul>
+<li><a href="#orga59f0d3">1.2.1. 段选择子与段寄存器</a></li>
 </ul>
 </li>
-<li><a href="#orgc471e2a">2. 内存管理</a></li>
-<li><a href="#org1ea0081">3. 进程地址空间</a></li>
+<li><a href="#orgb915dd3">1.3. Linux中的分段</a></li>
+<li><a href="#org0e84e8f">1.4. 硬件上的分页</a></li>
+<li><a href="#orgddf4dbc">1.5. Linux中的分页</a></li>
+</ul>
+</li>
+<li><a href="#org903e0aa">2. 内存管理</a></li>
+<li><a href="#org4e99e9e">3. 进程地址空间</a></li>
 </ul>
 </div>
 </div>
 <p>
-本文分三大部分来介绍Linux内存管理, 主要针对的平台是80x86.
+本文分三大部分来介绍Linux内存管理, 即是:
+</p>
+<ol class="org-ol">
+<li>内存寻址</li>
+<li>内存管理</li>
+<li>进程地址空间</li>
+</ol>
+
+<p>
+主要针对的平台是80x86.
 </p>
 
-<div id="outline-container-orge96932e" class="outline-2">
-<h2 id="orge96932e"><span class="section-number-2">1</span> 内存寻址</h2>
+<div id="outline-container-org17cf7ad" class="outline-2">
+<h2 id="org17cf7ad"><span class="section-number-2">1</span> 内存寻址</h2>
 <div class="outline-text-2" id="text-1">
+<p>
+内存寻址主要解决的问题是: CPU给出一个虚拟地址, 如何将这个虚拟地址转化为RAM的物理地址来索引其中的内容.
+</p>
 </div>
-<div id="outline-container-org75f22cf" class="outline-3">
-<h3 id="org75f22cf"><span class="section-number-3">1.1</span> 内存地址</h3>
+<div id="outline-container-orgd03cf24" class="outline-3">
+<h3 id="orgd03cf24"><span class="section-number-3">1.1</span> 内存地址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 在80x86下要区分三种地址:
@@ -108,8 +128,7 @@ for the JavaScript code in this tag.
 </p>
 
 <p>
-用来在内存芯片中索引某个内存单元, 其实就是一些会从微处理器发送到内存总线上的电信号. 物
-理地址由32或36比特的无符号整数来代表.
+用来在内存芯片中索引某个内存单元, 其实就是一些会从微处理器发送到内存总线上的电信号. 物理地址由32或36比特的无符号整数来代表.
 </p></li>
 </ol>
 
@@ -125,21 +144,58 @@ MMU会将逻辑地址转换为物理地址, 其流程如下:
 </div>
 
 <p>
-在多处理器中, 所有的CPU共享内存, 这意味着RAM芯片或许会被多个独立的芯片并发访问, 
+在多处理器中, 所有的CPU共享内存, 这意味着RAM芯片或许会被多个独立的芯片并发访问, 在RAM芯片
+上进行读写是序列化的, 在总线和芯片之间有一个内存仲裁器. 它的作用是, 如果内存芯片是空闲的,
+则授予本次访问, 而如果内存芯片正在服务另一个读/写请求, 则拒绝来到的请求. 即使是单处理器,
+也需要内存仲裁器. 因为DMA控制器可能会和CPU并发访问内存, 而引起冲突. 但是从编程的角度来说, 仲裁器对他们来说都是不可见的, 是由硬件电路管理的.
 </p>
 </div>
 </div>
+
+<div id="outline-container-orgb34ffd9" class="outline-3">
+<h3 id="orgb34ffd9"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+从80286开始, Intel微处理器就分两种方式的地址翻译, 一是实模式, 二是保护模式, 后文的内容主要是针对保护模式开启时的地址翻译. 实模式主要是为了与较旧的处理器兼容以及引导操作系统从实模式过渡到保护模式.
+</p>
 </div>
-<div id="outline-container-orgc471e2a" class="outline-2">
-<h2 id="orgc471e2a"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-orga59f0d3" class="outline-4">
+<h4 id="orga59f0d3"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+一个逻辑地址由两部分组成: 段标识符与偏移, 偏移用来指明在段内的相对地址. 段标识符由16比特组
+成, 叫做段选择子, 而offset是32比特的域. 关于段选择子后文还要介绍, 而下图是段选择子的结构:
+</p>
+
+
+<div class="figure">
+<p><img src="./img/segment-selector.png" alt="segment-selector.png" width="50%" height="50%" align="centering">
+</p>
+<p><span class="figure-number">Figure 2: </span>段选择子</p>
 </div>
-<div id="outline-container-org1ea0081" class="outline-2">
-<h2 id="org1ea0081"><span class="section-number-2">3</span> 进程地址空间</h2>
+</div>
+</div>
+</div>
+<div id="outline-container-orgb915dd3" class="outline-3">
+<h3 id="orgb915dd3"><span class="section-number-3">1.3</span> Linux中的分段</h3>
+</div>
+<div id="outline-container-org0e84e8f" class="outline-3">
+<h3 id="org0e84e8f"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
+</div>
+<div id="outline-container-orgddf4dbc" class="outline-3">
+<h3 id="orgddf4dbc"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+</div>
+</div>
+<div id="outline-container-org903e0aa" class="outline-2">
+<h2 id="org903e0aa"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-org4e99e9e" class="outline-2">
+<h2 id="org4e99e9e"><span class="section-number-2">3</span> 进程地址空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-04 Mon 22:43</p>
+<p class="date">Created: 2021-01-11 Mon 22:15</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
