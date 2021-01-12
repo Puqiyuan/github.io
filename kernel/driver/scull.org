@@ -16,7 +16,7 @@
 
 前一个数字就是所谓的主设备号, 后一个是次设备号. 所谓主设备号, 它标识了设备对应的驱动程序, 而次设备号用来确定具体的设备文件所指的设备. 不同的设备文件可由同一个驱动程序来进行管理, 比如图中的vcsu5和vcsu6由驱动程序7管理, 但次设备号69, 70区分了是哪个设备.
 
-在内核内部, 用dev_t的类型来表示设备编号: 即包括主设备编号又包括次设备编号. 如下位于linux内核中的代码:
+在内核内部, 用dev_t的类型来表示设备编号: 即包括主设备编号又包括次设备编号. 如下位于Linux内核中的代码:
 #+begin_src C++ :includes <stdio.h>
 typedef u32 __kernel_dev_t;
 typedef __kernel_dev_t		dev_t;
@@ -135,7 +135,7 @@ struct file_operations {
 
 s_driver只会实现其中几个重要的函数, 它的初始化如下:
 #+begin_src c :includes <stdio.h>
-struct file_operations scull_fops = {
+struct file_operations s_fops = {
         .owner =    THIS_MODULE,
         .llseek =   s_llseek,
         .read =     s_read,
@@ -159,7 +159,21 @@ file结构体定义在linux/fs.h中, 注意file结构体和用户程序中的FIL
 #+begin_src c :includes <stdio.h>
 struct file {
 fmode_t			f_mode;
+loff_t			f_pos;
+unsigned int 		f_flags;
 };
 #+end_src
-* 代码实现
+简单解释下这些成员的作用:
 
+1) f_mode:
+
+   这个域表明了文件是可读或可写的, 通过比特FMODE_READ或FMODE_WRITE来判断.
+
+2) f_pos:
+
+   当前的文件读写位置, loff_t是一个64-bit的值. 驱动如果需要知道文件的当前位置, 可以读取这个成员, 但通常不应该修改它. 这个成员会依据read和write的最后一个成员来修改. llseek会直接修改这个成员.
+
+3) f_flags:
+
+   这个成员表示了文件的标志, 比如O_RDONLY, O_NONBLOCK以及O_SYNC. 驱动应该检查O_NONBLOCK来检查是否是非阻塞操作请求, 而驱动很少使用其它标志了. 而read/write权限的检查应该f_mode而不是f_flags.
+* 代码实现
