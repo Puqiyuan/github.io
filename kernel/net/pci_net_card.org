@@ -85,3 +85,79 @@ pci设备驱动的注册和取消注册通过函数pci_register_driver和pci_unr
 注意动态的方式要在内核编译为支持可热插拔时才有效.
 
 * 电源管理与Wake-on-LAN
+电源管理事件是由pci_driver的suspend和resume函数处理. 除了处理pci的状态, 这些函数也需要做如下的一些事情:
+1) suspend函数会停止设备上egress队列的数据传送.
+2) resume函数会重新使能设备上的egress队列, 使得数据能重新传送.
+
+Wake-on-LAN(WOL)功能允许NIC在收到一种特殊类型的帧时可以唤醒处于待机模式的系统, 更多的细节后面会介绍.
+
+
+
+* PCI NIC驱动的初始化
+现在来看一个具体的例子: e100网卡驱动的注册. 其代码位于:./drivers/net/ethernet/intel/e100.c.
+
+首先是pci id表:
+#+begin_src C++ :includes <stdio.h>
+#define INTEL_8255X_ETHERNET_DEVICE(device_id, ich) {\
+	PCI_VENDOR_ID_INTEL, device_id, PCI_ANY_ID, PCI_ANY_ID, \
+	PCI_CLASS_NETWORK_ETHERNET << 8, 0xFFFF00, ich }
+static const struct pci_device_id e100_id_table[] = {
+	INTEL_8255X_ETHERNET_DEVICE(0x1029, 0),
+	INTEL_8255X_ETHERNET_DEVICE(0x1030, 0),
+  ...
+}
+#+end_src
+
+从前文描述知道, PCI NIC驱动向内核注册一个pci_device_id类型的向量表来表明其能管理的设备. 如
+这里所示, e100驱动能管理的设备就是e100_id_table中所列的设备, 这里有几点需要注意:
+
+1) 第一个域被初始化为了固定的PCI_VENDOR_ID_INTEL. 哪个厂商具有什么ID可以从linux/include/linux/pci_ids.h文件中得知.
+2) 第三以及四个域(subvendor和subdevice)赋值为PCI_ANY_ID, 因为前两个域通常已经够用了.
+
+该模块(驱动)的初始化函数为e100_init_module, 它会调用PCI层的pci_register_driver来向内核注册pci驱动. 
+
+e100的几段关于PCI接口的关键代码如下:
+#+begin_src C++ :includes <stdio.h>
+static int e100_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+{
+...
+}
+
+static void e100_remove(struct pci_dev *pdev)
+{
+...
+}
+
+static int __maybe_unused e100_suspend(struct device *dev_d)
+{
+...
+}
+
+static int __maybe_unused e100_resume(struct device *dev_d)
+{
+...
+}
+
+static struct pci_driver e100_driver = {
+	.name =         DRV_NAME,
+	.id_table =     e100_id_table,
+	.probe =        e100_probe,
+	.remove =       e100_remove,
+
+	/* Power Management hooks */
+	.driver.pm =	&e100_pm_ops,
+
+	.shutdown =     e100_shutdown,
+	.err_handler = &e100_err_handler,
+};
+
+static int __init e100_init_module(void)
+{
+...
+}
+
+static void __exit e100_cleanup_module(void)
+{
+	pci_unregister_driver(&e100_driver);
+}
+#+end_src

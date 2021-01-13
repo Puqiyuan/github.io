@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-06 Wed 22:06 -->
+<!-- 2021-01-13 Wed 22:40 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PCI层与网卡</title>
@@ -62,9 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org7cce03c">1. 关键数据结构</a></li>
-<li><a href="#org3707c29">2. 注册一个PCI NIC设备驱动</a></li>
-<li><a href="#org470297b">3. 电源管理与Wake-on-LAN</a></li>
+<li><a href="#org3bfc0b9">1. 关键数据结构</a></li>
+<li><a href="#org72cb472">2. 注册一个PCI NIC设备驱动</a></li>
+<li><a href="#org29b5343">3. 电源管理与Wake-on-LAN</a></li>
+<li><a href="#orgdde8254">4. PCI NIC驱动的初始化</a></li>
 </ul>
 </div>
 </div>
@@ -84,8 +85,8 @@ PCI层存在的意义是：
 下面介绍下PCI层的几个关键数据结构，后面会用网卡这个具体的例子来解释这些关键的数据结构是如何被初始化的。
 </p>
 
-<div id="outline-container-org7cce03c" class="outline-2">
-<h2 id="org7cce03c"><span class="section-number-2">1</span> 关键数据结构</h2>
+<div id="outline-container-org3bfc0b9" class="outline-2">
+<h2 id="org3bfc0b9"><span class="section-number-2">1</span> 关键数据结构</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 下面来看看几个在PCI层使用的关键数据结构。
@@ -176,8 +177,8 @@ struct pci_dynids dynids
 </div>
 
 
-<div id="outline-container-org3707c29" class="outline-2">
-<h2 id="org3707c29"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
+<div id="outline-container-org72cb472" class="outline-2">
+<h2 id="org72cb472"><span class="section-number-2">2</span> 注册一个PCI NIC设备驱动</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 PCI设备通过几个组合在一起的参数来唯一确定，包括vendor等。这些参数在内核里由pci_device_id结构体确定。它的定义如下：
@@ -235,13 +236,115 @@ dynamic
 </div>
 </div>
 
-<div id="outline-container-org470297b" class="outline-2">
-<h2 id="org470297b"><span class="section-number-2">3</span> 电源管理与Wake-on-LAN</h2>
+<div id="outline-container-org29b5343" class="outline-2">
+<h2 id="org29b5343"><span class="section-number-2">3</span> 电源管理与Wake-on-LAN</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+电源管理事件是由pci_driver的suspend和resume函数处理. 除了处理pci的状态, 这些函数也需要做如下的一些事情:
+</p>
+<ol class="org-ol">
+<li>suspend函数会停止设备上egress队列的数据传送.</li>
+<li>resume函数会重新使能设备上的egress队列, 使得数据能重新传送.</li>
+</ol>
+
+<p>
+Wake-on-LAN(WOL)功能允许NIC在收到一种特殊类型的帧时可以唤醒处于待机模式的系统, 更多的细节后面会介绍.
+</p>
+</div>
+</div>
+
+
+
+<div id="outline-container-orgdde8254" class="outline-2">
+<h2 id="orgdde8254"><span class="section-number-2">4</span> PCI NIC驱动的初始化</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+现在来看一个具体的例子: e100网卡驱动的注册. 其代码位于:./drivers/net/ethernet/intel/e100.c.
+</p>
+
+<p>
+首先是pci id表:
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">INTEL_8255X_ETHERNET_DEVICE</span>(<span style="color: #DFAF8F;">device_id</span>, <span style="color: #DFAF8F;">ich</span>) {\
+    PCI_VENDOR_ID_INTEL, device_id, PCI_ANY_ID, PCI_ANY_ID, \
+    PCI_CLASS_NETWORK_ETHERNET &lt;&lt; 8, 0xFFFF00, ich }
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pci_device_id</span> <span style="color: #DFAF8F;">e100_id_table</span>[] = {
+    INTEL_8255X_ETHERNET_DEVICE(0x1029, 0),
+    INTEL_8255X_ETHERNET_DEVICE(0x1030, 0),
+  ...
+}
+</pre>
+</div>
+
+<p>
+从前文描述知道, PCI NIC驱动向内核注册一个pci_device_id类型的向量表来表明其能管理的设备. 如
+这里所示, e100驱动能管理的设备就是e100_id_table中所列的设备, 这里有几点需要注意:
+</p>
+
+<ol class="org-ol">
+<li>第一个域被初始化为了固定的PCI_VENDOR_ID_INTEL. 哪个厂商具有什么ID可以从linux/include/linux/pci_ids.h文件中得知.</li>
+<li>第三以及四个域(subvendor和subdevice)赋值为PCI_ANY_ID, 因为前两个域通常已经够用了.</li>
+</ol>
+
+<p>
+该模块(驱动)的初始化函数为e100_init_module, 它会调用PCI层的pci_register_driver来向内核注册pci驱动. 
+</p>
+
+<p>
+e100的几段关于PCI接口的关键代码如下:
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">e100_probe</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pci_dev</span> *<span style="color: #DFAF8F;">pdev</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pci_device_id</span> *<span style="color: #DFAF8F;">ent</span>)
+{
+...
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">e100_remove</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pci_dev</span> *<span style="color: #DFAF8F;">pdev</span>)
+{
+...
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">__maybe_unused</span> e100_suspend(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">device</span> *<span style="color: #DFAF8F;">dev_d</span>)
+{
+...
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">__maybe_unused</span> e100_resume(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">device</span> *<span style="color: #DFAF8F;">dev_d</span>)
+{
+...
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pci_driver</span> <span style="color: #DFAF8F;">e100_driver</span> = {
+    .name =         DRV_NAME,
+    .id_table =     e100_id_table,
+    .probe =        e100_probe,
+    .remove =       e100_remove,
+
+    <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Power Management hooks</span><span style="color: #5F7F5F;"> */</span>
+    .driver.pm =    &amp;e100_pm_ops,
+
+    .shutdown =     e100_shutdown,
+    .err_handler = &amp;e100_err_handler,
+};
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">__init</span> e100_init_module(<span style="color: #7CB8BB;">void</span>)
+{
+...
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">__exit</span> e100_cleanup_module(<span style="color: #7CB8BB;">void</span>)
+{
+    pci_unregister_driver(&amp;e100_driver);
+}
+</pre>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-06 Wed 22:06</p>
+<p class="date">Created: 2021-01-13 Wed 22:40</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
