@@ -5,3 +5,13 @@
 #+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
 
 本文讲述Linux的页表管理, 在它的上一篇讲述了mm模块[[./des-phy-mem.html][如何描述物理内存]].
+
+本文会讲述Linux内核的页表是如何组织的, 以及各级页表都使用什么类型的数据结构来描述. 接着会
+讲述一个虚拟地址是怎样会划分为几部分从而用来一级一级的往下寻找页表, 最后会到PTE(Page Table
+Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
+
+* 页目录表示
+每一个进程都有一个指针指向它自己PGD的指针(mm_struct->pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
+#+begin_src C++ :includes <stdio.h>
+typedef struct { unsigned long pgd; } pgd_t;
+#+end_src
