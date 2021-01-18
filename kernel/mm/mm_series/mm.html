@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-11 Mon 22:18 -->
+<!-- 2021-01-18 Mon 22:13 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux内存管理</title>
@@ -62,21 +62,22 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgc28339a">1. 内存寻址</a>
+<li><a href="#org6a23115">1. 内存寻址</a>
 <ul>
-<li><a href="#org838c5d7">1.1. 内存地址</a></li>
-<li><a href="#org19072e6">1.2. 硬件上的分段</a>
+<li><a href="#orga2b0323">1.1. 内存地址</a></li>
+<li><a href="#orge73a79a">1.2. 硬件上的分段</a>
 <ul>
-<li><a href="#org31d0690">1.2.1. 段选择子与段寄存器</a></li>
+<li><a href="#orgf17de91">1.2.1. 段选择子与段寄存器</a></li>
+<li><a href="#org07920fc">1.2.2. 段描述符</a></li>
 </ul>
 </li>
-<li><a href="#org07d756b">1.3. Linux中的分段</a></li>
-<li><a href="#org4c83512">1.4. 硬件上的分页</a></li>
-<li><a href="#org6f2f65c">1.5. Linux中的分页</a></li>
+<li><a href="#orgd78e05f">1.3. Linux中的分段</a></li>
+<li><a href="#org1519be8">1.4. 硬件上的分页</a></li>
+<li><a href="#org9c9fe75">1.5. Linux中的分页</a></li>
 </ul>
 </li>
-<li><a href="#org7fe42e8">2. 内存管理</a></li>
-<li><a href="#orge1f7539">3. 进程地址空间</a></li>
+<li><a href="#orgc07d308">2. 内存管理</a></li>
+<li><a href="#org527600f">3. 进程地址空间</a></li>
 </ul>
 </div>
 </div>
@@ -93,15 +94,15 @@ for the JavaScript code in this tag.
 主要针对的平台是80x86.
 </p>
 
-<div id="outline-container-orgc28339a" class="outline-2">
-<h2 id="orgc28339a"><span class="section-number-2">1</span> 内存寻址</h2>
+<div id="outline-container-org6a23115" class="outline-2">
+<h2 id="org6a23115"><span class="section-number-2">1</span> 内存寻址</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内存寻址主要解决的问题是: CPU给出一个虚拟地址, 如何将这个虚拟地址转化为RAM的物理地址来索引其中的内容.
 </p>
 </div>
-<div id="outline-container-org838c5d7" class="outline-3">
-<h3 id="org838c5d7"><span class="section-number-3">1.1</span> 内存地址</h3>
+<div id="outline-container-orga2b0323" class="outline-3">
+<h3 id="orga2b0323"><span class="section-number-3">1.1</span> 内存地址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 在80x86下要区分三种地址:
@@ -119,8 +120,7 @@ for the JavaScript code in this tag.
 </p>
 
 <p>
-一个32-bit的无符号整数可以索引4GB的地址空间, 也就是4294967296个内存单元. 线性地址通常由
-十六进制表示, 也就是从0x00000000到0xffffffff.
+一个32-bit的无符号整数可以索引4GB的地址空间, 也就是4294967296个内存单元. 线性地址通常由十六进制表示, 也就是从0x00000000到0xffffffff.
 </p></li>
 
 <li><p>
@@ -144,23 +144,22 @@ MMU会将逻辑地址转换为物理地址, 其流程如下:
 </div>
 
 <p>
-在多处理器中, 所有的CPU共享内存, 这意味着RAM芯片或许会被多个独立的芯片并发访问, 在RAM芯片
-上进行读写是序列化的, 在总线和芯片之间有一个内存仲裁器. 它的作用是, 如果内存芯片是空闲的,
+在多处理器中, 所有的CPU共享内存, 这意味着RAM芯片或许会被多个独立的芯片并发访问, 在RAM芯片上进行读写是序列化的, 在总线和芯片之间有一个内存仲裁器. 它的作用是, 如果内存芯片是空闲的,
 则授予本次访问, 而如果内存芯片正在服务另一个读/写请求, 则拒绝来到的请求. 即使是单处理器,
 也需要内存仲裁器. 因为DMA控制器可能会和CPU并发访问内存, 而引起冲突. 但是从编程的角度来说, 仲裁器对他们来说都是不可见的, 是由硬件电路管理的.
 </p>
 </div>
 </div>
 
-<div id="outline-container-org19072e6" class="outline-3">
-<h3 id="org19072e6"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
+<div id="outline-container-orge73a79a" class="outline-3">
+<h3 id="orge73a79a"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 从80286开始, Intel微处理器就分两种方式的地址翻译, 一是实模式, 二是保护模式, 后文的内容主要是针对保护模式开启时的地址翻译. 实模式主要是为了与较旧的处理器兼容以及引导操作系统从实模式过渡到保护模式.
 </p>
 </div>
-<div id="outline-container-org31d0690" class="outline-4">
-<h4 id="org31d0690"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
+<div id="outline-container-orgf17de91" class="outline-4">
+<h4 id="orgf17de91"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
 <div class="outline-text-4" id="text-1-2-1">
 <p>
 一个逻辑地址由两部分组成: 段标识符与偏移, 偏移用来指明在段内的相对地址. 段标识符由16比特组成, 叫做段选择子, 而offset是32比特的域. 关于段选择子后文还要介绍, 而下图是段选择子的结构:
@@ -172,29 +171,77 @@ MMU会将逻辑地址转换为物理地址, 其流程如下:
 </p>
 <p><span class="figure-number">Figure 2: </span>段选择子</p>
 </div>
+
+<p>
+为了能够快速的取得段选择子, 在处理器内部有段寄存器用来存放段选择子, 这些寄存器被叫做cs,
+ss, ds, es, fs以及gs. 尽管只有较少的六个, 程序可以把它们存到内存上, 从而重用这些寄存器, 待用完后又可以从内存里恢复它们的值.
+</p>
+
+<p>
+其中有三个段寄存器是有特别的目的:
+</p>
+
+<ol class="org-ol">
+<li><p>
+cs
+</p>
+
+<p>
+代码段寄存器, 指向一个包含有程序指令的段.
+</p></li>
+
+<li><p>
+ss
+</p>
+
+<p>
+栈段寄存器, 指向一个包含当前栈的段.
+</p></li>
+
+<li><p>
+ds
+</p>
+
+<p>
+数据段寄存器, 指向一个包含有全局或静态数据的段.
+</p></li>
+</ol>
+
+<p>
+其余三个寄存器就是通用目的了, 可以指向任意的数据段.
+</p>
+
+<p>
+cs寄存器还有一个重要的功能, 它有两个bit域用来表明CPU的当前权限级(Current Privilege
+Level,CPL). 0表示最高的权限级, 而3表示最低的权限级, Linux仅使用0和3, 即所谓的内核模式和用户模式.
+</p>
 </div>
 </div>
-</div>
-<div id="outline-container-org07d756b" class="outline-3">
-<h3 id="org07d756b"><span class="section-number-3">1.3</span> Linux中的分段</h3>
-</div>
-<div id="outline-container-org4c83512" class="outline-3">
-<h3 id="org4c83512"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
-</div>
-<div id="outline-container-org6f2f65c" class="outline-3">
-<h3 id="org6f2f65c"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+
+<div id="outline-container-org07920fc" class="outline-4">
+<h4 id="org07920fc"><span class="section-number-4">1.2.2</span> 段描述符</h4>
 </div>
 </div>
-<div id="outline-container-org7fe42e8" class="outline-2">
-<h2 id="org7fe42e8"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-orgd78e05f" class="outline-3">
+<h3 id="orgd78e05f"><span class="section-number-3">1.3</span> Linux中的分段</h3>
 </div>
-<div id="outline-container-orge1f7539" class="outline-2">
-<h2 id="orge1f7539"><span class="section-number-2">3</span> 进程地址空间</h2>
+<div id="outline-container-org1519be8" class="outline-3">
+<h3 id="org1519be8"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
+</div>
+<div id="outline-container-org9c9fe75" class="outline-3">
+<h3 id="org9c9fe75"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+</div>
+</div>
+<div id="outline-container-orgc07d308" class="outline-2">
+<h2 id="orgc07d308"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-org527600f" class="outline-2">
+<h2 id="org527600f"><span class="section-number-2">3</span> 进程地址空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-11 Mon 22:18</p>
+<p class="date">Created: 2021-01-18 Mon 22:13</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
