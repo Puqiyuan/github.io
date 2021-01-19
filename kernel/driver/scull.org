@@ -161,6 +161,8 @@ struct file {
 fmode_t			f_mode;
 loff_t			f_pos;
 unsigned int 		f_flags;
+const struct file_operations	*f_op;
+void			*private_data;
 };
 #+end_src
 简单解释下这些成员的作用:
@@ -176,4 +178,16 @@ unsigned int 		f_flags;
 3) f_flags:
 
    这个成员表示了文件的标志, 比如O_RDONLY, O_NONBLOCK以及O_SYNC. 驱动应该检查O_NONBLOCK来检查是否是非阻塞操作请求, 而驱动很少使用其它标志了. 而read/write权限的检查应该f_mode而不是f_flags.
+
+4) f_op:
+
+   与文件关联的函数操作指针. 作为open调用实现的一个部分, 内核会在其中分配file_operations结构体指针, 当需要发起操作时, 内核就会读取这个结构体. 同一个major number(比如1, 管理着/dev/null和/dev/zero)的不同设备, 因其minor number不同, 在open实现里就会根据这个minor
+   number来给f_op赋予不同的值, 这其实就是面向对象编程里的方法重载的概念.
+
+5) private_data:
+
+   可以作为自己某种用途的空间, 当然也可以忽略. 如果不为空, 在release方法里, 在销毁file结构体之前,
+   要记得先释放private_data所指向的空间. 在我们的例子代码里常常会用这个成员来传递系统调用之间的状态信息.
+*** inode
+
 * 代码实现
