@@ -108,8 +108,7 @@ static const struct pci_device_id e100_id_table[] = {
 }
 #+end_src
 
-从前文描述知道, PCI NIC驱动向内核注册一个pci_device_id类型的向量表来表明其能管理的设备. 如
-这里所示, e100驱动能管理的设备就是e100_id_table中所列的设备, 这里有几点需要注意:
+从前文描述知道, PCI NIC驱动向内核注册一个pci_device_id类型的向量表来表明其能管理的设备. 如这里所示, e100驱动能管理的设备就是e100_id_table中所列的设备, 这里有几点需要注意:
 
 1) 第一个域被初始化为了固定的PCI_VENDOR_ID_INTEL. 哪个厂商具有什么ID可以从linux/include/linux/pci_ids.h文件中得知.
 2) 第三以及四个域(subvendor和subdevice)赋值为PCI_ANY_ID, 因为前两个域通常已经够用了.
@@ -154,6 +153,7 @@ static struct pci_driver e100_driver = {
 static int __init e100_init_module(void)
 {
 ...
+    return pci_register_driver(&e100_driver);
 }
 
 static void __exit e100_cleanup_module(void)
