@@ -39,6 +39,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构
 - AMD64(X86-64)架构下的系统资源[[./arch/amd64-sys-resources.html][介绍]]。
+- AMD64(X86-64)架构下的[[./arch/segmented_virtual_memory.html][分段虚拟内存]]。
 * 编译器
 - [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
 - [[./compiler/unroll_loop.html][unroll小循环对性能的提升]].

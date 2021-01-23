@@ -1,0 +1,17 @@
+#+TITLE: 分段虚拟内存
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+* 实模式分段
+* 虚拟8086模式分段
+* 保护模式分段内存模型
+* 分段数据结构与寄存器
+* 段选择子与寄存器
+* 描述符表
+* Legacy分段描述符
+* Long-mode分段描述符
+* 分段保护概要
+* 数据访问权限检查
+* 控制转换权限检查
+* 限长检查
+* 类型检查

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-01-23 Sat 20:22 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分段虚拟内存</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">分段虚拟内存</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org67c3cfe">1. 实模式分段</a></li>
+<li><a href="#orga27a23c">2. 虚拟8086模式分段</a></li>
+<li><a href="#org9d86131">3. 保护模式分段内存模型</a></li>
+<li><a href="#org8abff78">4. 分段数据结构与寄存器</a></li>
+<li><a href="#org43b826c">5. 段选择子与寄存器</a></li>
+<li><a href="#org8df1c0c">6. 描述符表</a></li>
+<li><a href="#orgfed5f76">7. Legacy分段描述符</a></li>
+<li><a href="#orgfecc65e">8. Long-mode分段描述符</a></li>
+<li><a href="#org7d9fe11">9. 分段保护概要</a></li>
+<li><a href="#orgad7092a">10. 数据访问权限检查</a></li>
+<li><a href="#orgbf0b99c">11. 控制转换权限检查</a></li>
+<li><a href="#org8ae2c37">12. 限长检查</a></li>
+<li><a href="#org523951c">13. 类型检查</a></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org67c3cfe" class="outline-2">
+<h2 id="org67c3cfe"><span class="section-number-2">1</span> 实模式分段</h2>
+</div>
+<div id="outline-container-orga27a23c" class="outline-2">
+<h2 id="orga27a23c"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
+</div>
+<div id="outline-container-org9d86131" class="outline-2">
+<h2 id="org9d86131"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
+</div>
+<div id="outline-container-org8abff78" class="outline-2">
+<h2 id="org8abff78"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
+</div>
+<div id="outline-container-org43b826c" class="outline-2">
+<h2 id="org43b826c"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
+</div>
+<div id="outline-container-org8df1c0c" class="outline-2">
+<h2 id="org8df1c0c"><span class="section-number-2">6</span> 描述符表</h2>
+</div>
+<div id="outline-container-orgfed5f76" class="outline-2">
+<h2 id="orgfed5f76"><span class="section-number-2">7</span> Legacy分段描述符</h2>
+</div>
+<div id="outline-container-orgfecc65e" class="outline-2">
+<h2 id="orgfecc65e"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
+</div>
+<div id="outline-container-org7d9fe11" class="outline-2">
+<h2 id="org7d9fe11"><span class="section-number-2">9</span> 分段保护概要</h2>
+</div>
+<div id="outline-container-orgad7092a" class="outline-2">
+<h2 id="orgad7092a"><span class="section-number-2">10</span> 数据访问权限检查</h2>
+</div>
+<div id="outline-container-orgbf0b99c" class="outline-2">
+<h2 id="orgbf0b99c"><span class="section-number-2">11</span> 控制转换权限检查</h2>
+</div>
+<div id="outline-container-org8ae2c37" class="outline-2">
+<h2 id="org8ae2c37"><span class="section-number-2">12</span> 限长检查</h2>
+</div>
+<div id="outline-container-org523951c" class="outline-2">
+<h2 id="org523951c"><span class="section-number-2">13</span> 类型检查</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-01-23 Sat 20:22</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
