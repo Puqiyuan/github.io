@@ -6,8 +6,7 @@
 
 本文讲述Linux的页表管理, 在它的上一篇讲述了mm模块[[./des-phy-mem.html][如何描述物理内存]].
 
-本文会讲述Linux内核的页表是如何组织的, 以及各级页表都使用什么类型的数据结构来描述. 接着会
-讲述一个虚拟地址是怎样会划分为几部分从而用来一级一级的往下寻找页表, 最后会到PTE(Page Table
+本文会讲述Linux内核的页表是如何组织的, 以及各级页表都使用什么类型的数据结构来描述. 接着会讲述一个虚拟地址是怎样划分为几部分从而用来一级一级的往下寻找页表, 最后会到PTE(Page Table
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 
 * 页目录表示
@@ -15,3 +14,13 @@ Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始�
 #+begin_src C++ :includes <stdio.h>
 typedef struct { unsigned long pgd; } pgd_t;
 #+end_src
+
+根据架构的不同，页表如何被加载也是不同的。以x86为例，进程页表的加载是通过将mm_struct->pgd复制到cr3寄存器中，同时会刷新tlb。
+
+每一个pgd页表里的条目指向包含有许多pmd条目的页框基地址，pgd页表本身的基地址如前所述在x86下是将mm_struct->pgd拷贝到cr3寄存器中，而每一个pmd条目又指向包含有许多pte条目的页框基地址，
+pte条目最终指向包含有用户所请求数据的页框基地址。如果是遇到page被swap out的情况，就会调用do_swap_page函数。页表组织如下图：
+
+#+CAPTION: 各级页表的组织
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/page_layout.png]]
