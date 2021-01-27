@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-20 Wed 23:16 -->
+<!-- 2021-01-27 Wed 23:03 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>用于组件初始化的内核基础设施</title>
@@ -62,11 +62,11 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org89e40d6">1. 启动时内核选项</a></li>
-<li><a href="#org79bd6df">2. 模块初始化代码</a></li>
-<li><a href="#org587508c">3. 基于宏的标签</a></li>
-<li><a href="#org1deae93">4. 启动时初始化例程</a></li>
-<li><a href="#org2a8b07f">5. 内存优化</a></li>
+<li><a href="#org9c335f6">1. 启动时内核选项</a></li>
+<li><a href="#org54a5a03">2. 模块初始化代码</a></li>
+<li><a href="#org5b68b78">3. 基于宏的标签</a></li>
+<li><a href="#orgad955d1">4. 启动时初始化例程</a></li>
+<li><a href="#orgc9a6bf9">5. 内存优化</a></li>
 </ul>
 </div>
 </div>
@@ -79,8 +79,7 @@ for the JavaScript code in this tag.
 </p>
 
 <p>
-本文是介绍一些内核组件初始化的公用函数, 这些公用的用于组件初始化的函数不论是静态内建的代码
-还是模块代码都会用到. 大概会介绍到以下几方面:
+本文是介绍一些内核组件初始化的公用函数, 这些公用的用于组件初始化的函数不论是静态内建的代码还是模块代码都会用到. 大概会介绍到以下几方面:
 </p>
 <ol class="org-ol">
 <li>初始化函数是如何命名以及如何由特殊的宏标识.</li>
@@ -88,30 +87,30 @@ for the JavaScript code in this tag.
 <li>什么时候以及怎样执行这些函数.</li>
 </ol>
 
-<div id="outline-container-org89e40d6" class="outline-2">
-<h2 id="org89e40d6"><span class="section-number-2">1</span> 启动时内核选项</h2>
+<div id="outline-container-org9c335f6" class="outline-2">
+<h2 id="org9c335f6"><span class="section-number-2">1</span> 启动时内核选项</h2>
 <div class="outline-text-2" id="text-1">
 <p>
-Linux内核允许把配置选项传递给它, 
+Linux内核允许把配置选项传递给它, 采用这种方式可以微调内核。两次调用parse_args函数用来解析启动时的配置。
 </p>
 </div>
 </div>
-<div id="outline-container-org79bd6df" class="outline-2">
-<h2 id="org79bd6df"><span class="section-number-2">2</span> 模块初始化代码</h2>
+<div id="outline-container-org54a5a03" class="outline-2">
+<h2 id="org54a5a03"><span class="section-number-2">2</span> 模块初始化代码</h2>
 </div>
-<div id="outline-container-org587508c" class="outline-2">
-<h2 id="org587508c"><span class="section-number-2">3</span> 基于宏的标签</h2>
+<div id="outline-container-org5b68b78" class="outline-2">
+<h2 id="org5b68b78"><span class="section-number-2">3</span> 基于宏的标签</h2>
 </div>
-<div id="outline-container-org1deae93" class="outline-2">
-<h2 id="org1deae93"><span class="section-number-2">4</span> 启动时初始化例程</h2>
+<div id="outline-container-orgad955d1" class="outline-2">
+<h2 id="orgad955d1"><span class="section-number-2">4</span> 启动时初始化例程</h2>
 </div>
-<div id="outline-container-org2a8b07f" class="outline-2">
-<h2 id="org2a8b07f"><span class="section-number-2">5</span> 内存优化</h2>
+<div id="outline-container-orgc9a6bf9" class="outline-2">
+<h2 id="orgc9a6bf9"><span class="section-number-2">5</span> 内存优化</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-20 Wed 23:16</p>
+<p class="date">Created: 2021-01-27 Wed 23:03</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
