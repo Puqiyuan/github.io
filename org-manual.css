@@ -345,7 +345,7 @@ img.random {
 div.figure {
 	align: center; 
 	width: 100%;
-	border: thin silver solid;
+	/*border: thin silver solid;*/
 	margin: 0em;
 	padding: 0em;
 }

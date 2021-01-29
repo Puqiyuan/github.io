@@ -22,5 +22,5 @@ pte条目最终指向包含有用户所请求数据的页框基地址。如果�
 
 #+CAPTION: 各级页表的组织
 #+ATTR_HTML: :align centering
-#+ATTR_HTML: :width 50% :height 50%
+#+ATTR_HTML: :width 70% :height 70%
 [[./img/page_layout.png]]
