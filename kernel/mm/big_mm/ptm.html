@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-29 Fri 20:15 -->
+<!-- 2021-01-29 Fri 20:30 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之页表管理</title>
@@ -62,7 +62,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org27ff4c2">1. 页目录表示</a></li>
+<li><a href="#org53c49fc">1. 页目录表示</a></li>
 </ul>
 </div>
 </div>
@@ -75,8 +75,8 @@ for the JavaScript code in this tag.
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 </p>
 
-<div id="outline-container-org27ff4c2" class="outline-2">
-<h2 id="org27ff4c2"><span class="section-number-2">1</span> 页目录表示</h2>
+<div id="outline-container-org53c49fc" class="outline-2">
+<h2 id="org53c49fc"><span class="section-number-2">1</span> 页目录表示</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 每一个进程都有一个指针指向它自己PGD的指针(mm_struct-&gt;pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
@@ -97,7 +97,7 @@ pte条目最终指向包含有用户所请求数据的页框基地址。如果�
 
 
 <div class="figure">
-<p><img src="./img/page_layout.png" alt="page_layout.png" width="60%" height="50%" align="centering">
+<p><img src="./img/page_layout.png" alt="page_layout.png" width="50%" height="50%" align="centering">
 </p>
 <p><span class="figure-number">Figure 1: </span>各级页表的组织</p>
 </div>
@@ -106,7 +106,7 @@ pte条目最终指向包含有用户所请求数据的页框基地址。如果�
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-29 Fri 20:15</p>
+<p class="date">Created: 2021-01-29 Fri 20:30</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
