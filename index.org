@@ -29,11 +29,14 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - [[./kernel/process-management/process-sched.html][内核进程调度]]。
 - 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
 - [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
-- [[./kernel/mm/big_mm/des-phy-mem.html][内存管理之描述物理内存]].
-- [[./kernel/mm/big_mm/ptm.html][内存管理之页表管理]].
+- 内存管理系列文章
+  
+  1) [[./kernel/mm/mm_series/des-phy-mem.html][内存管理之描述物理内存]]。
+  
+  2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]。
 - [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
 - [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
-- [[./kernel/mm/mm_series/mm.html][80x86内存管理]].
+- [[./kernel/mm/x86-mm/mm.html][80x86内存管理]]。
 - [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。

@@ -24,3 +24,10 @@ pte条目最终指向包含有用户所请求数据的页框基地址。如果�
 #+ATTR_HTML: :align centering
 #+ATTR_HTML: :width 50% :height 50%
 [[./img/page_layout.png]]
+
+一个给定的线性地址会划分为几个部分来表明在各级页表中的偏移。为了辅助将线性地址划分为几部分，对于每级页表，都有几个宏来完成一些功能，也就是SHIFT，SIZE以及MASK宏。SHIFT类的宏指明了每级页表能映射的长度（按bit算）。如下图：
+
+#+CAPTION: 各类SHIFT宏
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/shift-macro.png]]
