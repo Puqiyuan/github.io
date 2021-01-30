@@ -31,3 +31,35 @@ pte条目最终指向包含有用户所请求数据的页框基地址。如果�
 #+ATTR_HTML: :align centering
 #+ATTR_HTML: :width 50% :height 50%
 [[./img/shift-macro.png]]
+
+我们可以看看内核中关于SHIFT类宏的定义（ia64）：
+#+begin_src C++ :includes <stdio.h>
+#if defined(CONFIG_IA64_PAGE_SIZE_4KB)
+# define PAGE_SHIFT	12
+#elif defined(CONFIG_IA64_PAGE_SIZE_8KB)
+# define PAGE_SHIFT	13
+#elif defined(CONFIG_IA64_PAGE_SIZE_16KB)
+# define PAGE_SHIFT	14
+#elif defined(CONFIG_IA64_PAGE_SIZE_64KB)
+# define PAGE_SHIFT	16
+#+end_src
+
+PAGE_SHIFT表示了一个页面的大小，可以看到ia64架构下，可以配置不同的页面大小。再来看看PMD_SHIFT（同样是ia64）：
+
+#+begin_src C++ :includes <stdio.h>
+#define PTRS_PER_PTD_SHIFT	(PAGE_SHIFT-3)
+#define PMD_SHIFT	(PAGE_SHIFT + (PTRS_PER_PTD_SHIFT))
+#+end_src
+
+其中PTRS_PER_PTD_SHIFT表示了一个页表能包含的下级页表基地址（指针）数量。对于ia64如果配置了四级页表，还有PUD_SHIFT，看看定义：
+#+begin_src C++ :includes <stdio.h>
+#define PUD_SHIFT	(PMD_SHIFT + (PTRS_PER_PTD_SHIFT))
+#+end_src
+最后是PGDIR_SHIFT的定义了，它也依是否开启4级页表其定义而有所不同：
+#+begin_src C++ :includes <stdio.h>
+#if CONFIG_PGTABLE_LEVELS == 4
+#define PGDIR_SHIFT		(PUD_SHIFT + (PTRS_PER_PTD_SHIFT))
+#else
+#define PGDIR_SHIFT		(PMD_SHIFT + (PTRS_PER_PTD_SHIFT))
+#endif
+#+end_src
