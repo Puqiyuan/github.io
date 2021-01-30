@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-23 Sat 20:22 -->
+<!-- 2021-01-30 Sat 20:54 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>分段虚拟内存</title>
@@ -62,65 +62,84 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org67c3cfe">1. 实模式分段</a></li>
-<li><a href="#orga27a23c">2. 虚拟8086模式分段</a></li>
-<li><a href="#org9d86131">3. 保护模式分段内存模型</a></li>
-<li><a href="#org8abff78">4. 分段数据结构与寄存器</a></li>
-<li><a href="#org43b826c">5. 段选择子与寄存器</a></li>
-<li><a href="#org8df1c0c">6. 描述符表</a></li>
-<li><a href="#orgfed5f76">7. Legacy分段描述符</a></li>
-<li><a href="#orgfecc65e">8. Long-mode分段描述符</a></li>
-<li><a href="#org7d9fe11">9. 分段保护概要</a></li>
-<li><a href="#orgad7092a">10. 数据访问权限检查</a></li>
-<li><a href="#orgbf0b99c">11. 控制转换权限检查</a></li>
-<li><a href="#org8ae2c37">12. 限长检查</a></li>
-<li><a href="#org523951c">13. 类型检查</a></li>
+<li><a href="#org93aa070">1. 实模式分段</a></li>
+<li><a href="#org282ab0d">2. 虚拟8086模式分段</a></li>
+<li><a href="#orgb1505eb">3. 保护模式分段内存模型</a></li>
+<li><a href="#org62cca58">4. 分段数据结构与寄存器</a></li>
+<li><a href="#org491d06e">5. 段选择子与寄存器</a></li>
+<li><a href="#org9768fa1">6. 描述符表</a></li>
+<li><a href="#orgff70936">7. Legacy分段描述符</a></li>
+<li><a href="#org7b212f6">8. Long-mode分段描述符</a></li>
+<li><a href="#org9693c86">9. 分段保护概要</a></li>
+<li><a href="#org1782e8e">10. 数据访问权限检查</a></li>
+<li><a href="#orgca9d02e">11. 控制转换权限检查</a></li>
+<li><a href="#org4c684e3">12. 限长检查</a></li>
+<li><a href="#org4c0861c">13. 类型检查</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org67c3cfe" class="outline-2">
-<h2 id="org67c3cfe"><span class="section-number-2">1</span> 实模式分段</h2>
+<p>
+传统的x86模式支持分段翻译机制，这种机制允许重定位或隔离虚拟内存中的指令和数据。一个段就是虚拟内存中的一片连续内存，其大小或位置可以是任意的。指令或数据可以分配到一个或多个内存段，每个段都有它自己的保护权限。处理器保证段之间的访问满足相应的权限关系。
+</p>
+
+<p>
+分段机制提供十个分段寄存器，每个都定义了一个段。其中六个定义了用户段（CS，DS，ES，FS，GS以及SS）。用户段保存了软件、数据以及栈，可以被应用软件或系统软件使用。剩下的四个段寄存器（GDT，LDT，IDT以及TR）定义了系统段。系统段包含一些初始化了的数据结构并且仅由系统软件使用。段寄存器包含一个段的起始基址，limit则指明了段的大小，以及一些指明段保护特性的属性。
+</p>
+
+<p>
+尽管分段在重定位以及数据保护方面具有很大的灵活性，但是使用软件与硬件分页结合的机制去处理内存隔离和重定位往往效率更高。由于这个原因，许多现代的操作系统常常绕过分段的特点。然而，分段是不可能完全禁用的，并且对于分段机制的理解对于实现long-moded的系统软件是至关重要的。
+</p>
+
+<p>
+在long mode下，分段的作用取决于处理器是否是在兼容或64-bit模式：
+</p>
+<ul class="org-ul">
+<li>在兼容模式下，分段的功能和legacy mode下一样。</li>
+<li>64-bit模式下，分段是禁用了的，64-bit的虚拟地址是平坦寻址的。然而某些段寄存器仍旧保留了它的功能，尤其是系统段寄存器。</li>
+</ul>
+<div id="outline-container-org93aa070" class="outline-2">
+<h2 id="org93aa070"><span class="section-number-2">1</span> 实模式分段</h2>
 </div>
-<div id="outline-container-orga27a23c" class="outline-2">
-<h2 id="orga27a23c"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
+<div id="outline-container-org282ab0d" class="outline-2">
+<h2 id="org282ab0d"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
 </div>
-<div id="outline-container-org9d86131" class="outline-2">
-<h2 id="org9d86131"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
+<div id="outline-container-orgb1505eb" class="outline-2">
+<h2 id="orgb1505eb"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
 </div>
-<div id="outline-container-org8abff78" class="outline-2">
-<h2 id="org8abff78"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
+<div id="outline-container-org62cca58" class="outline-2">
+<h2 id="org62cca58"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
 </div>
-<div id="outline-container-org43b826c" class="outline-2">
-<h2 id="org43b826c"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
+<div id="outline-container-org491d06e" class="outline-2">
+<h2 id="org491d06e"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
 </div>
-<div id="outline-container-org8df1c0c" class="outline-2">
-<h2 id="org8df1c0c"><span class="section-number-2">6</span> 描述符表</h2>
+<div id="outline-container-org9768fa1" class="outline-2">
+<h2 id="org9768fa1"><span class="section-number-2">6</span> 描述符表</h2>
 </div>
-<div id="outline-container-orgfed5f76" class="outline-2">
-<h2 id="orgfed5f76"><span class="section-number-2">7</span> Legacy分段描述符</h2>
+<div id="outline-container-orgff70936" class="outline-2">
+<h2 id="orgff70936"><span class="section-number-2">7</span> Legacy分段描述符</h2>
 </div>
-<div id="outline-container-orgfecc65e" class="outline-2">
-<h2 id="orgfecc65e"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
+<div id="outline-container-org7b212f6" class="outline-2">
+<h2 id="org7b212f6"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
 </div>
-<div id="outline-container-org7d9fe11" class="outline-2">
-<h2 id="org7d9fe11"><span class="section-number-2">9</span> 分段保护概要</h2>
+<div id="outline-container-org9693c86" class="outline-2">
+<h2 id="org9693c86"><span class="section-number-2">9</span> 分段保护概要</h2>
 </div>
-<div id="outline-container-orgad7092a" class="outline-2">
-<h2 id="orgad7092a"><span class="section-number-2">10</span> 数据访问权限检查</h2>
+<div id="outline-container-org1782e8e" class="outline-2">
+<h2 id="org1782e8e"><span class="section-number-2">10</span> 数据访问权限检查</h2>
 </div>
-<div id="outline-container-orgbf0b99c" class="outline-2">
-<h2 id="orgbf0b99c"><span class="section-number-2">11</span> 控制转换权限检查</h2>
+<div id="outline-container-orgca9d02e" class="outline-2">
+<h2 id="orgca9d02e"><span class="section-number-2">11</span> 控制转换权限检查</h2>
 </div>
-<div id="outline-container-org8ae2c37" class="outline-2">
-<h2 id="org8ae2c37"><span class="section-number-2">12</span> 限长检查</h2>
+<div id="outline-container-org4c684e3" class="outline-2">
+<h2 id="org4c684e3"><span class="section-number-2">12</span> 限长检查</h2>
 </div>
-<div id="outline-container-org523951c" class="outline-2">
-<h2 id="org523951c"><span class="section-number-2">13</span> 类型检查</h2>
+<div id="outline-container-org4c0861c" class="outline-2">
+<h2 id="org4c0861c"><span class="section-number-2">13</span> 类型检查</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-23 Sat 20:22</p>
+<p class="date">Created: 2021-01-30 Sat 20:54</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
