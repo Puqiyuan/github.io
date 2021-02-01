@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-01-25 Mon 21:48 -->
+<!-- 2021-02-01 Mon 22:27 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux内存管理</title>
@@ -62,23 +62,23 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf12feb4">1. 内存寻址</a>
+<li><a href="#org51fcccf">1. 内存寻址</a>
 <ul>
-<li><a href="#orgefd7389">1.1. 内存地址</a></li>
-<li><a href="#org790b043">1.2. 硬件上的分段</a>
+<li><a href="#org09acb88">1.1. 内存地址</a></li>
+<li><a href="#org751b498">1.2. 硬件上的分段</a>
 <ul>
-<li><a href="#orgefdd017">1.2.1. 段选择子与段寄存器</a></li>
-<li><a href="#org2c766b1">1.2.2. 段描述符</a></li>
-<li><a href="#org7fbb4d6">1.2.3. 快速访问段描述符</a></li>
+<li><a href="#org11815b0">1.2.1. 段选择子与段寄存器</a></li>
+<li><a href="#orgd872dce">1.2.2. 段描述符</a></li>
+<li><a href="#org6bf539c">1.2.3. 快速访问段描述符</a></li>
 </ul>
 </li>
-<li><a href="#org26f80bf">1.3. Linux中的分段</a></li>
-<li><a href="#org37e1f5a">1.4. 硬件上的分页</a></li>
-<li><a href="#orga7b0616">1.5. Linux中的分页</a></li>
+<li><a href="#orgfee9957">1.3. Linux中的分段</a></li>
+<li><a href="#orgd16b236">1.4. 硬件上的分页</a></li>
+<li><a href="#orgaab6cdb">1.5. Linux中的分页</a></li>
 </ul>
 </li>
-<li><a href="#org478df49">2. 内存管理</a></li>
-<li><a href="#org045c145">3. 进程地址空间</a></li>
+<li><a href="#orgd5e2a8e">2. 内存管理</a></li>
+<li><a href="#org7d55ad0">3. 进程地址空间</a></li>
 </ul>
 </div>
 </div>
@@ -95,15 +95,15 @@ for the JavaScript code in this tag.
 主要针对的平台是80x86.
 </p>
 
-<div id="outline-container-orgf12feb4" class="outline-2">
-<h2 id="orgf12feb4"><span class="section-number-2">1</span> 内存寻址</h2>
+<div id="outline-container-org51fcccf" class="outline-2">
+<h2 id="org51fcccf"><span class="section-number-2">1</span> 内存寻址</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内存寻址主要解决的问题是: CPU给出一个虚拟地址, 如何将这个虚拟地址转化为RAM的物理地址来索引其中的内容.
 </p>
 </div>
-<div id="outline-container-orgefd7389" class="outline-3">
-<h3 id="orgefd7389"><span class="section-number-3">1.1</span> 内存地址</h3>
+<div id="outline-container-org09acb88" class="outline-3">
+<h3 id="org09acb88"><span class="section-number-3">1.1</span> 内存地址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 在80x86下要区分三种地址:
@@ -152,15 +152,15 @@ MMU会将逻辑地址转换为物理地址, 其流程如下:
 </div>
 </div>
 
-<div id="outline-container-org790b043" class="outline-3">
-<h3 id="org790b043"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
+<div id="outline-container-org751b498" class="outline-3">
+<h3 id="org751b498"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 从80286开始, Intel微处理器就分两种方式的地址翻译, 一是实模式, 二是保护模式, 后文的内容主要是针对保护模式开启时的地址翻译. 实模式主要是为了与较旧的处理器兼容以及引导操作系统从实模式过渡到保护模式.
 </p>
 </div>
-<div id="outline-container-orgefdd017" class="outline-4">
-<h4 id="orgefdd017"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
+<div id="outline-container-org11815b0" class="outline-4">
+<h4 id="org11815b0"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
 <div class="outline-text-4" id="text-1-2-1">
 <p>
 一个逻辑地址由两部分组成: 段标识符与偏移, 偏移用来指明在段内的相对地址. 段标识符由16比特组成, 叫做段选择子, 而offset是32比特的域. 关于段选择子后文还要介绍, 而下图是段选择子的结构:
@@ -219,8 +219,8 @@ Level,CPL). 0表示最高的权限级, 而3表示最低的权限级, Linux仅使
 </div>
 </div>
 
-<div id="outline-container-org2c766b1" class="outline-4">
-<h4 id="org2c766b1"><span class="section-number-4">1.2.2</span> 段描述符</h4>
+<div id="outline-container-orgd872dce" class="outline-4">
+<h4 id="orgd872dce"><span class="section-number-4">1.2.2</span> 段描述符</h4>
 <div class="outline-text-4" id="text-1-2-2">
 <p>
 每个段由八字节的段描述符来表示，这个段描述符描述了段的特性。段描述符存在全局描述符表或局部描述符表中。
@@ -281,58 +281,67 @@ Table）可能会有多个。GDT在内存里的地址和占有的大小通常是
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">Type</td>
+<td class="org-left">指明段的类型以及访问权限</td>
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">DPL</td>
+<td class="org-left">Descriptor Privilege Level，用来限制对段的访问。指明了访问段的最小权限级别。当段的DPL是0时，这时仅有CPL是0，即CPU处于Kernel Mode时才可访问，然而DPL为3时，就可被任意级别的CPL访问。</td>
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">P</td>
+<td class="org-left">段存在标志。为0时，代表段存在于内存中。Linux总是把这个flag设为1，代表它从未将段swap out到磁盘。</td>
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">D or B</td>
+<td class="org-left">依据段是包含代码还是数据，代码段为D，数据段为B。</td>
 </tr>
 
 <tr>
-<td class="org-left">&#xa0;</td>
-<td class="org-left">&#xa0;</td>
+<td class="org-left">AVL</td>
+<td class="org-left">或许被操作系统使用，Linux不用。</td>
 </tr>
 </tbody>
 </table>
-</div>
-</div>
 
-<div id="outline-container-org7fbb4d6" class="outline-4">
-<h4 id="org7fbb4d6"><span class="section-number-4">1.2.3</span> 快速访问段描述符</h4>
+<p>
+由于有几种类型段，也有对应的几种段描述符。下面列出了几种在Linux中广泛使用的段描述符类型：
+</p>
+<ol class="org-ol">
+<li>代码段描述符</li>
+<li>数据段描述符</li>
+<li>任务状态段描述符</li>
+<li>局部描述符表描述符</li>
+</ol>
 </div>
 </div>
-<div id="outline-container-org26f80bf" class="outline-3">
-<h3 id="org26f80bf"><span class="section-number-3">1.3</span> Linux中的分段</h3>
-</div>
-<div id="outline-container-org37e1f5a" class="outline-3">
-<h3 id="org37e1f5a"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
-</div>
-<div id="outline-container-orga7b0616" class="outline-3">
-<h3 id="orga7b0616"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+<div id="outline-container-org6bf539c" class="outline-4">
+<h4 id="org6bf539c"><span class="section-number-4">1.2.3</span> 快速访问段描述符</h4>
 </div>
 </div>
-<div id="outline-container-org478df49" class="outline-2">
-<h2 id="org478df49"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-orgfee9957" class="outline-3">
+<h3 id="orgfee9957"><span class="section-number-3">1.3</span> Linux中的分段</h3>
 </div>
-<div id="outline-container-org045c145" class="outline-2">
-<h2 id="org045c145"><span class="section-number-2">3</span> 进程地址空间</h2>
+<div id="outline-container-orgd16b236" class="outline-3">
+<h3 id="orgd16b236"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
+</div>
+<div id="outline-container-orgaab6cdb" class="outline-3">
+<h3 id="orgaab6cdb"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+</div>
+</div>
+<div id="outline-container-orgd5e2a8e" class="outline-2">
+<h2 id="orgd5e2a8e"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-org7d55ad0" class="outline-2">
+<h2 id="org7d55ad0"><span class="section-number-2">3</span> 进程地址空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-01-25 Mon 21:48</p>
+<p class="date">Created: 2021-02-01 Mon 22:27</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
