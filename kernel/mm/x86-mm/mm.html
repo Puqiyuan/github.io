@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-02-01 Mon 22:27 -->
+<!-- 2021-02-16 Tue 18:54 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux内存管理</title>
@@ -62,23 +62,24 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org51fcccf">1. 内存寻址</a>
+<li><a href="#orgb85d6db">1. 内存寻址</a>
 <ul>
-<li><a href="#org09acb88">1.1. 内存地址</a></li>
-<li><a href="#org751b498">1.2. 硬件上的分段</a>
+<li><a href="#orgf5b41b4">1.1. 内存地址</a></li>
+<li><a href="#org9dbf281">1.2. 硬件上的分段</a>
 <ul>
-<li><a href="#org11815b0">1.2.1. 段选择子与段寄存器</a></li>
-<li><a href="#orgd872dce">1.2.2. 段描述符</a></li>
-<li><a href="#org6bf539c">1.2.3. 快速访问段描述符</a></li>
+<li><a href="#orgc47b859">1.2.1. 段选择子与段寄存器</a></li>
+<li><a href="#org57882be">1.2.2. 段描述符</a></li>
+<li><a href="#orgc91f953">1.2.3. 快速访问段描述符</a></li>
+<li><a href="#orgab6492f">1.2.4. 分段单元</a></li>
 </ul>
 </li>
-<li><a href="#orgfee9957">1.3. Linux中的分段</a></li>
-<li><a href="#orgd16b236">1.4. 硬件上的分页</a></li>
-<li><a href="#orgaab6cdb">1.5. Linux中的分页</a></li>
+<li><a href="#org141fe9c">1.3. Linux中的分段</a></li>
+<li><a href="#orga8e8d17">1.4. 硬件上的分页</a></li>
+<li><a href="#orgcd1b5d9">1.5. Linux中的分页</a></li>
 </ul>
 </li>
-<li><a href="#orgd5e2a8e">2. 内存管理</a></li>
-<li><a href="#org7d55ad0">3. 进程地址空间</a></li>
+<li><a href="#orgd3c9004">2. 内存管理</a></li>
+<li><a href="#org8f1ac8d">3. 进程地址空间</a></li>
 </ul>
 </div>
 </div>
@@ -95,15 +96,15 @@ for the JavaScript code in this tag.
 主要针对的平台是80x86.
 </p>
 
-<div id="outline-container-org51fcccf" class="outline-2">
-<h2 id="org51fcccf"><span class="section-number-2">1</span> 内存寻址</h2>
+<div id="outline-container-orgb85d6db" class="outline-2">
+<h2 id="orgb85d6db"><span class="section-number-2">1</span> 内存寻址</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内存寻址主要解决的问题是: CPU给出一个虚拟地址, 如何将这个虚拟地址转化为RAM的物理地址来索引其中的内容.
 </p>
 </div>
-<div id="outline-container-org09acb88" class="outline-3">
-<h3 id="org09acb88"><span class="section-number-3">1.1</span> 内存地址</h3>
+<div id="outline-container-orgf5b41b4" class="outline-3">
+<h3 id="orgf5b41b4"><span class="section-number-3">1.1</span> 内存地址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 在80x86下要区分三种地址:
@@ -152,15 +153,15 @@ MMU会将逻辑地址转换为物理地址, 其流程如下:
 </div>
 </div>
 
-<div id="outline-container-org751b498" class="outline-3">
-<h3 id="org751b498"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
+<div id="outline-container-org9dbf281" class="outline-3">
+<h3 id="org9dbf281"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 从80286开始, Intel微处理器就分两种方式的地址翻译, 一是实模式, 二是保护模式, 后文的内容主要是针对保护模式开启时的地址翻译. 实模式主要是为了与较旧的处理器兼容以及引导操作系统从实模式过渡到保护模式.
 </p>
 </div>
-<div id="outline-container-org11815b0" class="outline-4">
-<h4 id="org11815b0"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
+<div id="outline-container-orgc47b859" class="outline-4">
+<h4 id="orgc47b859"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
 <div class="outline-text-4" id="text-1-2-1">
 <p>
 一个逻辑地址由两部分组成: 段标识符与偏移, 偏移用来指明在段内的相对地址. 段标识符由16比特组成, 叫做段选择子, 而offset是32比特的域. 关于段选择子后文还要介绍, 而下图是段选择子的结构:
@@ -219,8 +220,8 @@ Level,CPL). 0表示最高的权限级, 而3表示最低的权限级, Linux仅使
 </div>
 </div>
 
-<div id="outline-container-orgd872dce" class="outline-4">
-<h4 id="orgd872dce"><span class="section-number-4">1.2.2</span> 段描述符</h4>
+<div id="outline-container-org57882be" class="outline-4">
+<h4 id="org57882be"><span class="section-number-4">1.2.2</span> 段描述符</h4>
 <div class="outline-text-4" id="text-1-2-2">
 <p>
 每个段由八字节的段描述符来表示，这个段描述符描述了段的特性。段描述符存在全局描述符表或局部描述符表中。
@@ -272,7 +273,7 @@ Table）可能会有多个。GDT在内存里的地址和占有的大小通常是
 
 <tr>
 <td class="org-left">Limit</td>
-<td class="org-left">存放段的最后字节的偏移，也即是指明了段的成都，如果G是0，大小介于1B-1MB，否则是4KB-4GB。</td>
+<td class="org-left">存放段的最后字节的偏移，也即是指明了段的长度，如果G是0，大小介于1B-1MB，否则是4KB-4GB。</td>
 </tr>
 
 <tr>
@@ -311,37 +312,126 @@ Table）可能会有多个。GDT在内存里的地址和占有的大小通常是
 由于有几种类型段，也有对应的几种段描述符。下面列出了几种在Linux中广泛使用的段描述符类型：
 </p>
 <ol class="org-ol">
-<li>代码段描述符</li>
-<li>数据段描述符</li>
-<li>任务状态段描述符</li>
-<li>局部描述符表描述符</li>
+<li><p>
+代码段描述符
+</p>
+
+<p>
+表示段描述符指向的是一个代码段，这种类型的段描述符可以存放在全局描述符表GDT中，也可以存放在局部描述符表LDT中。描述符的S标志被设置为1，表明这是一个非系统段。
+</p></li>
+<li><p>
+数据段描述符
+</p>
+
+<p>
+表示段描述符指向的是一个数据段，这种类型的段描述符可以存放在全局描述符表GDT中，也可以存放在局部描述符表LDT中。描述符的S标志被设置为1，表明这是一个非系统段。栈段在实现上是通过普通的数据段来做到的。
+</p></li>
+<li><p>
+任务状态段描述符（TSSD）
+</p>
+
+<p>
+表明这个段描述符指向一个任务状态段，这个段是用来存放处理器（进程的）寄存器的内容。仅在GDT中存放，根据对应的进程是否正在CPU上运行，其对应的Type域有值11或9。它的S标志自然是0，代表这是一个系统段。
+</p></li>
+<li><p>
+局部描述符表描述符（LDTD）
+</p>
+
+<p>
+表示段描述符指向一个包含有LDT的段，仅在GDT中存放，Type域的值为2。S标志为0，代表所指段为
+系统段。后文会介绍在80x86下，如何决定一个段描述符是存放在GDT中还是LDT中。
+</p></li>
 </ol>
 </div>
 </div>
-<div id="outline-container-org6bf539c" class="outline-4">
-<h4 id="org6bf539c"><span class="section-number-4">1.2.3</span> 快速访问段描述符</h4>
+<div id="outline-container-orgc91f953" class="outline-4">
+<h4 id="orgc91f953"><span class="section-number-4">1.2.3</span> 快速访问段描述符</h4>
+<div class="outline-text-4" id="text-1-2-3">
+<p>
+前文已述，逻辑地址由16-bit的段选择子和32-bit的偏移组成，段寄存器用来存放段选择子。
+</p>
+
+<p>
+为了加速逻辑地址到线性地址的翻译，在80x86下，对于每个可编程的段寄存器，都有一个不可编程的（程序员不可见）寄存器，这个不可编程的寄存器都存放有由对应的段寄存器里的段选择子所指明的段描述符。每当段选择子加载到段寄存器时，其对应的段描述符也会由内存加载到对应的不可编程寄存器里。这时，访问响应段里的逻辑地址时就可以不用访问存在内存中的GDT或LDT。处理器可以直接从CPU寄存器里获得相应段选择子的段描述符。只有当段寄存器的内容改变时，才有必要访问GDT或LDT。如下图：
+</p>
+
+
+<div class="figure">
+<p><img src="./img/selector-descriptor.png" alt="selector-descriptor.png" width="50%" height="50%" align="centering">
+</p>
+<p><span class="figure-number">Figure 4: </span>段选择子与段描述符</p>
+</div>
+
+<p>
+任何段选择子都包含如下表的三个域：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">域名</th>
+<th scope="col" class="org-left">描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">索引</td>
+<td class="org-left">指明是在GDT或LDT中的哪个条目</td>
+</tr>
+
+<tr>
+<td class="org-left">TI</td>
+<td class="org-left">Table Indictor：指明描述符是包含在GDT（TI=0）还是LDT（TI=1）中</td>
+</tr>
+
+<tr>
+<td class="org-left">RPL</td>
+<td class="org-left">Requestor Privilege Level：当段选择子被加载到cs寄存器时，RPL就成了CPU的Current Privilege Level。</td>
+</tr>
+</tbody>
+</table>
+
+
+<p>
+由于段描述符是8字节长，那么一个段描述符在GDT或LDT中的相对位置是将13-bit的索引值乘以8后得到。比如，GDT存在0x00020000位置（在gdtr寄存器中）而由段选择子指明的索引是2，那么对应的段描述符的地址就是0x00020000 + （2X8），即是0x00020010。
+</p>
+
+<p>
+GDT的第一个条目通常设为0。这可以保证逻辑地址为NULL时，可以被当成非法，因此触发处理器异常。
+在GDT中能存放最大数目的段选择子是8191个（2**13 - 1）。
+</p>
 </div>
 </div>
-<div id="outline-container-orgfee9957" class="outline-3">
-<h3 id="orgfee9957"><span class="section-number-3">1.3</span> Linux中的分段</h3>
-</div>
-<div id="outline-container-orgd16b236" class="outline-3">
-<h3 id="orgd16b236"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
-</div>
-<div id="outline-container-orgaab6cdb" class="outline-3">
-<h3 id="orgaab6cdb"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+<div id="outline-container-orgab6492f" class="outline-4">
+<h4 id="orgab6492f"><span class="section-number-4">1.2.4</span> 分段单元</h4>
 </div>
 </div>
-<div id="outline-container-orgd5e2a8e" class="outline-2">
-<h2 id="orgd5e2a8e"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-org141fe9c" class="outline-3">
+<h3 id="org141fe9c"><span class="section-number-3">1.3</span> Linux中的分段</h3>
 </div>
-<div id="outline-container-org7d55ad0" class="outline-2">
-<h2 id="org7d55ad0"><span class="section-number-2">3</span> 进程地址空间</h2>
+<div id="outline-container-orga8e8d17" class="outline-3">
+<h3 id="orga8e8d17"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
+</div>
+<div id="outline-container-orgcd1b5d9" class="outline-3">
+<h3 id="orgcd1b5d9"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+</div>
+</div>
+<div id="outline-container-orgd3c9004" class="outline-2">
+<h2 id="orgd3c9004"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-org8f1ac8d" class="outline-2">
+<h2 id="org8f1ac8d"><span class="section-number-2">3</span> 进程地址空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-02-01 Mon 22:27</p>
+<p class="date">Created: 2021-02-16 Tue 18:54</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
