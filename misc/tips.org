@@ -1,4 +1,4 @@
-#+TITLE: 常见操作命令
+#+TITLE: 实践操作记录
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
