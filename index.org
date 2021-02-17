@@ -48,7 +48,12 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - [[./compiler/unroll_loop.html][unroll小循环对性能的提升]].
 * 网络
 * 虚拟化技术
+* ROS开发记录
+下述系列文章记录了自己的操作系统ROS的开发过程。
+
+1) [[./ros/i386-on-x64.html][x64机器上搭建i386开发环境]]。
 * 杂项
 - 一份较为详细的翻墙指南[[./bypass/index.html][Bypass Guide]]。
 - 大学老师对于教育的[[./misc/thoughts.html][看法]]。
 - Debian[[./misc/install.html][安装指导]]。
+- [[./misc/tips.html][常见操作命令]]。

@@ -1,0 +1,6 @@
+#+TITLE: x64机器上搭建i386开发环境
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css"> 
+本文介绍在x64环境下如何搭建出i386开发环境，因为ros的第一个实验环境选定在i386架构下，后续会支持x64架构，以及更往后兼容更多架构。
+
