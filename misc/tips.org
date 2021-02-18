@@ -8,3 +8,5 @@
 1) 如何创建分区，使用fdisk命令，添加新的磁盘空间，参见[[https://kb.vmware.com/s/article/1003940][资料]]。
 
    若要开机时自动挂载，可以修改/etc/fstab文件，使用命令sudo blkid查看磁盘的uuid。如果挂载出来的文件系统属于root，可以添加sudo chown username path/to/mountpoint命令到.bashrc文件（每次启动后有效）改变文件系统的属主。
+
+2) 如何创建

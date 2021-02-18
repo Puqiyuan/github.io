@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-02-17 Wed 20:47 -->
+<!-- 2021-02-18 Thu 21:55 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Notes of Computer Technology</title>
@@ -62,16 +62,16 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org879f1b0">1. Linux系统管理</a></li>
-<li><a href="#orge5239fa">2. Linux系统开发</a></li>
-<li><a href="#orgeb6349f">3. Linux内核</a></li>
-<li><a href="#org01b4534">4. 算法与数据结构</a></li>
-<li><a href="#org4e1b433">5. 体系架构</a></li>
-<li><a href="#org141a221">6. 编译器</a></li>
-<li><a href="#orgabfb902">7. 网络</a></li>
-<li><a href="#org5d5ba61">8. 虚拟化技术</a></li>
-<li><a href="#org18fe727">9. ROS开发记录</a></li>
-<li><a href="#orgd8a0883">10. 杂项</a></li>
+<li><a href="#org788d389">1. Linux系统管理</a></li>
+<li><a href="#org1092548">2. Linux系统开发</a></li>
+<li><a href="#org700150f">3. Linux内核</a></li>
+<li><a href="#org78497e5">4. 算法与数据结构</a></li>
+<li><a href="#orgcce6f47">5. 体系架构</a></li>
+<li><a href="#org0a316b5">6. 编译器与优化</a></li>
+<li><a href="#orgea627cd">7. 网络基础</a></li>
+<li><a href="#orgf7e656e">8. 虚拟化技术</a></li>
+<li><a href="#org9b7d45f">9. ROS开发记录</a></li>
+<li><a href="#org70796f5">10. 杂项</a></li>
 </ul>
 </div>
 </div>
@@ -99,55 +99,73 @@ For github repo: <a href="https://github.com/Puqiyuan/Puqiyuan.github.io">https:
 </p>
 </div>
 
-<div id="outline-container-org879f1b0" class="outline-2">
-<h2 id="org879f1b0"><span class="section-number-2">1</span> Linux系统管理</h2>
+<div id="outline-container-org788d389" class="outline-2">
+<h2 id="org788d389"><span class="section-number-2">1</span> Linux系统管理</h2>
 <div class="outline-text-2" id="text-1">
 <ul class="org-ul">
 <li><a href="./sys-admin/pipe-redirection.html">管道与重定向</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orge5239fa" class="outline-2">
-<h2 id="orge5239fa"><span class="section-number-2">2</span> Linux系统开发</h2>
+<div id="outline-container-org1092548" class="outline-2">
+<h2 id="org1092548"><span class="section-number-2">2</span> Linux系统开发</h2>
 <div class="outline-text-2" id="text-2">
 <ul class="org-ul">
 <li><a href="./sys-programming/thread.html">Linux线程之一</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgeb6349f" class="outline-2">
-<h2 id="orgeb6349f"><span class="section-number-2">3</span> Linux内核</h2>
+<div id="outline-container-org700150f" class="outline-2">
+<h2 id="org700150f"><span class="section-number-2">3</span> Linux内核</h2>
 <div class="outline-text-2" id="text-3">
 <ul class="org-ul">
-<li>LWN内核文档学习<a href="./kernel/lwn/lwn.html">记录</a>。</li>
-<li>内核<a href="./kernel/interrupts/interrupts.html">中断与异常</a>。</li>
-<li><a href="./kernel/process-management/process-sched.html">内核进程调度</a>。</li>
-<li>微线程切换在X86，X86-64，ARM，ARM64几种平台上的<a href="./kernel/process-management/switch-protected.html">实现</a>。</li>
-<li><a href="./kernel/driver/io_port.html">关于驱动的一些内核接口介绍</a>。</li>
-<li>内存管理系列文章
+<li>内存管理
+<ul class="org-ul">
+<li><a href="./kernel/mm/x86-mm/mm.html">80x86内存管理</a>。</li>
 
+<li>系列文章
 <ol class="org-ol">
 <li><a href="./kernel/mm/mm_series/des-phy-mem.html">内存管理之描述物理内存</a>。</li>
 
 <li><a href="./kernel/mm/mm_series/ptm.html">内存管理之页表管理</a>。</li>
 </ol></li>
-<li><a href="./kernel/driver/scull.html">一个简单的字符驱动程序</a>。</li>
+</ul></li>
+<li>进程管理
+<ul class="org-ul">
+<li><a href="https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf">lkd</a>介绍的进程管理知识：
+<ol class="org-ol">
+<li><a href="./kernel/lkd/proc/proc_mm.html">进程管理</a>（参看lkd）。</li>
+</ol></li>
+</ul></li>
+<li>网络
+<ul class="org-ul">
 <li><a href="./kernel/net/pci_net_card.html">PCI层与网卡</a>。</li>
-<li><a href="./kernel/mm/x86-mm/mm.html">80x86内存管理</a>。</li>
+</ul></li>
+
+<li>中断与异常
+<ul class="org-ul">
+<li>内核<a href="./kernel/interrupts/interrupts.html">中断与异常</a>（参考<a href="https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf">ulk</a>）。</li>
+</ul></li>
+<li>杂项
+<ul class="org-ul">
+<li><a href="./kernel/driver/io_port.html">关于驱动的一些内核接口介绍</a>。</li>
+<li><a href="./kernel/driver/scull.html">一个简单的字符驱动程序</a>。</li>
 <li><a href="./kernel/net/infra_com_init.html">用于组件初始化的内核基础设施.</a></li>
+</ul></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org01b4534" class="outline-2">
-<h2 id="org01b4534"><span class="section-number-2">4</span> 算法与数据结构</h2>
+
+<div id="outline-container-org78497e5" class="outline-2">
+<h2 id="org78497e5"><span class="section-number-2">4</span> 算法与数据结构</h2>
 <div class="outline-text-2" id="text-4">
 <ul class="org-ul">
 <li><a href="./algo/shiftand.html">Shift-And算法</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org4e1b433" class="outline-2">
-<h2 id="org4e1b433"><span class="section-number-2">5</span> 体系架构</h2>
+<div id="outline-container-orgcce6f47" class="outline-2">
+<h2 id="orgcce6f47"><span class="section-number-2">5</span> 体系架构</h2>
 <div class="outline-text-2" id="text-5">
 <ul class="org-ul">
 <li>AMD64(X86-64)架构下的系统资源<a href="./arch/amd64-sys-resources.html">介绍</a>。</li>
@@ -155,8 +173,8 @@ For github repo: <a href="https://github.com/Puqiyuan/Puqiyuan.github.io">https:
 </ul>
 </div>
 </div>
-<div id="outline-container-org141a221" class="outline-2">
-<h2 id="org141a221"><span class="section-number-2">6</span> 编译器</h2>
+<div id="outline-container-org0a316b5" class="outline-2">
+<h2 id="org0a316b5"><span class="section-number-2">6</span> 编译器与优化</h2>
 <div class="outline-text-2" id="text-6">
 <ul class="org-ul">
 <li><a href="./compiler/pointer-array-optimization.html">编译器优化对数组和指针的性能影响</a>。</li>
@@ -164,14 +182,14 @@ For github repo: <a href="https://github.com/Puqiyuan/Puqiyuan.github.io">https:
 </ul>
 </div>
 </div>
-<div id="outline-container-orgabfb902" class="outline-2">
-<h2 id="orgabfb902"><span class="section-number-2">7</span> 网络</h2>
+<div id="outline-container-orgea627cd" class="outline-2">
+<h2 id="orgea627cd"><span class="section-number-2">7</span> 网络基础</h2>
 </div>
-<div id="outline-container-org5d5ba61" class="outline-2">
-<h2 id="org5d5ba61"><span class="section-number-2">8</span> 虚拟化技术</h2>
+<div id="outline-container-orgf7e656e" class="outline-2">
+<h2 id="orgf7e656e"><span class="section-number-2">8</span> 虚拟化技术</h2>
 </div>
-<div id="outline-container-org18fe727" class="outline-2">
-<h2 id="org18fe727"><span class="section-number-2">9</span> ROS开发记录</h2>
+<div id="outline-container-org9b7d45f" class="outline-2">
+<h2 id="org9b7d45f"><span class="section-number-2">9</span> ROS开发记录</h2>
 <div class="outline-text-2" id="text-9">
 <p>
 下述系列文章记录了自己的操作系统ROS的开发过程。
@@ -182,21 +200,22 @@ For github repo: <a href="https://github.com/Puqiyuan/Puqiyuan.github.io">https:
 </ol>
 </div>
 </div>
-<div id="outline-container-orgd8a0883" class="outline-2">
-<h2 id="orgd8a0883"><span class="section-number-2">10</span> 杂项</h2>
+<div id="outline-container-org70796f5" class="outline-2">
+<h2 id="org70796f5"><span class="section-number-2">10</span> 杂项</h2>
 <div class="outline-text-2" id="text-10">
 <ul class="org-ul">
 <li>一份较为详细的翻墙指南<a href="./bypass/index.html">Bypass Guide</a>。</li>
 <li>大学老师对于教育的<a href="./misc/thoughts.html">看法</a>。</li>
 <li>Debian<a href="./misc/install.html">安装指导</a>。</li>
 <li><a href="./misc/tips.html">实践操作记录</a>。</li>
+<li>微线程切换在X86，X86-64，ARM，ARM64几种平台上的<a href="./kernel/process-management/switch-protected.html">实现</a>。</li>
 </ul>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-02-17 Wed 20:47</p>
+<p class="date">Created: 2021-02-18 Thu 21:55</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -24,29 +24,37 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 * Linux系统开发
 - [[./sys-programming/thread.html][Linux线程之一]]。
 * Linux内核
-- LWN内核文档学习[[./kernel/lwn/lwn.html][记录]]。
-- 内核[[./kernel/interrupts/interrupts.html][中断与异常]]。
-- [[./kernel/process-management/process-sched.html][内核进程调度]]。
-- 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
-- [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
-- 内存管理系列文章
+# - LWN内核文档学习[[./kernel/lwn/lwn.html][记录]]。
+- 内存管理
+  + [[./kernel/mm/x86-mm/mm.html][80x86内存管理]]。    
+
+  + 系列文章
+    1) [[./kernel/mm/mm_series/des-phy-mem.html][内存管理之描述物理内存]]。
+      
+    2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]。
+- 进程管理
+  + [[https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf][lkd]]介绍的进程管理知识：
+    1) [[./kernel/lkd/proc/proc_mm.html][进程管理]]（参看lkd）。
+    # 2) 进程调度
+- 网络
+  + [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
+    
+- 中断与异常
+  + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考[[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。
+- 杂项
+  + [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
+  + [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
+  + [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
   
-  1) [[./kernel/mm/mm_series/des-phy-mem.html][内存管理之描述物理内存]]。
-  
-  2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]。
-- [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
-- [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
-- [[./kernel/mm/x86-mm/mm.html][80x86内存管理]]。
-- [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。
 * 体系架构
 - AMD64(X86-64)架构下的系统资源[[./arch/amd64-sys-resources.html][介绍]]。
 - AMD64(X86-64)架构下的[[./arch/segmented_virtual_memory.html][分段虚拟内存]]。
-* 编译器
+* 编译器与优化
 - [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
 - [[./compiler/unroll_loop.html][unroll小循环对性能的提升]].
-* 网络
+* 网络基础
 * 虚拟化技术
 * ROS开发记录
 下述系列文章记录了自己的操作系统ROS的开发过程。
@@ -57,3 +65,4 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - 大学老师对于教育的[[./misc/thoughts.html][看法]]。
 - Debian[[./misc/install.html][安装指导]]。
 - [[./misc/tips.html][实践操作记录]]。
+- 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
