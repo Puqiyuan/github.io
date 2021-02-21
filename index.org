@@ -45,6 +45,8 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
   + [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
   + [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
   + [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
+  + [[./kernel/debug/debug.html][内核调试手段及工具]]。
+      
   
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。

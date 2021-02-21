@@ -1,0 +1,23 @@
+#+TITLE: bpf工具
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+本文介绍bpf调试内核。
+
+bcc（bpf）性能分析工具从应用层到内核层都可以分析。下面的图反映了各种bcc工具作用在内核的各个部件。
+
+#+CAPTION: BCC性能分析工具
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 30% :height 30%
+[[./img/bcc-performance.png]]
+
+下面的表格对这些工具进行了下分类，以它们各自能分析什么对象的角度。
+
+#+CAPTION: BCC工具分类
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 30% :height 30%
+[[./img/bcc-char.png]]
+
+bcc工具安装很容易，如下命令可以安装：
+: sudo apt-get install bpfcc-tools linux-headers-$(uname -r)
+默认情况下这些工具会被安装到/sbin目录，后缀是bpfcc。
