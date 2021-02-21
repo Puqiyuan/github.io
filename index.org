@@ -25,23 +25,23 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - [[./sys-programming/thread.html][Linux线程之一]]。
 * Linux内核
 # - LWN内核文档学习[[./kernel/lwn/lwn.html][记录]]。
-- 内存管理
+** 内存管理
   + [[./kernel/mm/x86-mm/mm.html][80x86内存管理]]。    
 
   + 系列文章
     1) [[./kernel/mm/mm_series/des-phy-mem.html][内存管理之描述物理内存]]。
       
     2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]。
-- 进程管理
+** 进程管理
   + [[https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf][lkd]]介绍的进程管理知识：
     1) [[./kernel/lkd/proc/proc_mm.html][进程管理]]（参看lkd）。
     # 2) 进程调度
-- 网络
+** 网络
   + [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
     
-- 中断与异常
+** 中断与异常
   + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考[[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。
-- 杂项
+** 杂项
   + [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
   + [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
   + [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
