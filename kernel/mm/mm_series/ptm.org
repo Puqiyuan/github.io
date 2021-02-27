@@ -10,7 +10,7 @@
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 
 * 页目录表示
-每一个进程都有一个指针指向它自己PGD的指针(mm_struct->pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
+每一个进程都有一个指向它自己PGD的指针(mm_struct->pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
 #+begin_src C++ :includes <stdio.h>
 typedef struct { unsigned long pgd; } pgd_t;
 #+end_src
@@ -63,3 +63,22 @@ PAGE_SHIFT表示了一个页面的大小，可以看到ia64架构下，可以配
 #define PGDIR_SHIFT		(PMD_SHIFT + (PTRS_PER_PTD_SHIFT))
 #endif
 #+end_src
+
+而MASK值可以和线性地址进行AND操作从而取出其高位部分的比特，经常被用来确定一个线性地址是否在给定级别的页表上对齐。而SIZE宏主要用来表明各级别页表里的条目能寻址多少字节。SIZE与MASK宏的关系如下图：
+#+CAPTION: SIZE与MASK宏
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/size-mask.png]]
+
+下面以X86为例来说下这三个类型的宏是如何计算的，其中SHIFT宏较为重要，因为其它的宏都是基于这个宏计算的。在X86上的三级页表下：
+#+begin_src C++ :includes <stdio.h>
+/* PAGE_SHIFT determines the page size */
+#define PAGE_SHIFT		12
+#define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)
+#define PAGE_MASK		(~(PAGE_SIZE-1))
+#+end_src
+
+PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12比特。一个页面的大小可以通过2^PAGE_SHIFT来算出。PAGE_MASK就是PAGE_SIZE-1再取反。如果一个页面需要在页边界对齐，PAGE_ALIGN宏可以使用。其它级别的MASK和SIZE可以类似方式计算出。
+
+
+* 页表条目表示
