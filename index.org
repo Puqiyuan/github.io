@@ -55,7 +55,9 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - AMD64(X86-64)架构下的[[./arch/segmented_virtual_memory.html][分段虚拟内存]]。
 * 编译器与优化
 - [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
-- [[./compiler/unroll_loop.html][unroll小循环对性能的提升]].
+- [[./compiler/unroll_loop.html][unroll小循环对性能的提升]]。
+- [[./compiler/quick_bool_expr.html][重排bool表达式对于条件判断语句的性能影响]]。
+    
 * 网络基础
 * 虚拟化技术
 * ROS开发记录

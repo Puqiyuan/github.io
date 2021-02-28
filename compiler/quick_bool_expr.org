@@ -1,0 +1,12 @@
+#+TITLE: 布尔表达式对于条件表达式的性能影响
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+
+对于使用逻辑与（AND）或逻辑或（||）的操作符，注意逻辑表达式的排列会影响性能：
+| 使用哪个操作符 | 计算结果概率高的先写（靠左） |
+|----------------+------------------------------|
+| &&（逻辑与）   | False                        |
+|              |                              |
+
