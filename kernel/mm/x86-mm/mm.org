@@ -148,7 +148,27 @@ GDT的第一个条目通常设为0。这可以保证逻辑地址为NULL时，可
 - 当所有进程都使用相同的段寄存器时，也就是它们共享相同的线性地址空间，内存管理就会变得更加简单。
 - Linux的一个设计目的就是可移植性，尽量移植到更多的架构。而RISC对于分段支持的不是很好。
 
-  
+所有在User Mode下运行的进程，使用user code segment和user data segment来寻址指令和
+数据。类似的，所有在Kernel Mode下运行的进程，使用kernel code segment和kernel data segment
+来寻址指令和数据。下面的表描述了对于这四个段描述符的各个域：
+| Segment     |       Base | G |   Limit | S | Type | DPL | D/B | P |
+|-------------+------------+---+---------+---+------+-----+-----+---|
+| user code   | 0x00000000 | 1 | 0xfffff | 1 |   10 |   3 |   1 | 1 |
+| user data   | 0x00000000 | 1 | 0xfffff | 1 |    2 |   3 |   1 | 1 |
+| kernel code | 0x00000000 | 1 | 0xfffff | 1 |   10 |   0 |   1 | 1 |
+| kernel data | 0x00000000 | 1 | 0xfffff | 1 |    2 |   0 |   1 | 1 |
+对应的段描述符由四个宏定义，分别是__USER_CS、__USER_DS、__KERNEL_CS以及__KERNEL_DS。为了寻址内核代码段，内核就加载由__KERNEL_CS宏决定的值到cs段寄存器。
+
+注意这些段的线性地址都是从0开始到2**32-1，这意味着所有的进程，不论是在User Mode还是Kernel Mode下都可能使用相同的逻辑地址。
+
+另外在Linux下，逻辑地址和线性地址是重合的，也就是逻辑地址的offset域就对应着线性地址。
+
+如前所述，CPU的当前权限级表明了处理器是在User模式还是Kernel模式下，并且是由存在cs寄存器中段选择子的RPL域指明。CPL如果改变，对应的某些段寄存器就可能会更新，比如，CPL是3（User Mode）
+的话，ds寄存器就必须包含user data segment的段选择子。当CPL是0的时候，ds寄存器就必须包含kernel data segment的段选择子。
+
+对于ss寄存器也有类似的情形，当CPL为3时，必须引用用户模式的栈，为0就是内核模式的栈了。当从用户模式切换到内核模式时，Linux总是确保ss寄存器包含内核数据段的段选择子。
+
+
 *** Linux GDT
 *** Linux LDTs
 ** 硬件上的分页
