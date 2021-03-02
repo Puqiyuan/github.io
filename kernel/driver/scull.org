@@ -200,4 +200,54 @@ inode结构体包含许多信息，但是作为驱动作者，仅仅关心其中
 2) struct cdev *i_cdev:
 
    当inode指向一个字符设备时，这个成员就是内核内部对于字符设备的结构体表示。
+
+为了提高程序的可移植性，内核开发者提供了两个宏用于从inode中获取major以及minor号码：
+#+begin_src c :includes <stdio.h>
+static inline unsigned iminor(const struct inode *inode)
+{
+	return MINOR(inode->i_rdev);
+}
+
+static inline unsigned imajor(const struct inode *inode)
+{
+	return MAJOR(inode->i_rdev);
+}
+#+end_src
+
+可以看到内部其实还是前文介绍过的MINOR和MAJOR宏。
+** 字符设备注册
+如前介绍过的，在内核内部使用cdev结构体来描述字符设备，在内核能够调用设备操作之前，必须要分配和注册这些结构体。在编写的代码里必须包含<linux/cdev.h>，这个头文件会定义相关的结构体和关联的辅助函数。
+
+有两种方式可以用来初始化这些结构体，如果想在运行时动态的分配一个单独的cdev结构体，可以使用下面的代码：
+#+begin_src c :includes <stdio.h>
+struct cdev *my_cdev = cdev_alloc();
+my_cdev->ops = &my_fops;
+#+end_src
+
+不过某些时候，想要把cdev类型的结构体嵌入到自己定义的设备相关的结构体里，这也是scull驱动程
+序所做的。在这种情况下，就需要使用如下代码来初始化了：
+#+begin_src c :includes <stdio.h>
+void cdev_init(struct cdev *cdev, )
+#+end_src
+
+无论采用哪种方式，cdev结构体都需要初始化。和file_operations结构体类似，struct cdev也有一个owner域需要被设置成THIS_MODULE。
+
+cdev结构体设置好了之后，最后一步就是向内核宣告它的存在：
+#+begin_src c :includes <stdio.h>
+int cdev_add(struct cdev *dev, dev_t num, unsigned int count);
+#+end_src
+
+这里dev就是cdev结构体了，num是这个设备会响应的第一个数字，count是关联到这个设备的号码个数。通常count是1，不过有时候对于一个特定的设备有多个设备号码是有意义的，比如，对于SCSI磁带驱动，通过分配给物理设备以多个minor number，可以允许用户空间去选择不同的操作模式。
+
+使用cdev_add有几点需要注意，一是这个调用可能会失败，如果是返回负值，设备就没能加入到系统里。
+但大多数时候，它是返回成功的。不过只要cdev_add返回成功，设备在系统中就处于live状态，它与之
+关联的操作就可能会被调用。在完全准备好处理设备相关联的操作之前，cdev_add不应该被调用。
+
+为了从系统中删除char字符设备：
+#+begin_src c :includes <stdio.h>
+void cdev_del(struct cdev *dev);
+#+end_src
+
+当然，cdev_del被调用了就不应该再访问cdev结构体了。
+*** scull驱动中的设备注册
 * 代码实现
