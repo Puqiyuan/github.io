@@ -170,6 +170,27 @@ GDT的第一个条目通常设为0。这可以保证逻辑地址为NULL时，可
 
 
 *** Linux GDT
+在单处理器中只有一个GDT，然而在多处理器情况时，每个CPU都会对应一个GDT。所有的GDT都会存在cpu_gdt_table数组里，而GDT的地址和大小则存在cpu_gdt_descr数组里。
+
+GDT的布局如下图示意：
+
+#+CAPTION: 全局描述符表
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/gdt.png]]
+
+每一个GDT都包含18个段描述符以及14个null，unused，以及reserved（保留的）条目。插入unused条目的段描述符主要就是为了访问段描述符在硬件cache的32字节处对齐。
+
+每个GDT中的18个段描述符指向下面这些段：
+- 代码和数据段，内核和用户态各两个。
+- 一个任务状态段（TSS），系统中每个处理器的TSS都不同。对应于一个TSS的线性地址空间是对应于内核数据段的线性地址空间的一个小子集。任务状态段依次存储在init_tss数组中。对于第n个处理器，其TSS描述符的Base域指向init_tss数组的第n个元素。G标志被清0，Limit域被设置成0xeb，因为TSS段有236字节长。Type域为9或11，DPL为0，即是User Mode下的进程不允许访问TSS段。
+
+- 一个默认的LDT局部描述符，通常由所有进程共享。
+- 三个线程局部存储段：这三个段的机制是，允许多线程应用可以使用最多三个段用来存储线程私有的数据。set_thread_area和get_thread_area系统调用分别用来为正在执行的进程创建和释放TLS段。
+- 三个APM（Advanced Power Management）段：由BIOS利用的段。
+- 五个由BIOS使用的Plug and Play(PnP)段。
+- 一个由内核使用的用来处理double fault异常的特殊TSS段。
+
 *** Linux LDTs
 ** 硬件上的分页
 ** Linux中的分页
