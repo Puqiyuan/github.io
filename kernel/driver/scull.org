@@ -239,9 +239,7 @@ int cdev_add(struct cdev *dev, dev_t num, unsigned int count);
 
 这里dev就是cdev结构体了，num是这个设备会响应的第一个数字，count是关联到这个设备的号码个数。通常count是1，不过有时候对于一个特定的设备有多个设备号码是有意义的，比如，对于SCSI磁带驱动，通过分配给物理设备以多个minor number，可以允许用户空间去选择不同的操作模式。
 
-使用cdev_add有几点需要注意，一是这个调用可能会失败，如果是返回负值，设备就没能加入到系统里。
-但大多数时候，它是返回成功的。不过只要cdev_add返回成功，设备在系统中就处于live状态，它与之
-关联的操作就可能会被调用。在完全准备好处理设备相关联的操作之前，cdev_add不应该被调用。
+使用cdev_add有几点需要注意，一是这个调用可能会失败，如果是返回负值，设备就没能加入到系统里。但大多数时候，它是返回成功的。不过只要cdev_add返回成功，设备在系统中就处于live状态，它与之关联的操作就可能会被调用。在完全准备好处理设备相关联的操作之前，cdev_add不应该被调用。
 
 为了从系统中删除char字符设备：
 #+begin_src c :includes <stdio.h>
@@ -250,4 +248,38 @@ void cdev_del(struct cdev *dev);
 
 当然，cdev_del被调用了就不应该再访问cdev结构体了。
 *** scull驱动中的设备注册
+scull驱动使用struct scull_dev来代表每个结构体。这个结构体如下定义：
+#+CAPTION: scull_dev结构体
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 30% :height 30%
+[[./img/scull_dev.png]]
+
+后面遇到这个结构体里的成员时再详细介绍每个成员。现在注意下cdev成员，cdev充当内核和设备之间的接口。这个结构体必须被初始化并添加到系统中，scull的scull_setup_cdev函数完成这个处理：
+#+CAPTION: cdev初始化
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 30% :height 30%
+[[./img/cdev-init.png]]
+
+注意这里是初始化dev里内嵌的cdev。
+
+*** open和release方法
+现在可以看下在scull里使用的open和release方法。
+**** open方法
+驱动实现open方法一般是做一些准备的操作。在许多驱动里，open一般会执行下面这些任务：
+- 检查设备相关的错误（比如设备未准备就绪或者是类似的硬件问题）。
+- 如果设备是第一次打开，初始化它。
+- 如果有必要，需要更新f_op指针。
+- 分配和填充filp->private_data中的数据结构。
+
+不过第一步当然是确认哪个设备被打开，回忆open方法的原型如下：
+#+begin_src c :includes <stdio.h>
+int (*open) (struct inode *inode, struct file *filp)
+#+end_src
+inode参数里的i_cdev成员就包含了之前设置好的cdev结构体，但问题是我们并不想要cdev结构体，而是想要包含cdev结构体的scull_dev结构体。C语言提供offsetof来达到这个目的，不过在linux/kernel.h里已经定义好了一个container_of宏可供使用：
+#+begin_src c :includes <stdio.h>
+container_of(pointer, container_type, container_field)
+#+end_src
+
+这个宏的pointer参数指向一个container_field的类型，这个成员类型（container_field）存在于
+container_type结构体中，并且返回一个指向包含结构体类型（container_type）的指针。
 * 代码实现
