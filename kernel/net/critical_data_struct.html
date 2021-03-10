@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-03-10 Wed 21:01 -->
+<!-- 2021-03-10 Wed 22:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>用于组件初始化的内核基础设施</title>
+<title>关键数据结构</title>
 <meta name="generator" content="Org mode">
 <meta name="author" content="Cauchy(pqy7172@gmail.com)">
 <link rel="stylesheet" href="../../org-manual.css" type="text/css">
@@ -57,60 +57,73 @@ for the JavaScript code in this tag.
 </head>
 <body>
 <div id="content">
-<h1 class="title">用于组件初始化的内核基础设施</h1>
+<h1 class="title">关键数据结构</h1>
 <div id="table-of-contents">
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org1168d36">1. 启动时内核选项</a></li>
-<li><a href="#orgcfd8644">2. 模块初始化代码</a></li>
-<li><a href="#orga05c3f0">3. 基于宏的标签</a></li>
-<li><a href="#org46728fb">4. 启动时初始化例程</a></li>
-<li><a href="#org17d58ee">5. 内存优化</a></li>
+<li><a href="#org0b4acc5">1. 套接字缓存：sk_buff结构体</a></li>
+<li><a href="#org4cba93c">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
 <p>
-本文介绍一些内核基础设施, 在内核组件初始化时, 会用到这些工具(设施).
+在阅读本系列的后续文章和研究内核网络代码时，会不时参考几个关键结构，自然对其中的各个域也要有一定的理解。
 </p>
 
 <p>
-为了彻底的理解一个内核组件, 除了理解相应组件的函数的功能, 也要清楚这些函数在什么时候被谁调用. 
+本文会介绍下面这些数据结构，并且会提及某些操作这些数据结构的函数和宏：
+</p>
+<ul class="org-ul">
+<li><p>
+struct sk_buff
 </p>
 
 <p>
-本文会介绍一些内核组件初始化的公用函数, 这些公用的用于组件初始化的函数不论是静态内建的代码还是模块代码都会用到. 大概会介绍到以下几方面:
-</p>
-<ol class="org-ol">
-<li>初始化函数是如何命名以及如何由特殊的宏标识.</li>
-<li>基于内核配置, 这些宏是如何被定义以及它们被用来优化内存使用, 和用来确保各种初始化操作按照正确的顺序来完成.</li>
-<li>什么时候以及怎样执行这些函数.</li>
-</ol>
+用于存放一个packet。该结构体会被所有网络层用到，存放头部信息，用户数据（负载payload）信息，以及其它需要协调工作的信息。
+</p></li>
 
-<div id="outline-container-org1168d36" class="outline-2">
-<h2 id="org1168d36"><span class="section-number-2">1</span> 启动时内核选项</h2>
+<li><p>
+struct net_device
+</p>
+
+<p>
+在内核中的网络设备都由这个结构体表示，它包含有硬件以及软件配置信息。后面的系列文章会介绍它的分配。
+</p></li>
+</ul>
+
+<p>
+另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
+</p>
+<div id="outline-container-org0b4acc5" class="outline-2">
+<h2 id="org0b4acc5"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
-Linux内核允许把配置选项传递给它, 采用这种方式可以微调内核。两次调用 <b>parse_args</b> 函数用来解析启动时的配置。
+这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
+</p>
+
+<p>
+在内核开发的历史上，这个结构体改变了许多次，包括添加新的选项，重排已经存在的成员，这些域大致可以分为以下四类：
+</p>
+<ul class="org-ul">
+<li>布局</li>
+<li>通用</li>
+<li>特定功能相关的</li>
+<li>管理函数</li>
+</ul>
+
+<p>
+这个结构体会被几个不同的网络层（包括MAC或者其它在第二层的链路层协议，L3层上的IP，L4层上的TCP或UDP）使用到，并且随着包从一层传到另一层，结构体中的各个域也会改变。
 </p>
 </div>
 </div>
-<div id="outline-container-orgcfd8644" class="outline-2">
-<h2 id="orgcfd8644"><span class="section-number-2">2</span> 模块初始化代码</h2>
-</div>
-<div id="outline-container-orga05c3f0" class="outline-2">
-<h2 id="orga05c3f0"><span class="section-number-2">3</span> 基于宏的标签</h2>
-</div>
-<div id="outline-container-org46728fb" class="outline-2">
-<h2 id="org46728fb"><span class="section-number-2">4</span> 启动时初始化例程</h2>
-</div>
-<div id="outline-container-org17d58ee" class="outline-2">
-<h2 id="org17d58ee"><span class="section-number-2">5</span> 内存优化</h2>
+<div id="outline-container-org4cba93c" class="outline-2">
+<h2 id="org4cba93c"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-03-10 Wed 21:01</p>
+<p class="date">Created: 2021-03-10 Wed 22:00</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

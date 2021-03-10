@@ -38,7 +38,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
     # 2) 进程调度
 ** 网络
   + [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
-    
+  + [[./kernel/net/critical_data_struct.html][关键数据结构]]。
 ** 中断与异常
   + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考[[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。
 ** 杂项
