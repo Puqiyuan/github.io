@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-02-27 Sat 18:42 -->
+<!-- 2021-03-13 Sat 22:34 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>分段虚拟内存</title>
@@ -62,19 +62,25 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org50b40d5">1. 实模式分段</a></li>
-<li><a href="#org0fd0885">2. 虚拟8086模式分段</a></li>
-<li><a href="#orga860673">3. 保护模式分段内存模型</a></li>
-<li><a href="#orgd2ad3b9">4. 分段数据结构与寄存器</a></li>
-<li><a href="#org40209aa">5. 段选择子与寄存器</a></li>
-<li><a href="#org710cb48">6. 描述符表</a></li>
-<li><a href="#orge73a850">7. Legacy分段描述符</a></li>
-<li><a href="#orgfd740c1">8. Long-mode分段描述符</a></li>
-<li><a href="#org7ba549e">9. 分段保护概要</a></li>
-<li><a href="#org2c40006">10. 数据访问权限检查</a></li>
-<li><a href="#org8836b6d">11. 控制转换权限检查</a></li>
-<li><a href="#org88c0679">12. 限长检查</a></li>
-<li><a href="#org6a5585d">13. 类型检查</a></li>
+<li><a href="#org78b305b">1. 实模式分段</a></li>
+<li><a href="#org158ad96">2. 虚拟8086模式分段</a></li>
+<li><a href="#org5995bc6">3. 保护模式分段内存模型</a>
+<ul>
+<li><a href="#orgd55be22">3.1. 多段模型</a></li>
+<li><a href="#org283069d">3.2. 平坦内存模型</a></li>
+<li><a href="#orgca0d237">3.3. 64位模式下的分段</a></li>
+</ul>
+</li>
+<li><a href="#orge4e5496">4. 分段数据结构与寄存器</a></li>
+<li><a href="#org7d88f62">5. 段选择子与寄存器</a></li>
+<li><a href="#orgfc3b2ec">6. 描述符表</a></li>
+<li><a href="#org56a9ceb">7. Legacy分段描述符</a></li>
+<li><a href="#org5c61402">8. Long-mode分段描述符</a></li>
+<li><a href="#orgfdd68ee">9. 分段保护概要</a></li>
+<li><a href="#org1146312">10. 数据访问权限检查</a></li>
+<li><a href="#org7623a04">11. 控制转换权限检查</a></li>
+<li><a href="#org675c477">12. 限长检查</a></li>
+<li><a href="#orga91f65a">13. 类型检查</a></li>
 </ul>
 </div>
 </div>
@@ -97,8 +103,8 @@ for the JavaScript code in this tag.
 <li>在兼容模式下，分段的功能和legacy mode下一样。</li>
 <li>64-bit模式下，分段是禁用了的，64-bit的虚拟地址是平坦寻址的。然而某些段寄存器仍旧保留了它的功能，尤其是系统段寄存器。</li>
 </ul>
-<div id="outline-container-org50b40d5" class="outline-2">
-<h2 id="org50b40d5"><span class="section-number-2">1</span> 实模式分段</h2>
+<div id="outline-container-org78b305b" class="outline-2">
+<h2 id="org78b305b"><span class="section-number-2">1</span> 实模式分段</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 在重启或加电后，处理器一开始总是会进入实模式，保护模式从实模式进入。
@@ -121,46 +127,67 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 </div>
 </div>
-<div id="outline-container-org0fd0885" class="outline-2">
-<h2 id="org0fd0885"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
+<div id="outline-container-org158ad96" class="outline-2">
+<h2 id="org158ad96"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+虚拟8086模式可以支持16-bit的实模式程序运行在保护模式下。它会使用相对简单的内存分段，可选的分页机制，以及限长保护检查。在虚拟8086模式运行的程序可以访问最大1MB的内存空间。
+</p>
+
+<p>
+在实模式下的段，每个64K的段对齐在16-byte字节的边界处。段基址就是给定段的最低地址，并且等于段选择子×16。
+</p>
 </div>
-<div id="outline-container-orga860673" class="outline-2">
-<h2 id="orga860673"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
 </div>
-<div id="outline-container-orgd2ad3b9" class="outline-2">
-<h2 id="orgd2ad3b9"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
+<div id="outline-container-org5995bc6" class="outline-2">
+<h2 id="org5995bc6"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
+<div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org40209aa" class="outline-2">
-<h2 id="org40209aa"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
+<div id="outline-container-orgd55be22" class="outline-3">
+<h3 id="orgd55be22"><span class="section-number-3">3.1</span> 多段模型</h3>
 </div>
-<div id="outline-container-org710cb48" class="outline-2">
-<h2 id="org710cb48"><span class="section-number-2">6</span> 描述符表</h2>
+
+<div id="outline-container-org283069d" class="outline-3">
+<h3 id="org283069d"><span class="section-number-3">3.2</span> 平坦内存模型</h3>
 </div>
-<div id="outline-container-orge73a850" class="outline-2">
-<h2 id="orge73a850"><span class="section-number-2">7</span> Legacy分段描述符</h2>
+<div id="outline-container-orgca0d237" class="outline-3">
+<h3 id="orgca0d237"><span class="section-number-3">3.3</span> 64位模式下的分段</h3>
 </div>
-<div id="outline-container-orgfd740c1" class="outline-2">
-<h2 id="orgfd740c1"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
 </div>
-<div id="outline-container-org7ba549e" class="outline-2">
-<h2 id="org7ba549e"><span class="section-number-2">9</span> 分段保护概要</h2>
+<div id="outline-container-orge4e5496" class="outline-2">
+<h2 id="orge4e5496"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
 </div>
-<div id="outline-container-org2c40006" class="outline-2">
-<h2 id="org2c40006"><span class="section-number-2">10</span> 数据访问权限检查</h2>
+<div id="outline-container-org7d88f62" class="outline-2">
+<h2 id="org7d88f62"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
 </div>
-<div id="outline-container-org8836b6d" class="outline-2">
-<h2 id="org8836b6d"><span class="section-number-2">11</span> 控制转换权限检查</h2>
+<div id="outline-container-orgfc3b2ec" class="outline-2">
+<h2 id="orgfc3b2ec"><span class="section-number-2">6</span> 描述符表</h2>
 </div>
-<div id="outline-container-org88c0679" class="outline-2">
-<h2 id="org88c0679"><span class="section-number-2">12</span> 限长检查</h2>
+<div id="outline-container-org56a9ceb" class="outline-2">
+<h2 id="org56a9ceb"><span class="section-number-2">7</span> Legacy分段描述符</h2>
 </div>
-<div id="outline-container-org6a5585d" class="outline-2">
-<h2 id="org6a5585d"><span class="section-number-2">13</span> 类型检查</h2>
+<div id="outline-container-org5c61402" class="outline-2">
+<h2 id="org5c61402"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
+</div>
+<div id="outline-container-orgfdd68ee" class="outline-2">
+<h2 id="orgfdd68ee"><span class="section-number-2">9</span> 分段保护概要</h2>
+</div>
+<div id="outline-container-org1146312" class="outline-2">
+<h2 id="org1146312"><span class="section-number-2">10</span> 数据访问权限检查</h2>
+</div>
+<div id="outline-container-org7623a04" class="outline-2">
+<h2 id="org7623a04"><span class="section-number-2">11</span> 控制转换权限检查</h2>
+</div>
+<div id="outline-container-org675c477" class="outline-2">
+<h2 id="org675c477"><span class="section-number-2">12</span> 限长检查</h2>
+</div>
+<div id="outline-container-orga91f65a" class="outline-2">
+<h2 id="orga91f65a"><span class="section-number-2">13</span> 类型检查</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-02-27 Sat 18:42</p>
+<p class="date">Created: 2021-03-13 Sat 22:34</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

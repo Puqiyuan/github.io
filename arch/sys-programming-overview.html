@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-03-13 Sat 23:03 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>系统编程概要</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">系统编程概要</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org435c37d">1. 内存模型</a></li>
+<li><a href="#org86ac21c">2. 内存管理</a></li>
+<li><a href="#orge9856d8">3. 操作模式</a></li>
+<li><a href="#org92a86fe">4. 系统寄存器</a></li>
+<li><a href="#org33914a3">5. 系统数据结构</a></li>
+<li><a href="#org1beb524">6. 中断</a></li>
+<li><a href="#orgded0f64">7. 其它系统编程功能</a></li>
+</ul>
+</div>
+</div>
+<p>
+本系列文章是为系统软件开发者准备的，系统软件开发者是指编写操作系统，加载器，链接器，设备驱动或者其它请求访问系统资源的程序。这些系统软件通常只能提供给具有最高权限级的软件（CPL=0），权限以及它们的交互在后面的系列文章介绍。
+</p>
+
+<p>
+本章主要介绍AMD64架构提供给系统软件开发者的基本功能，这些概念包括：
+</p>
+<ul class="org-ul">
+<li>支持的地址形式以及内存是怎样组织的。</li>
+<li>内存管理硬件是怎样利用各种形式的地址去访问内存。</li>
+<li>处理器操作模式，以及内存管理是怎样支持这些模式的。</li>
+<li>用来管理系统资源的系统控制器。</li>
+<li>中断与异常机制，以及它们是怎样打断程序的执行从而报告错误。</li>
+<li>此外，一些其它的功能也会提供给系统软件，包括硬件多任务的支持，报告Machine-check异常，调  试软件以及优化程序性能。</li>
+</ul>
+
+<p>
+为了支持64-bit的操作系统和应用，许多遗留下来的功能个特性都有被加强，但同时也向后兼容已经存在的软件。
+</p>
+
+<div id="outline-container-org435c37d" class="outline-2">
+<h2 id="org435c37d"><span class="section-number-2">1</span> 内存模型</h2>
+</div>
+<div id="outline-container-org86ac21c" class="outline-2">
+<h2 id="org86ac21c"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-orge9856d8" class="outline-2">
+<h2 id="orge9856d8"><span class="section-number-2">3</span> 操作模式</h2>
+</div>
+<div id="outline-container-org92a86fe" class="outline-2">
+<h2 id="org92a86fe"><span class="section-number-2">4</span> 系统寄存器</h2>
+</div>
+<div id="outline-container-org33914a3" class="outline-2">
+<h2 id="org33914a3"><span class="section-number-2">5</span> 系统数据结构</h2>
+</div>
+<div id="outline-container-org1beb524" class="outline-2">
+<h2 id="org1beb524"><span class="section-number-2">6</span> 中断</h2>
+</div>
+<div id="outline-container-orgded0f64" class="outline-2">
+<h2 id="orgded0f64"><span class="section-number-2">7</span> 其它系统编程功能</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-03-13 Sat 23:03</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
