@@ -280,6 +280,31 @@ inode参数里的i_cdev成员就包含了之前设置好的cdev结构体，但�
 container_of(pointer, container_type, container_field)
 #+end_src
 
-这个宏的pointer参数指向一个container_field的类型，这个成员类型（container_field）存在于
-container_type结构体中，并且返回一个指向包含结构体类型（container_type）的指针。
+这个宏的pointer参数指向一个container_field的类型，这个成员类型（container_field）存在于container_type结构体中，并且返回一个指向包含结构体类型（container_type）的指针。在scull_open函数里, 这个宏用来寻找恰当的设备结构体:
+
+#+begin_src c :includes <stdio.h>
+struct scull_dev *dev;
+dev = container_of(inode->i_cdev, struct scull_dev, cdev);
+filp->private_data = dev;
+#+end_src
+
+一旦找到了scull_dev结构体, 为了方便未来的访问, 就把指向它的指针放到file结构体的private_data成员里.
+
+另外一种用来确定打开设备的方法是查看inode结构体里的minor number成员. 注意使用iminor宏来从inode结构体里获得minor number, 并且要确保对应的设备已经准备就绪操作.
+
+这样scull_open方法(稍微简化的版本)就很容易理解了:
+#+begin_src c :includes <stdio.h>
+int scull_open(struct inode *inode, struct file *filp)
+{
+    struct scull_dev *dev; /*device information*/
+    dev = container_of(inode->i_cdev, struct scull_dev, cdev);
+    filp->private_data = dev; /*for other methods*/
+
+    if ( (filp->f_flags & O_ACCMODE) == O_WRONLY) {
+        scull_trim(dev);
+    }
+    return 0;
+}
+#+end_src
+**** release方法
 * 代码实现
