@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-03-10 Wed 22:00 -->
+<!-- 2021-03-17 Wed 22:05 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,8 +62,12 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org0b4acc5">1. 套接字缓存：sk_buff结构体</a></li>
-<li><a href="#org4cba93c">2. net_device结构体</a></li>
+<li><a href="#org6c2932b">1. 套接字缓存：sk_buff结构体</a>
+<ul>
+<li><a href="#orgd24c6d7">1.1. 网络选项与内核结构体</a></li>
+</ul>
+</li>
+<li><a href="#org0802230">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
@@ -95,8 +99,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-org0b4acc5" class="outline-2">
-<h2 id="org0b4acc5"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-org6c2932b" class="outline-2">
+<h2 id="org6c2932b"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -113,17 +117,59 @@ struct net_device
 </ul>
 
 <p>
-这个结构体会被几个不同的网络层（包括MAC或者其它在第二层的链路层协议，L3层上的IP，L4层上的TCP或UDP）使用到，并且随着包从一层传到另一层，结构体中的各个域也会改变。
+这个结构体会被几个不同的网络层（包括MAC或者其它在第二层的链路层协议，L3层上的IP，L4层上的TCP或UDP）使用到，并且随着包从一层传到另一层，结构体中的各个域也会改变。在L4层把包传给L3层
+之前, 会附加一个头部信息, 而L3层在传到L2层时, 也会附加它的头. 比起将数据从一层拷贝到另一层,
+只附加头部信息, 效率就很高. 因为向一个buffer的头部处添加空间(通过操作指向这个buffer的变量)是一个比较复杂的操作, 内核提供skb_reserve函数来完成这个功能. 因此到每个协议层时, 要做的第一件事就是调用skb_reserve函数来为协议预留头部信息. 在后面的小节里我们会看到一个例子, 当缓存在层之间传递时, 内核是如何确保在缓存的头部预留足够多的空间.
+</p>
+
+<p>
+当缓存(数据)在协议栈由底向上传递时, 底层(旧)的头部信息就不再需要了. 举例来说, L2层的头部信息, 仅由设备驱动层使用, L3层并不关心. 不过内核代码并不是直接从缓存(数据)中直接删除L2层的头部信息, 只是将指向payload的指针向前移动到L3的头部信息处, 这样消耗的CPU周期就比较少.
+</p>
+</div>
+
+<div id="outline-container-orgd24c6d7" class="outline-3">
+<h3 id="orgd24c6d7"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
+播以及其它的功能. 这些选项大多数都要求在内核的数据结构里增加更多的域. 因此在sk_buff里随处
+可见C的预处理宏#ifdef. 比如在sk_buff结构体的底部, 可以看到这样的代码部分:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-C++">...
+<span style="color: #94BFF3;">#ifdef</span> CONFIG_NET_SCHED
+  __u32 tc_index;
+<span style="color: #94BFF3;">#ifdef</span> CONFIG_NET_CLS_ACT
+  <span style="color: #7CB8BB;">__32</span> <span style="color: #DFAF8F;">tc_verd</span>;
+  <span style="color: #7CB8BB;">__u32</span> <span style="color: #DFAF8F;">tc_classid</span>;
+<span style="color: #94BFF3;">#endif</span>
+<span style="color: #94BFF3;">#endif</span>
+</pre>
+</div>
+
+<p>
+这个例子就展示了只有在编译时定义了CONFIG_NET_SCHED符号时tc_index域才是sk_buff结构体的一部分. 这就是说, 系统管理员使用make config或者使用自动安装工具, 将Device Drivres-&gt;Networking support-&gt;Networking options-&gt;Qos and/or fair queueing选项打开了.
+</p>
+
+<p>
+这个例子实际上展示了两个嵌套的选项, CONFIG_NET_CLS_ACT下的成员只有在QoS and/or fair
+queueing选项得到支持时才考虑加入到sk_buff结构体里来.
+</p>
+
+<p>
+需要注意的是, QoS选项不能被编译成模块的形式.
 </p>
 </div>
 </div>
-<div id="outline-container-org4cba93c" class="outline-2">
-<h2 id="org4cba93c"><span class="section-number-2">2</span> net_device结构体</h2>
+</div>
+<div id="outline-container-org0802230" class="outline-2">
+<h2 id="org0802230"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-03-10 Wed 22:00</p>
+<p class="date">Created: 2021-03-17 Wed 22:05</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
