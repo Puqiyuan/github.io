@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-02-27 Sat 15:20 -->
+<!-- 2021-03-19 Fri 22:13 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之页表管理</title>
@@ -62,8 +62,8 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgce0708f">1. 页目录表示</a></li>
-<li><a href="#org44e231f">2. 页表条目表示</a></li>
+<li><a href="#org5c11b35">1. 页目录表示</a></li>
+<li><a href="#org73a486b">2. 页表条目表示</a></li>
 </ul>
 </div>
 </div>
@@ -76,8 +76,8 @@ for the JavaScript code in this tag.
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 </p>
 
-<div id="outline-container-orgce0708f" class="outline-2">
-<h2 id="orgce0708f"><span class="section-number-2">1</span> 页目录表示</h2>
+<div id="outline-container-org5c11b35" class="outline-2">
+<h2 id="org5c11b35"><span class="section-number-2">1</span> 页目录表示</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 每一个进程都有一个指向它自己PGD的指针(mm_struct-&gt;pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
@@ -186,13 +186,78 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 
 
-<div id="outline-container-org44e231f" class="outline-2">
-<h2 id="org44e231f"><span class="section-number-2">2</span> 页表条目表示</h2>
+<div id="outline-container-org73a486b" class="outline-2">
+<h2 id="org73a486b"><span class="section-number-2">2</span> 页表条目表示</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+如前所述, 对于PTEs, PMDs以及PGDs来说, 分别由结构体pte_t, pmd_t以及pgd_t结构体来表示. 即使这些结构体里的成员只有一个unsigned的成员, 但是依旧被定义成结构体, 这主要有两个目的, 一是起
+到类型保护的作用, 避免被不恰当的使用. 第二个目的就是, 像在x86中使用的PAE的特点, 有特别的四个比特用来寻址超过4GB的物理内存. 为了存储保护比特, 定义了prprot_t类型, 它会存储相关的标志并且通常是存在一个页表条目的低比特位.
+</p>
+
+<p>
+对于类型转换来说, 在asm/page.h里提供了四个宏, 参数是前面提到的四种类型, 然后返回结构体相关类型的值. 这些宏是pte_val, pmd_val, pgd_val以及pgprot_val(). 对于取逆类型转换, 提供了四个宏: __pte(), __pmd(), __pgd()以及__pgprot().
+</p>
+
+<p>
+究竟在那些位置上存储保护比特依各个架构不同. 为了解释方便, 采用的例子是没有开启PAE的x86架构,
+但是相同的原则几乎可以应用在所有架构上. 在X86上(没有开启PAE), pte_t是存放在结构体里的
+32-bit的整数. 每一个pte_t条目都指向页框里的一个地址, 并且所有被指向的地址都保证对齐在页边
+界. 因此在每一个页表条目中, 都有PAGE_SHIFT(12)个比特可以自由的用来标记状态. 一些保护和状态
+比特在下表列出, 不过究竟有哪些比特存在以及它们具体意义却可能因架构的变化而不同:
+</p>
+
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">比特</th>
+<th scope="col" class="org-left">功能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">_PAGE_PRESENT</td>
+<td class="org-left">页面在内存中并且没有被换出</td>
+</tr>
+
+<tr>
+<td class="org-left">_PAGE_PROTNONE</td>
+<td class="org-left">页面在内存中, 但是不可访问</td>
+</tr>
+
+<tr>
+<td class="org-left">_PAGE_RW</td>
+<td class="org-left">如果页面可写就设置</td>
+</tr>
+
+<tr>
+<td class="org-left">_PAGE_USER</td>
+<td class="org-left">如果页面可以从用户空间访问就设置</td>
+</tr>
+
+<tr>
+<td class="org-left">_PAGE_DIRTY</td>
+<td class="org-left">页面被写过</td>
+</tr>
+
+<tr>
+<td class="org-left">_PAGE_ACCESSED</td>
+<td class="org-left">页面被访问过</td>
+</tr>
+</tbody>
+</table>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-02-27 Sat 15:20</p>
+<p class="date">Created: 2021-03-19 Fri 22:13</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
