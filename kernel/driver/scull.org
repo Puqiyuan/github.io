@@ -307,4 +307,19 @@ int scull_open(struct inode *inode, struct file *filp)
 }
 #+end_src
 **** release方法
+release方法的作用和open的作用是相逆的. 有时候这个方法实现的名字也叫device_close而不是device_release. 不论哪种方式, 设备的release(close)方法都应该执行下面的任务:
++ 回收任何分配在filp->private_data中的数据.
++ 在最后的代码关闭设备.
+scull驱动没有硬件需要关闭, 所以代码很少:
+
+#+begin_src c :includes <stdio.h>
+int scull_release(struct  inode *inode, struct file *filp)
+{
+return 0;
+}
+#+end_src
+
+你或许很好奇, 如果一个设备文件关闭的次数大于打开的次数时会发生什么. 毕竟, 即使没有调用open, dup和fork系统调用都会创建打开文件的拷贝, 在程序结束时, 这些拷贝都会被关闭. 比如, 许多的程序都没有打开stdin文件(或者是stdin设备), 但是最终却关闭了. 一个驱动怎么知道一个打开的设备文件被真正的关闭了呢?
+
+答案其实很简单: 并不是每次调用close系统调用, 都会引起release方法被调用. 
 * 代码实现
