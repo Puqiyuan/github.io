@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-03-17 Wed 22:05 -->
+<!-- 2021-03-24 Wed 23:36 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,12 +62,13 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org6c2932b">1. 套接字缓存：sk_buff结构体</a>
+<li><a href="#org896ba0f">1. 套接字缓存：sk_buff结构体</a>
 <ul>
-<li><a href="#orgd24c6d7">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#orgffc9699">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#org6a8fded">1.2. 字段布局</a></li>
 </ul>
 </li>
-<li><a href="#org0802230">2. net_device结构体</a></li>
+<li><a href="#orgc3d3e78">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
@@ -99,8 +100,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-org6c2932b" class="outline-2">
-<h2 id="org6c2932b"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-org896ba0f" class="outline-2">
+<h2 id="org896ba0f"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -127,8 +128,8 @@ struct net_device
 </p>
 </div>
 
-<div id="outline-container-orgd24c6d7" class="outline-3">
-<h3 id="orgd24c6d7"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div id="outline-container-orgffc9699" class="outline-3">
+<h3 id="orgffc9699"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
@@ -158,18 +159,37 @@ queueing选项得到支持时才考虑加入到sk_buff结构体里来.
 </p>
 
 <p>
-需要注意的是, QoS选项不能被编译成模块的形式.
+需要注意的是, QoS选项不能被编译成模块的形式. 因为使能这个选项后, 对于内核数据结构的影响通
+常是不可逆的. 一般来说, 那些会造成内核数据结构有改变的选项都不适合编译成模块.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org6a8fded" class="outline-3">
+<h3 id="org6a8fded"><span class="section-number-3">1.2</span> 字段布局</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 内核在双向链表里维护sk_buff结构体.
+但是这个链表的组织比传统的要复杂些.
+</p>
+
+<p>
+像其它双链表一样, 通过next和prev域来连接这些sk_buff结构体. 而sb_buff有一个特殊的要求就是要
+能快速的找到整个链表的头. 为了达到这个目的, 一个sk_buff_head类型的成员放在了链表的开头. 其
+定义如下:
 </p>
 </div>
 </div>
 </div>
-<div id="outline-container-org0802230" class="outline-2">
-<h2 id="org0802230"><span class="section-number-2">2</span> net_device结构体</h2>
+
+
+<div id="outline-container-orgc3d3e78" class="outline-2">
+<h2 id="orgc3d3e78"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-03-17 Wed 22:05</p>
+<p class="date">Created: 2021-03-24 Wed 23:36</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
