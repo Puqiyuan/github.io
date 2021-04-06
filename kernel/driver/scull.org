@@ -315,11 +315,35 @@ scull驱动没有硬件需要关闭, 所以代码很少:
 #+begin_src c :includes <stdio.h>
 int scull_release(struct  inode *inode, struct file *filp)
 {
-return 0;
+    return 0;
 }
 #+end_src
 
 你或许很好奇, 如果一个设备文件关闭的次数大于打开的次数时会发生什么. 毕竟, 即使没有调用open, dup和fork系统调用都会创建打开文件的拷贝, 在程序结束时, 这些拷贝都会被关闭. 比如, 许多的程序都没有打开stdin文件(或者是stdin设备), 但是最终却关闭了. 一个驱动怎么知道一个打开的设备文件被真正的关闭了呢?
 
-答案其实很简单: 并不是每次调用close系统调用, 都会引起release方法被调用. 
+答案其实很简单: 并不是每次调用close系统调用, 都会引起release方法被调用. 内核会保存一个counter用来计算一个文件结构体被使用了多少次. fork和dup都不会创建新的file结构体(只有open系统调用才会), fork和dup只会增加file结构体里存在的counter计数器. 只有当file结构体的counter计数器减少到0时, close系统调用才会执行release方法, 这时file结构体也会被销毁. 
+
+但是每当应用调用close系统调用时, flush都会被调用.
+
+即使进程在结束时没有显式的调用close, 内核自己也会在进程退出的时候自动调用close.
+
+**** scull如何使用内存
+
+在介绍read和write操作前, 先要了解下scull"怎样"和"为什么"执行内存操作. 为了完全理解代码, 需要明白"怎样", 而"为什么"展示了驱动作者需要面对的一些选择, 当然scull不是一个精确的设备.
+
+本节只关心scull的内存分配策略, 并不会介绍在编写真正的驱动时需要的硬件管理技巧, 这些在后面介绍. 
+
+scull使用的内存其长度是变长的. 写的越多, 就会逐渐增长. 而写一个较短的文件时就是缩减所使用的内存了.
+
+scull驱动会使用在内核里常见的两个用来管理内存的函数. 这些函数定义在<linux/slab.h>, 即:
+
+#+begin_src c :includes <stdio.h>
+void *kmalloc(size_t size, int flags);
+void kfree(void *ptr)
+#+end_src
+
+调用kmalloc将尝试分配size大小字节的内存, 返回值是指向那片内存的指针或者是NULL, 代表失败.
+flags用来描述内存应该怎样分配, 后面会描述这些flag的细节. 现在只需关心GFP_KERNEL标志. 分配的内存由kfree释放. 要注意一定不要传给kfree一个指针不是由kmalloc分配而得到的. 当然传NULL给kfree是合法的.
+
+
 * 代码实现
