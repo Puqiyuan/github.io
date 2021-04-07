@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-03-24 Wed 23:36 -->
+<!-- 2021-04-07 Wed 22:16 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,13 +62,13 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org896ba0f">1. 套接字缓存：sk_buff结构体</a>
+<li><a href="#org6bbafc4">1. 套接字缓存：sk_buff结构体</a>
 <ul>
-<li><a href="#orgffc9699">1.1. 网络选项与内核结构体</a></li>
-<li><a href="#org6a8fded">1.2. 字段布局</a></li>
+<li><a href="#orgef858c0">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#org6a37e76">1.2. 字段布局</a></li>
 </ul>
 </li>
-<li><a href="#orgc3d3e78">2. net_device结构体</a></li>
+<li><a href="#org4488ff1">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
@@ -100,8 +100,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-org896ba0f" class="outline-2">
-<h2 id="org896ba0f"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-org6bbafc4" class="outline-2">
+<h2 id="org6bbafc4"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -128,8 +128,8 @@ struct net_device
 </p>
 </div>
 
-<div id="outline-container-orgffc9699" class="outline-3">
-<h3 id="orgffc9699"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div id="outline-container-orgef858c0" class="outline-3">
+<h3 id="orgef858c0"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
@@ -165,8 +165,8 @@ queueing选项得到支持时才考虑加入到sk_buff结构体里来.
 </div>
 </div>
 
-<div id="outline-container-org6a8fded" class="outline-3">
-<h3 id="org6a8fded"><span class="section-number-3">1.2</span> 字段布局</h3>
+<div id="outline-container-org6a37e76" class="outline-3">
+<h3 id="org6a37e76"><span class="section-number-3">1.2</span> 字段布局</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 内核在双向链表里维护sk_buff结构体.
@@ -174,22 +174,68 @@ sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 
 </p>
 
 <p>
-像其它双链表一样, 通过next和prev域来连接这些sk_buff结构体. 而sb_buff有一个特殊的要求就是要
-能快速的找到整个链表的头. 为了达到这个目的, 一个sk_buff_head类型的成员放在了链表的开头. 其
-定义如下:
+像其它双链表一样, 通过next和prev域来连接这些sk_buff结构体. 而sb_buff有一个特殊的要求就是要能快速的找到整个链表的头. 为了达到这个目的, 一个sk_buff_head类型的成员放在了链表的开头. 其定义如下:
 </p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">sk_buff_head</span> {
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">sk_buff</span> *<span style="color: #DFAF8F;">next</span>;
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">sk_buff</span> *<span style="color: #DFAF8F;">prev</span>;
+<span style="color: #7CB8BB;">__u32</span> <span style="color: #DFAF8F;">qlen</span>;
+<span style="color: #7CB8BB;">spinlock_t</span> <span style="color: #DFAF8F;">lock</span>;
+}
+</pre>
+</div>
+
+<p>
+qlen代表列表中有多少个元素. lock用来防止同时访问列表, 后面还会介绍.
+</p>
+
+<p>
+sk_buff和sk_buff_head的前两个元素是一样的: next和prev指针. 另外sk_buff还包括一个list域用来指向sk_buff_head. 如下的图:
+</p>
+
+
+<div class="figure">
+<p><img src="./img/sk_buff_head_rel.png" alt="sk_buff_head_rel.png" width="30%" height="30%" align="centering">
+</p>
+<p><span class="figure-number">Figure 1: </span>sk_buff和sk_buff_head之间的关系</p>
+</div>
+
+<p>
+其它的一些域:
+</p>
+
+<ul class="org-ul">
+<li><p>
+struct sock *sk
+</p>
+
+<p>
+指向拥有这个sk_buff的套接字. 当数据在本地生成或被本地进程接收时, 就需要这个域. 因为数据本身和套接字相关的信息被L4层(TCP或UDP)以及用户程序所使用. 当这个buffer仅仅是转发(forward)时, 也就是源和目的地都不在本机, 这个指针就是NULL.
+</p></li>
+
+<li><p>
+unsigned int len
+</p>
+
+<p>
+在buffer中数据的大小. 这个长度包括被head所指的主buffer里的数据, 以及分段(fragments)中的  数据. 它的值会随着buffer在网络协议栈上移动而变化, 比如沿协议栈向上时, 头部就会被丢弃, 而沿协议栈向下时, 头部就会被添加上. 当然, len是算上了协议头部的. 关于这一点后面还会介绍.
+</p></li>
+
+<li>unsigned int data_len</li>
+</ul>
 </div>
 </div>
 </div>
 
 
-<div id="outline-container-orgc3d3e78" class="outline-2">
-<h2 id="orgc3d3e78"><span class="section-number-2">2</span> net_device结构体</h2>
+<div id="outline-container-org4488ff1" class="outline-2">
+<h2 id="org4488ff1"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-03-24 Wed 23:36</p>
+<p class="date">Created: 2021-04-07 Wed 22:16</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
