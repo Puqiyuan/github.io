@@ -88,10 +88,7 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 对于类型转换来说, 在asm/page.h里提供了四个宏, 参数是前面提到的四种类型, 然后返回结构体相关类型的值. 这些宏是pte_val, pmd_val, pgd_val以及pgprot_val(). 对于取逆类型转换, 提供了四个宏: __pte(), __pmd(), __pgd()以及__pgprot().
 
 究竟在那些位置上存储保护比特依各个架构不同. 为了解释方便, 采用的例子是没有开启PAE的x86架构,
-但是相同的原则几乎可以应用在所有架构上. 在X86上(没有开启PAE), pte_t是存放在结构体里的
-32-bit的整数. 每一个pte_t条目都指向页框里的一个地址, 并且所有被指向的地址都保证对齐在页边
-界. 因此在每一个页表条目中, 都有PAGE_SHIFT(12)个比特可以自由的用来标记状态. 一些保护和状态
-比特在下表列出, 不过究竟有哪些比特存在以及它们具体意义却可能因架构的变化而不同:
+但是相同的原则几乎可以应用在所有架构上. 在X86上(没有开启PAE), pte_t是存放在结构体里的32-bit整数. 每一个pte_t条目都指向页框里的一个地址, 并且所有被指向的地址都保证对齐在页边界. 因此在每一个页表条目中, 都有PAGE_SHIFT(12)个比特可以自由的用来标记状态. 一些保护和状态比特在下表列出, 不过究竟有哪些比特存在以及它们的具体意义如何却可能因架构的变化而不同:
 
 | 比特           | 功能                             |
 |----------------+----------------------------------|
@@ -102,4 +99,46 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 | _PAGE_DIRTY    | 页面被写过                       |
 | _PAGE_ACCESSED | 页面被访问过                     |
 
+* 使用页表条目
+定义在pgtable.h中的一些宏, 可以用来检查和查看页表条目. 有三个重要的宏, 用来把线性地址分解为它们的组成部分. pgd_offset使用传入的两个参数, 一个地址以及一个mm_struct结构体, 返回一个pgd条目:
 
+#+begin_src C++ :includes <stdio.h>
+#ifndef pgd_offset
+#define pgd_offset(mm, address)		pgd_offset_pgd((mm)->pgd, (address))
+#endif
+
+static inline pgd_t *pgd_offset_pgd(pgd_t *pgd, unsigned long address)
+{
+	return (pgd + pgd_index(address));
+};
+
+#ifndef pgd_index
+/* Must be a compile-time constant, so implement it as a macro */
+#define pgd_index(a)  (((a) >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
+#endif
+#+end_src
+
+而pmd_offset使用传入的两个参数, 一个地址和一个PGD条目, 返回相关的PMD条目. 下面的宏用来确定相应的页表条目项是否存在或者是否在使用:
+
+- 如果对应的条目不存在, pte_none(), pmd_none()等返回1:
+  #+begin_src C++ :includes <stdio.h>
+  #define pte_none(pte) 			(!pte_val(pte))
+  # define pte_val(x)	((x).pte)
+
+  #define pmd_none(pmd)			(!pmd_val(pmd))
+  # define pmd_val(x)	((x).pmd)
+  #+end_src
+
+
+- 如果对应的页表条目有PRESENT比特被设置, pte_present(), pmd_present()等返回1:
+  #+begin_src C++ :includes <stdio.h>
+#define pte_present(pte)		(pte_val(pte) & (_PAGE_P | _PAGE_PROTNONE))
+#define pmd_present(pmd)		(pmd_val(pmd) != 0UL)
+  #+end_src
+
+- pte_clear(), pmd_clear()等将会清除对应的条目:
+
+  #+begin_src C++ :includes <stdio.h>
+#define pte_clear(mm,addr,pte)		(pte_val(*(pte)) = 0UL)
+#define pmd_clear(pmdp)			(pmd_val(*(pmdp)) = 0UL)
+  #+end_src
