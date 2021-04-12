@@ -255,7 +255,52 @@ GDT的布局如下图示意：
   仅用于页表条目. 每当在页框上进行写操作时, 这个标志就会被设置. 如同access标志, dirty标志也可被操作系统用来选择哪些页面被swap out. 分页单元自身不会reset这个bit, 这是由操作系统做的.
 
 - Read/Write 标志
+
+  页或页表的访问权限(Read/Write).
+
+- User/Supervisor 标志
+
+  表明了访问这个页面需要的权限级.
+
+- PCD和PWT 标志
+
+  控制硬件cache处理页或页表的方式.
+
+- Page Size 标志
+
+  仅对Page Directory条目有效. 如果被设置, Page Directory条目指向2MB-4MB的页帧.
+
+- Global 标志
+
+  仅对Page Table有效. 在Pentium Pro中引入, 用来阻止常用的页面从TLB cache中被清除, 使用这个功能需要把cr4寄存器的Page Global Enable(PGE)标志清除.
 *** 扩展分页
+从Pentium开始, 80x86微处理器引入了扩展分页(Extended Paging), 它允许页帧成为4MB大小, 而不是原先的4KB, 如下图:
+#+CAPTION: 80x86扩展分页
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/extended-paging.png]]
+
+扩展分页用来将大块的连续线性地址翻译成对应的物理地址. 这种情况下, 内核可以没有中间层次的页
+表, 因此节省了一部分内存以及保留TLB条目.
+
+前面提到过, 通过设置Page Directory条目的Page Size标志来使能扩展分页功能. 在这种情况下, 分页单元将32-bit的线性地址划分为两个域:
+
+- Directory
+  
+  最高的10比特.
+
+- Offset
+  
+  剩下的22比特.
+
+除了以下两点, 扩展分页的页目录条目和常规分页是一样的:
+
+- Page Size标志必须设置.
+
+- 物理地址的最高10-bit才有效, 因为每个物理地址都被对齐在4MB的边界, 所以最低的22个比特都是0. 
+
+
+扩展分页和常规分页并存, 通过设置cr4的PSE标志来使能扩展分页功能.
 *** 硬件保护机制
 *** 常规分页的一个例子
 *** 物理地址扩展(PAE)分页机制
