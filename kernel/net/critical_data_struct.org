@@ -85,10 +85,56 @@ sk_buff和sk_buff_head的前两个元素是一样的: next和prev指针. 另外s
 
 - unsigned int len
 
-  在buffer中数据的大小. 这个长度包括被head所指的主buffer里的数据, 以及分段(fragments)中的  数据. 它的值会随着buffer在网络协议栈上移动而变化, 比如沿协议栈向上时, 头部就会被丢弃, 而沿协议栈向下时, 头部就会被添加上. 当然, len是算上了协议头部的. 关于这一点后面还会介绍.
+  在buffer中数据的大小. 这个长度包括被head所指的主buffer里的数据, 以及分段(fragments)中的数据. 它的值会随着buffer在网络协议栈上移动而变化, 比如沿协议栈向上时, 头部就会被丢弃, 而沿协议栈向下时, 头部就会被添加上. 当然, len是算上了协议头部的. 关于这一点后面还会介绍.
 
 - unsigned int data_len
 
+  与len不同的是, data_len仅仅计算在分段中的数据长度.
+
+- unsigned int mac_len
+
+  链路层(MAC)的头部长度.
+
+- refcount_t users
+
+  记录了有多少个实体正在使用sk_buff结构体. 使用这个成员主要是为了防止还在使用sk_buff时而被释放了. 每个使用这个结构体的用户都应该增加这个域, 并且在必要的时候递减这个域. 需要注意的是, 这个域仅是包含对sk_buff本身引用的计数, 而对于由sk_buff包含数据的计数在skb_shared_info或skb_shinfo中一个相似的域: dataref来计数, 后面会介绍这点.
+
+  user有时直接使用atomic_inc或atomic_dec来直接加减, 但是大多数时候是通过skb_get或kfree_skb来操作.
+
+- unsigned int truesize
+
+  表示了buffer的总大小, 要算上sk_buff结构体自身的大小. 当buffer在alloc_skb函数里请求分配len字节大小的时候, 这个域就会被初始化成len+sizeof(sk_buff):
+
+  #+begin_src C++ :includes <stdio.h>
+  struct sk_buff *alloc_skb(unsigned int size, int gfp_mask)
+  {
+    ...
+    skb->truesize = size + sizeof(struct sk_buff);
+    ...
+  }
+  #+end_src
+
+  当skb->len更新时, 这个域也要更新.
+
+- unsigned char *head
+- unsigned char *end
+- unsigned char *data
+- unsigned char *tail
+  这些域划分了buffer以及在其中的数据的边界. 当各层操作它们自己的数据时, 可能会给header或数据本身分配更多空间. head和end指向分配buffer的开始以及结尾处, 而data和tail指向实际数据的开始与结束处. 如下图所示:
+
+#+CAPTION: head/end和data/tail之间的对比
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 50% :height 50%
+[[./img/head-end-data-tail.png]]
+
+  网络协议栈上的某层可以将它自己的协议header填到head与data之间. 而在tail和end之间还可以填充尾部信息. 
+
+- void (*destructor)(...)
   
+  当一个buffer被移除时, 这个成员所指的函数会执行某些动作. 当buffer不属于一个套节字时,
+  destructor通常不会被初始化. 当buffer属于某个套接字时, 这个成员通常会被初始化为sock_rfree
+  或sock_wfree(分别由skb_set_owner_r或skb_set_owner_w初始化).
+
+** 通用字段
 * net_device结构体
 
