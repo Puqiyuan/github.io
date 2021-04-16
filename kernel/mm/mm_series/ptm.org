@@ -142,3 +142,14 @@ static inline pgd_t *pgd_offset_pgd(pgd_t *pgd, unsigned long address)
 #define pte_clear(mm,addr,pte)		(pte_val(*(pte)) = 0UL)
 #define pmd_clear(pmdp)			(pmd_val(*(pmdp)) = 0UL)
   #+end_src
+* 翻译与设置页表条目
+有一组宏和函数用来映射地址和页面里的PTE条目, 以及设置单个条目.
+
+宏mk_pte使用两个参数, 一个是struct page, 另一个是protection bit, 将它们组合起来从而形成pte_t可以插入到页表中. 另一个相似的宏是mk_pte_phys, 只不过它的参数是物理页面地址.
+
+pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个struct page包含pte条目.
+
+而set_pte宏可以使用mk_pte宏返回的参数去设置pte条目到进程的页表, pte_clear的作用就相反了.
+
+* 分配以及释放页表
+
