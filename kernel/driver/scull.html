@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-04-13 Tue 23:05 -->
+<!-- 2021-04-20 Tue 23:06 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>一个简单的字符驱动程序</title>
@@ -62,26 +62,26 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org8962502">1. 背景知识</a>
+<li><a href="#orgcefc475">1. 背景知识</a>
 <ul>
-<li><a href="#org87177eb">1.1. 主设备号和次设备号</a></li>
-<li><a href="#org4e84972">1.2. 分配和释放设备编号</a></li>
-<li><a href="#org38b0b8f">1.3. 关键数据结构</a>
+<li><a href="#orga05addb">1.1. 主设备号和次设备号</a></li>
+<li><a href="#org7001b67">1.2. 分配和释放设备编号</a></li>
+<li><a href="#orgab141f5">1.3. 关键数据结构</a>
 <ul>
-<li><a href="#org6fb08e7">1.3.1. file_operations</a></li>
-<li><a href="#org9d677cd">1.3.2. file</a></li>
-<li><a href="#orgd0674f5">1.3.3. inode</a></li>
+<li><a href="#org7e7b059">1.3.1. file_operations</a></li>
+<li><a href="#orgb710136">1.3.2. file</a></li>
+<li><a href="#orgc25841d">1.3.3. inode</a></li>
 </ul>
 </li>
-<li><a href="#orge26f17e">1.4. 字符设备注册</a>
+<li><a href="#orgc6fe35a">1.4. 字符设备注册</a>
 <ul>
-<li><a href="#org65febb8">1.4.1. scull驱动中的设备注册</a></li>
-<li><a href="#org413863a">1.4.2. open和release方法</a></li>
+<li><a href="#org1bb62bf">1.4.1. scull驱动中的设备注册</a></li>
+<li><a href="#orgcfe7643">1.4.2. open和release方法</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org7d872f3">2. 代码实现</a></li>
+<li><a href="#orgf920e96">2. 代码实现</a></li>
 </ul>
 </div>
 </div>
@@ -89,12 +89,12 @@ for the JavaScript code in this tag.
 本文将详细介绍在Linux平台的一个简单字符驱动程序的编写。它操作的是一片内存，把内存当作设备，这样可以不依赖于具体的硬件设备, 就把这个简单字符驱动程序叫s_driver吧.
 </p>
 
-<div id="outline-container-org8962502" class="outline-2">
-<h2 id="org8962502"><span class="section-number-2">1</span> 背景知识</h2>
+<div id="outline-container-orgcefc475" class="outline-2">
+<h2 id="orgcefc475"><span class="section-number-2">1</span> 背景知识</h2>
 <div class="outline-text-2" id="text-1">
 </div>
-<div id="outline-container-org87177eb" class="outline-3">
-<h3 id="org87177eb"><span class="section-number-3">1.1</span> 主设备号和次设备号</h3>
+<div id="outline-container-orga05addb" class="outline-3">
+<h3 id="orga05addb"><span class="section-number-3">1.1</span> 主设备号和次设备号</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 访问设备要通过文件系统中的设备文件。Linux把设备抽象成文件，访问设备也就是访问文件。这些文件都很特殊，通常位于/dev目录下，用ls -l可以看到字符设备第一列是c字母开头，而块设备是b开头，同时可以看到有两个数字由逗号隔开，如下图：
@@ -142,8 +142,8 @@ MAJOR用于获得主设备号, 而MINOR用于获得次设备号. 可以稍微注
 </div>
 </div>
 </div>
-<div id="outline-container-org4e84972" class="outline-3">
-<h3 id="org4e84972"><span class="section-number-3">1.2</span> 分配和释放设备编号</h3>
+<div id="outline-container-org7001b67" class="outline-3">
+<h3 id="org7001b67"><span class="section-number-3">1.2</span> 分配和释放设备编号</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 如前面的图, 设备都有编号, 自然我们的简单字符驱动程序s_driver也需要设备编号, 内核提供两个函数用来分配设备编号:
@@ -180,16 +180,16 @@ mknod /dev/${<span style="color: #DFAF8F;">device</span>}0 c $<span style="color
 </div>
 </div>
 
-<div id="outline-container-org38b0b8f" class="outline-3">
-<h3 id="org38b0b8f"><span class="section-number-3">1.3</span> 关键数据结构</h3>
+<div id="outline-container-orgab141f5" class="outline-3">
+<h3 id="orgab141f5"><span class="section-number-3">1.3</span> 关键数据结构</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 很多基本的驱动操作都涉及到三个重要的内核数据结构，分别是file_operations，file以及inode，下面依次来看看。
 </p>
 </div>
 
-<div id="outline-container-org6fb08e7" class="outline-4">
-<h4 id="org6fb08e7"><span class="section-number-4">1.3.1</span> file_operations</h4>
+<div id="outline-container-org7e7b059" class="outline-4">
+<h4 id="org7e7b059"><span class="section-number-4">1.3.1</span> file_operations</h4>
 <div class="outline-text-4" id="text-1-3-1">
 <p>
 到目前为止，我们预留了设备号，但还没有将这些设备号与驱动操作联系起来，file_operations结构体正是设定这种连接。每一个打开的文件都有file结构体表示（后面会讲到），其内有一个file_operations类型的成员f_op指向了设备（驱动）的操作函数，这些操作也是对应相应的系统调用比如read，open等。可以把文件当作一个对象，而这些函数（file_operations）当作方法，这就是面向对象编程的术语了，其实内核中有很多这样的面向对象思想，以后还会看到。
@@ -344,8 +344,8 @@ s_driver只会实现其中几个重要的函数, 它的初始化如下:
 </div>
 
 
-<div id="outline-container-org9d677cd" class="outline-4">
-<h4 id="org9d677cd"><span class="section-number-4">1.3.2</span> file</h4>
+<div id="outline-container-orgb710136" class="outline-4">
+<h4 id="orgb710136"><span class="section-number-4">1.3.2</span> file</h4>
 <div class="outline-text-4" id="text-1-3-2">
 <p>
 file结构体定义在linux/fs.h中, 注意file结构体和用户程序中的FILE指针(在C库中实现)是根本不同的事物, file在内核空间中, FILE在用户空间中.
@@ -417,8 +417,8 @@ private_data:
 </ol>
 </div>
 </div>
-<div id="outline-container-orgd0674f5" class="outline-4">
-<h4 id="orgd0674f5"><span class="section-number-4">1.3.3</span> inode</h4>
+<div id="outline-container-orgc25841d" class="outline-4">
+<h4 id="orgc25841d"><span class="section-number-4">1.3.3</span> inode</h4>
 <div class="outline-text-4" id="text-1-3-3">
 <p>
 在内核内部使用的是inode结构体来表示文件，它与file结构体不同，file结构体用来表示一个打开的文件描述符。在一个文件上可以有许多打开的文件描述符，进而有多个file结构体与之对应，但是它们可能都对应一个inode结构体。
@@ -468,8 +468,8 @@ struct cdev *i_cdev:
 </div>
 </div>
 </div>
-<div id="outline-container-orge26f17e" class="outline-3">
-<h3 id="orge26f17e"><span class="section-number-3">1.4</span> 字符设备注册</h3>
+<div id="outline-container-orgc6fe35a" class="outline-3">
+<h3 id="orgc6fe35a"><span class="section-number-3">1.4</span> 字符设备注册</h3>
 <div class="outline-text-3" id="text-1-4">
 <p>
 如前介绍过的，在内核内部使用cdev结构体来描述字符设备，在内核能够调用设备操作之前，必须要分配和注册这些结构体。在编写的代码里必须包含&lt;linux/cdev.h&gt;，这个头文件会定义相关的结构体和关联的辅助函数。
@@ -525,8 +525,8 @@ cdev结构体设置好了之后，最后一步就是向内核宣告它的存在�
 当然，cdev_del被调用了就不应该再访问cdev结构体了。
 </p>
 </div>
-<div id="outline-container-org65febb8" class="outline-4">
-<h4 id="org65febb8"><span class="section-number-4">1.4.1</span> scull驱动中的设备注册</h4>
+<div id="outline-container-org1bb62bf" class="outline-4">
+<h4 id="org1bb62bf"><span class="section-number-4">1.4.1</span> scull驱动中的设备注册</h4>
 <div class="outline-text-4" id="text-1-4-1">
 <p>
 scull驱动使用struct scull_dev来代表每个结构体。这个结构体如下定义：
@@ -554,15 +554,15 @@ scull驱动使用struct scull_dev来代表每个结构体。这个结构体如�
 </div>
 </div>
 
-<div id="outline-container-org413863a" class="outline-4">
-<h4 id="org413863a"><span class="section-number-4">1.4.2</span> open和release方法</h4>
+<div id="outline-container-orgcfe7643" class="outline-4">
+<h4 id="orgcfe7643"><span class="section-number-4">1.4.2</span> open和release方法</h4>
 <div class="outline-text-4" id="text-1-4-2">
 <p>
 现在可以看下在scull里使用的open和release方法。
 </p>
 </div>
 <ol class="org-ol">
-<li><a id="org6e146da"></a>open方法<br>
+<li><a id="orgf901f03"></a>open方法<br>
 <div class="outline-text-5" id="text-1-4-2-1">
 <p>
 驱动实现open方法一般是做一些准备的操作。在许多驱动里，open一般会执行下面这些任务：
@@ -627,7 +627,7 @@ filp-&gt;private_data = dev;
 </div>
 </div>
 </li>
-<li><a id="org3eee4e6"></a>release方法<br>
+<li><a id="orgebcd59c"></a>release方法<br>
 <div class="outline-text-5" id="text-1-4-2-2">
 <p>
 release方法的作用和open的作用是相逆的. 有时候这个方法实现的名字也叫device_close而不是device_release. 不论哪种方式, 设备的release(close)方法都应该执行下面的任务:
@@ -666,7 +666,7 @@ scull驱动没有硬件需要关闭, 所以代码很少:
 </div>
 </li>
 
-<li><a id="orge525ff7"></a>scull如何使用内存<br>
+<li><a id="org64466b0"></a>scull如何使用内存<br>
 <div class="outline-text-5" id="text-1-4-2-3">
 <p>
 在介绍read和write操作前, 先要了解下scull"怎样"和"为什么"执行内存操作. 为了完全理解代码, 需要明白"怎样", 而"为什么"展示了驱动作者需要面对的一些选择, 当然scull不是一个精确的设备.
@@ -717,21 +717,50 @@ flags用来描述内存应该怎样分配, 后面会描述这些flag的细节. �
 </div>
 
 <p>
-依据选择的数字不同, 写入一个字节将会消耗8000或12000个内存的字节. 
+依据选择的数字不同, 写入一个字节将会消耗8000或12000个内存的字节.
 </p>
+</div>
+</li>
+
+<li><a id="orgf3c48ad"></a>reand和write方法<br>
+<div class="outline-text-5" id="text-1-4-2-4">
+<p>
+read和write方法执行相似的任务，从内核里拷贝数据到用户代码，或者从用户代码拷贝数据内核。因
+此它们的原型极其相似:
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">ssize_t</span> <span style="color: #93E0E3;">read</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">file</span> *<span style="color: #DFAF8F;">filp</span>, <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">__user</span> *buff, <span style="color: #7CB8BB;">size_t</span> <span style="color: #DFAF8F;">count</span>, <span style="color: #7CB8BB;">loff_t</span> *<span style="color: #DFAF8F;">offp</span>);
+<span style="color: #7CB8BB;">ssize_t</span> <span style="color: #93E0E3;">write</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">file</span> *<span style="color: #DFAF8F;">filp</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">__user</span> *buff, <span style="color: #7CB8BB;">size_t</span> <span style="color: #DFAF8F;">count</span>, <span style="color: #7CB8BB;">loff_t</span> *<span style="color: #DFAF8F;">offp</span>);
+</pre>
+</div>
+
+<p>
+对于这两个方法，filp是一个文件指针，而count是请求要传输数据的大小。而buff参数指向一个用户态buffer，这buffer用来用来存储数据往内核里写（write），或者从内核里读数据到buffer。最后，
+offp是一个long offset类型的对象，它表明了用户正在访问的文件位置。返回值是signed size type类型的。
+</p>
+
+<p>
+对于buff参数，它是来自用户空间的指针，因此不能够在内核代码里直接解引用。对于这个限制有以下几个理由：
+</p>
+
+<ul class="org-ul">
+<li>根据驱动程序所运行的架构，以及内核是如何配置的，在内核空间运行时，用户空间的指针或许是无效的。没有针对这样指针的映射，也可能指向随机的数据。</li>
+<li></li>
+</ul>
 </div>
 </li>
 </ol>
 </div>
 </div>
 </div>
-<div id="outline-container-org7d872f3" class="outline-2">
-<h2 id="org7d872f3"><span class="section-number-2">2</span> 代码实现</h2>
+<div id="outline-container-orgf920e96" class="outline-2">
+<h2 id="orgf920e96"><span class="section-number-2">2</span> 代码实现</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-04-13 Tue 23:05</p>
+<p class="date">Created: 2021-04-20 Tue 23:06</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

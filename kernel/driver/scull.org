@@ -358,5 +358,22 @@ flags用来描述内存应该怎样分配, 后面会描述这些flag的细节. �
 #+ATTR_HTML: :width 50% :height 50%
 [[./img/scull-layout.png]]
 
-依据选择的数字不同, 写入一个字节将会消耗8000或12000个内存的字节. 
+依据选择的数字不同, 写入一个字节将会消耗8000或12000个内存的字节.
+
+**** reand和write方法
+read和write方法执行相似的任务，从内核里拷贝数据到用户代码，或者从用户代码拷贝数据内核。因
+此它们的原型极其相似:
+
+#+begin_src c :includes <stdio.h>
+ssize_t read(struct file *filp, char __user *buff, size_t count, loff_t *offp);
+ssize_t write(struct file *filp, const char __user *buff, size_t count, loff_t *offp);
+#+end_src
+
+对于这两个方法，filp是一个文件指针，而count是请求要传输数据的大小。而buff参数指向一个用户态buffer，这buffer用来用来存储数据往内核里写（write），或者从内核里读数据到buffer。最后，
+offp是一个long offset类型的对象，它表明了用户正在访问的文件位置。返回值是signed size type类型的。
+
+对于buff参数，它是来自用户空间的指针，因此不能够在内核代码里直接解引用。对于这个限制有以下几个理由：
+
+- 根据驱动程序所运行的架构，以及内核是如何配置的，在内核空间运行时，用户空间的指针或许是无效的。没有针对这样指针的映射，也可能指向随机的数据。
+- 
 * 代码实现
