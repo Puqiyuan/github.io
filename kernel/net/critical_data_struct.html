@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-04-14 Wed 22:44 -->
+<!-- 2021-04-21 Wed 22:32 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,14 +62,14 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge71b2b4">1. 套接字缓存：sk_buff结构体</a>
+<li><a href="#org2422081">1. 套接字缓存：sk_buff结构体</a>
 <ul>
-<li><a href="#org41c401f">1.1. 网络选项与内核结构体</a></li>
-<li><a href="#org53342e8">1.2. 字段布局</a></li>
-<li><a href="#orgc91f5b6">1.3. 通用字段</a></li>
+<li><a href="#org4324cbc">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#org0cd4370">1.2. 字段布局</a></li>
+<li><a href="#org38aa18d">1.3. 通用字段</a></li>
 </ul>
 </li>
-<li><a href="#org6113566">2. net_device结构体</a></li>
+<li><a href="#orgfe2ee80">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
@@ -101,8 +101,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-orge71b2b4" class="outline-2">
-<h2 id="orge71b2b4"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-org2422081" class="outline-2">
+<h2 id="org2422081"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -129,8 +129,8 @@ struct net_device
 </p>
 </div>
 
-<div id="outline-container-org41c401f" class="outline-3">
-<h3 id="org41c401f"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div id="outline-container-org4324cbc" class="outline-3">
+<h3 id="org4324cbc"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
@@ -166,8 +166,8 @@ queueing选项得到支持时才考虑加入到sk_buff结构体里来.
 </div>
 </div>
 
-<div id="outline-container-org53342e8" class="outline-3">
-<h3 id="org53342e8"><span class="section-number-3">1.2</span> 字段布局</h3>
+<div id="outline-container-org0cd4370" class="outline-3">
+<h3 id="org0cd4370"><span class="section-number-3">1.2</span> 字段布局</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 内核在双向链表里维护sk_buff结构体.
@@ -276,8 +276,13 @@ unsigned int truesize
 <li>unsigned char *head</li>
 <li>unsigned char *end</li>
 <li>unsigned char *data</li>
-<li>unsigned char *tail
-这些域划分了buffer以及在其中的数据的边界. 当各层操作它们自己的数据时, 可能会给header或数据本身分配更多空间. head和end指向分配buffer的开始以及结尾处, 而data和tail指向实际数据的开始与结束处. 如下图所示:</li>
+<li><p>
+unsigned char *tail
+</p>
+
+<p>
+这些域划分了buffer以及在其中的数据的边界. 当各层操作它们自己的数据时, 可能会给header或数据本身分配更多空间. head和end指向分配buffer的开始以及结尾处, 而data和tail指向实际数据的开始与结束处. 如下图所示:
+</p></li>
 </ul>
 
 
@@ -305,17 +310,147 @@ destructor通常不会被初始化. 当buffer属于某个套接字时, 这个成
 </div>
 </div>
 
-<div id="outline-container-orgc91f5b6" class="outline-3">
-<h3 id="orgc91f5b6"><span class="section-number-3">1.3</span> 通用字段</h3>
+<div id="outline-container-org38aa18d" class="outline-3">
+<h3 id="org38aa18d"><span class="section-number-3">1.3</span> 通用字段</h3>
+<div class="outline-text-3" id="text-1-3">
+<p>
+下面介绍一些sk_buff主要的域，这些域不和内核特定的feature关联。
+</p>
+<ul class="org-ul">
+<li><p>
+tsamp
+</p>
+
+<p>
+包到达或离开的时间。
+</p></li>
+
+<li><p>
+struct net_device *dev
+</p>
+
+<p>
+表示一个网络设备，后面还会详细介绍。dev结构体充当的角色作用，依赖于存在buffer里的数据是要被传送的还是刚到达的。
+</p>
+
+<p>
+当包是到达的时候，设备驱动会更新这个域，以一个指向代表接受包的网卡设备。
+</p>
+
+<p>
+当包准备被发送出去时，dev就表示发送包的设备。
+</p>
+
+<p>
+某些网络功能，允许多个设备聚合在一起成为一个虚拟的设备，这个虚拟的设备不直接和具体的硬件关联起来。当设备驱动被调用时，dev成员指向虚拟设备的net_device结构体。驱动程序会从这组硬件设备相关的dev结构体中选择一个dev。换言之，指向传输设备的指针在包处理的过程中可能会改变。
+</p></li>
+
+<li><p>
+char cb[40]
+</p>
+
+<p>
+控制buffer，或者用来存储私有信息，由每一层维护，自己内部使用。在sk_buff里静态分配。在各层的代码里，访问这个成员通过宏来做，这使得代码可读性更好。比如对TCP来说，就用来存储tcp_skb_cb结构体。
+</p>
+
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">tcp_skb_cb</span> {
+  ...
+  __u32     seq;        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Starting sequence number</span><span style="color: #5F7F5F;"> */</span>
+  <span style="color: #7CB8BB;">__u32</span>     <span style="color: #DFAF8F;">end_seq</span>;    <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">SEQ + FIN + SYN + datalen</span><span style="color: #5F7F5F;">    */</span>
+  <span style="color: #F0DFAF; font-weight: bold;">union</span> {
+      <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Note : tcp_tw_isn is used in input path only</span>
+<span style="color: #7F9F7F;">       *      (isn chosen by tcp_timewait_state_process())</span>
+<span style="color: #7F9F7F;">       *</span>
+<span style="color: #7F9F7F;">       *      tcp_gso_segs/size are used in write queue only,</span>
+<span style="color: #7F9F7F;">       *      cf tcp_skb_pcount()/tcp_skb_mss()</span>
+<span style="color: #5F7F5F;">       */</span>
+      <span style="color: #7CB8BB;">__u32</span>     <span style="color: #DFAF8F;">tcp_tw_isn</span>;
+      <span style="color: #F0DFAF; font-weight: bold;">struct</span> {
+          <span style="color: #7CB8BB;">u16</span>   <span style="color: #DFAF8F;">tcp_gso_segs</span>;
+          <span style="color: #7CB8BB;">u16</span>   <span style="color: #DFAF8F;">tcp_gso_size</span>;
+      };
+  };
+}
+...
+</pre>
+</div>
+
+<p>
+下面这个宏被用来访问这个结构体，这个宏其实就是简单的指针转换：
+</p>
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">TCP_SKB_CB</span>(<span style="color: #DFAF8F;">__skb</span>)   ((<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">tcp_skb_cb</span> *)&amp;((__skb)-&gt;cb[0]))
+</pre>
+</div></li>
+
+<li>unsigned int csum</li>
+<li><p>
+unsigned char ip_summed
+</p>
+
+<p>
+校验和以及关联的状态标志。
+</p></li>
+
+<li><p>
+unsigned char cloned
+</p>
+
+<p>
+一个boolean标志，当设置时，表示这个结构体是另一个结构体的拷贝。
+</p></li>
+
+<li><p>
+unsigned char pkt_type
+</p>
+
+<p>
+基于L2层的目的地址而划分帧的类型。对于以太网设备来说，这个参数由函数eth_type_trans设置，后面还会介绍。
+</p>
+
+<p>
+主要可能的值包括：
+</p>
+
+<ul class="org-ul">
+<li><p>
+PACKET_HOST
+</p>
+
+<p>
+收到的帧的目的地址就是接收接口，换句话说，包已经到达了目的地址。
+</p></li>
+
+<li><p>
+PACKET_MULTICAST
+</p>
+
+<p>
+收到的帧的目的地址是一个注册的多播地址。
+</p></li>
+
+<li><p>
+PACKET_BROADCAST
+</p>
+
+<p>
+收到帧的目的地址是一个广播地址。
+</p></li>
+</ul></li>
+</ul>
 </div>
 </div>
-<div id="outline-container-org6113566" class="outline-2">
-<h2 id="org6113566"><span class="section-number-2">2</span> net_device结构体</h2>
+</div>
+
+
+<div id="outline-container-orgfe2ee80" class="outline-2">
+<h2 id="orgfe2ee80"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-04-14 Wed 22:44</p>
+<p class="date">Created: 2021-04-21 Wed 22:32</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

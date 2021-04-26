@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-04-16 Fri 23:01 -->
+<!-- 2021-04-23 Fri 22:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之页表管理</title>
@@ -62,11 +62,17 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgea7db19">1. 页目录表示</a></li>
-<li><a href="#org5f9c80a">2. 页表条目表示</a></li>
-<li><a href="#org51a222b">3. 使用页表条目</a></li>
-<li><a href="#orgac81a3f">4. 翻译与设置页表条目</a></li>
-<li><a href="#orga8400c3">5. 分配以及释放页表</a></li>
+<li><a href="#org034331b">1. 页目录表示</a></li>
+<li><a href="#org2799ef1">2. 页表条目表示</a></li>
+<li><a href="#orge0f0140">3. 使用页表条目</a></li>
+<li><a href="#orgd678a15">4. 翻译与设置页表条目</a></li>
+<li><a href="#org5d9d3d7">5. 分配以及释放页表</a></li>
+<li><a href="#orge942a3a">6. 内核页表</a>
+<ul>
+<li><a href="#orge742d15">6.1. 自举</a></li>
+<li><a href="#org42e605a">6.2. 初始化完成</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </div>
@@ -79,8 +85,8 @@ for the JavaScript code in this tag.
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 </p>
 
-<div id="outline-container-orgea7db19" class="outline-2">
-<h2 id="orgea7db19"><span class="section-number-2">1</span> 页目录表示</h2>
+<div id="outline-container-org034331b" class="outline-2">
+<h2 id="org034331b"><span class="section-number-2">1</span> 页目录表示</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 每一个进程都有一个指向它自己PGD的指针(mm_struct-&gt;pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
@@ -189,8 +195,8 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 
 
-<div id="outline-container-org5f9c80a" class="outline-2">
-<h2 id="org5f9c80a"><span class="section-number-2">2</span> 页表条目表示</h2>
+<div id="outline-container-org2799ef1" class="outline-2">
+<h2 id="org2799ef1"><span class="section-number-2">2</span> 页表条目表示</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 如前所述, 对于PTEs, PMDs以及PGDs来说, 分别由结构体pte_t, pmd_t以及pgd_t结构体来表示. 即使这些结构体里的成员只有一个unsigned的成员, 但是依旧被定义成结构体, 这主要有两个目的, 一是起
@@ -255,8 +261,8 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 </div>
 
-<div id="outline-container-org51a222b" class="outline-2">
-<h2 id="org51a222b"><span class="section-number-2">3</span> 使用页表条目</h2>
+<div id="outline-container-orge0f0140" class="outline-2">
+<h2 id="orge0f0140"><span class="section-number-2">3</span> 使用页表条目</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 定义在pgtable.h中的一些宏, 可以用来检查和查看页表条目. 有三个重要的宏, 用来把线性地址分解为它们的组成部分. pgd_offset使用传入的两个参数, 一个地址以及一个mm_struct结构体, 返回一个pgd条目:
@@ -320,8 +326,8 @@ pte_clear(), pmd_clear()等将会清除对应的条目:
 </ul>
 </div>
 </div>
-<div id="outline-container-orgac81a3f" class="outline-2">
-<h2 id="orgac81a3f"><span class="section-number-2">4</span> 翻译与设置页表条目</h2>
+<div id="outline-container-orgd678a15" class="outline-2">
+<h2 id="orgd678a15"><span class="section-number-2">4</span> 翻译与设置页表条目</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 有一组宏和函数用来映射地址和页面里的PTE条目, 以及设置单个条目.
@@ -341,13 +347,38 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 
-<div id="outline-container-orga8400c3" class="outline-2">
-<h2 id="orga8400c3"><span class="section-number-2">5</span> 分配以及释放页表</h2>
+<div id="outline-container-org5d9d3d7" class="outline-2">
+<h2 id="org5d9d3d7"><span class="section-number-2">5</span> 分配以及释放页表</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+最后再介绍几个页表的分配与释放函数。如前所述，页表也是物理页面，只不过是包含有许多条目，分配与释放物理页面是一个相对昂贵的操作，昂贵的意思是，时间消耗大，另外在页面分配期间中断不能打开。不论在哪个级别，页表的分配与删除都是十分频繁的操作，所以这些操作保持尽量的快是十分重要的。
+</p>
+
+<p>
+因此用于页表的页是缓存起来了的，不过对于各个缓存的实现却是架构相异的。比如对于PGD的缓存不是每个架构都实现了，因为PGD的变化仅存在于进程创建或销毁时。对于PGD，PMD以及PTE来说，各有两套释放和分配函数，即pgd_alloc，pmd_alloc以及pte_alloc三个分配的函数。另外是pfd_free，pmd_free以及pte_free三个释放的函数。
+</p>
+</div>
+</div>
+
+<div id="outline-container-orge942a3a" class="outline-2">
+<h2 id="orge942a3a"><span class="section-number-2">6</span> 内核页表</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+在系统刚起来的时候，分页功能是没有准备好的，因为页表无法初始化它自己。初始化页表的实现是架构相关的。这里我们只关心X86，这时页表的初始化分为两个阶段，bootstrap（自举）阶段只设置8MB的空间进而可以进一步的初始化分页单元，第二阶段就是初始化余下的部分了。
+</p>
+</div>
+<div id="outline-container-orge742d15" class="outline-3">
+<h3 id="orge742d15"><span class="section-number-3">6.1</span> 自举</h3>
+</div>
+
+<div id="outline-container-org42e605a" class="outline-3">
+<h3 id="org42e605a"><span class="section-number-3">6.2</span> 初始化完成</h3>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-04-16 Fri 23:01</p>
+<p class="date">Created: 2021-04-23 Fri 22:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

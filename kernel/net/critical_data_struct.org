@@ -120,6 +120,7 @@ sk_buff和sk_buff_head的前两个元素是一样的: next和prev指针. 另外s
 - unsigned char *end
 - unsigned char *data
 - unsigned char *tail
+  
   这些域划分了buffer以及在其中的数据的边界. 当各层操作它们自己的数据时, 可能会给header或数据本身分配更多空间. head和end指向分配buffer的开始以及结尾处, 而data和tail指向实际数据的开始与结束处. 如下图所示:
 
 #+CAPTION: head/end和data/tail之间的对比
@@ -136,5 +137,79 @@ sk_buff和sk_buff_head的前两个元素是一样的: next和prev指针. 另外s
   或sock_wfree(分别由skb_set_owner_r或skb_set_owner_w初始化).
 
 ** 通用字段
+下面介绍一些sk_buff主要的域，这些域不和内核特定的feature关联。
+- tsamp
+
+  包到达或离开的时间。
+
+- struct net_device	*dev
+
+  表示一个网络设备，后面还会详细介绍。dev结构体充当的角色作用，依赖于存在buffer里的数据是要被传送的还是刚到达的。
+
+  当包是到达的时候，设备驱动会更新这个域，以一个指向代表接受包的网卡设备。
+
+  当包准备被发送出去时，dev就表示发送包的设备。
+
+  某些网络功能，允许多个设备聚合在一起成为一个虚拟的设备，这个虚拟的设备不直接和具体的硬件关联起来。当设备驱动被调用时，dev成员指向虚拟设备的net_device结构体。驱动程序会从这组硬件设备相关的dev结构体中选择一个dev。换言之，指向传输设备的指针在包处理的过程中可能会改变。
+
+- char cb[40]
+
+  控制buffer，或者用来存储私有信息，由每一层维护，自己内部使用。在sk_buff里静态分配。在各层的代码里，访问这个成员通过宏来做，这使得代码可读性更好。比如对TCP来说，就用来存储tcp_skb_cb结构体。
+
+  #+begin_src C++ :includes <stdio.h>
+  struct tcp_skb_cb {
+    ...
+	__u32		seq;		/* Starting sequence number	*/
+	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
+	union {
+		/* Note : tcp_tw_isn is used in input path only
+		 *	  (isn chosen by tcp_timewait_state_process())
+		 *
+		 * 	  tcp_gso_segs/size are used in write queue only,
+		 *	  cf tcp_skb_pcount()/tcp_skb_mss()
+		 */
+		__u32		tcp_tw_isn;
+		struct {
+			u16	tcp_gso_segs;
+			u16	tcp_gso_size;
+		};
+	};
+  }
+  ...
+  #+end_src
+
+  下面这个宏被用来访问这个结构体，这个宏其实就是简单的指针转换：
+  #+begin_src C++ :includes <stdio.h>
+  #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
+  #+end_src
+
+- unsigned int csum
+- unsigned char ip_summed
+
+  校验和以及关联的状态标志。
+
+- unsigned char cloned
+
+  一个boolean标志，当设置时，表示这个结构体是另一个结构体的拷贝。
+
+- unsigned char pkt_type
+
+  基于L2层的目的地址而划分帧的类型。对于以太网设备来说，这个参数由函数eth_type_trans设置，后面还会介绍。
+
+  主要可能的值包括：
+
+  - PACKET_HOST
+
+    收到的帧的目的地址就是接收接口，换句话说，包已经到达了目的地址。
+
+  - PACKET_MULTICAST
+
+    收到的帧的目的地址是一个注册的多播地址。
+    
+  - PACKET_BROADCAST
+
+    收到帧的目的地址是一个广播地址。
+      
+  
 * net_device结构体
 
