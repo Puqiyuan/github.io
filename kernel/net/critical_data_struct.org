@@ -210,6 +210,42 @@ sk_buff和sk_buff_head的前两个元素是一样的: next和prev指针. 另外s
 
     收到帧的目的地址是一个广播地址。
       
-  
-* net_device结构体
+  - PACKET_OTHERHOST
 
+    收到帧的目的地址不属于接收的这个卡。这时，如果forward（转发）打开了的话，就转发，否则丢弃。
+
+  - PACKET_LOOPBACK
+
+    包是发送到回环（loopback）设备上。由于这个flag，当处理回环设备的包时，相比真实的设备内核会跳过一些操作。
+
+  - PACKET_FASTROUTE
+
+    包通过fastroute功能进行路由，fastroute在2.6以后内核被支持。
+
+- __u32 priority
+
+  这个成员表示了一个要被传送或转发包的QoS等级（Quality of Service）。如果包是在本地机器生成的，由socket层来定义priority值。而如果是转发的包，rt_tos2priority会根据IP头里的ToS（Type of Service）来填这个priority，是由ip_forward调用rt_tos2priority完成的。
+
+- __be16 protocol;
+
+  表示了在设备驱动层（L2）看到的上一层，典型的值有：
+
+  #+begin_src C++ :includes <stdio.h>
+  #define ETH_P_IP	0x0800		/* Internet Protocol packet	*/
+  #define ETH_P_IPV6	0x86DD		/* IPv6 over bluebook		*/
+  #+end_src
+
+  每种协议都有它自己的处理接受包的函数，该字段由驱动使用用来通知上层使用哪个函数句柄。每个驱动都会调用netif_rx来调用上层的句柄。
+
+** 功能相关的域
+Linux是模块化的，可以允许什么被包括进内核，什么不被包括进内核。因此仅当内核被编译为支持某些功能的时候才会将sk_buff里某些成员包括进内核。比如对于Netfiler或QoS来说就是这样。
+
+** 管理函数
+内核提供了很多简短的函数用来操纵sk_buff里的元素或者是操作sk_buff列表。在下图的帮助下，本节会介绍几个这样的函数：
+
+#+CAPTION: skb操纵函数操作前后，(a): skb_put，(b): skb_push，（c）：skb_pull，(d): skb_reserve
+#+ATTR_HTML: :align centering
+#+ATTR_HTML: :width 30% :height 30%
+[[./img/skb_ops.png]]
+
+* net_device结构体

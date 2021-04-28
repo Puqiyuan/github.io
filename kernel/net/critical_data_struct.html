@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-04-21 Wed 22:32 -->
+<!-- 2021-04-28 Wed 22:42 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,14 +62,16 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org2422081">1. 套接字缓存：sk_buff结构体</a>
+<li><a href="#org79d8481">1. 套接字缓存：sk_buff结构体</a>
 <ul>
-<li><a href="#org4324cbc">1.1. 网络选项与内核结构体</a></li>
-<li><a href="#org0cd4370">1.2. 字段布局</a></li>
-<li><a href="#org38aa18d">1.3. 通用字段</a></li>
+<li><a href="#orga7b88e4">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#org5d65cc9">1.2. 字段布局</a></li>
+<li><a href="#org103afd2">1.3. 通用字段</a></li>
+<li><a href="#org1576193">1.4. 功能相关的域</a></li>
+<li><a href="#org0402680">1.5. 管理函数</a></li>
 </ul>
 </li>
-<li><a href="#orgfe2ee80">2. net_device结构体</a></li>
+<li><a href="#org18eb0fa">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
@@ -101,8 +103,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-org2422081" class="outline-2">
-<h2 id="org2422081"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-org79d8481" class="outline-2">
+<h2 id="org79d8481"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -129,8 +131,8 @@ struct net_device
 </p>
 </div>
 
-<div id="outline-container-org4324cbc" class="outline-3">
-<h3 id="org4324cbc"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div id="outline-container-orga7b88e4" class="outline-3">
+<h3 id="orga7b88e4"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
@@ -166,8 +168,8 @@ queueing选项得到支持时才考虑加入到sk_buff结构体里来.
 </div>
 </div>
 
-<div id="outline-container-org0cd4370" class="outline-3">
-<h3 id="org0cd4370"><span class="section-number-3">1.2</span> 字段布局</h3>
+<div id="outline-container-org5d65cc9" class="outline-3">
+<h3 id="org5d65cc9"><span class="section-number-3">1.2</span> 字段布局</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 内核在双向链表里维护sk_buff结构体.
@@ -310,8 +312,8 @@ destructor通常不会被初始化. 当buffer属于某个套接字时, 这个成
 </div>
 </div>
 
-<div id="outline-container-org38aa18d" class="outline-3">
-<h3 id="org38aa18d"><span class="section-number-3">1.3</span> 通用字段</h3>
+<div id="outline-container-org103afd2" class="outline-3">
+<h3 id="org103afd2"><span class="section-number-3">1.3</span> 通用字段</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 下面介绍一些sk_buff主要的域，这些域不和内核特定的feature关联。
@@ -437,20 +439,94 @@ PACKET_BROADCAST
 <p>
 收到帧的目的地址是一个广播地址。
 </p></li>
+
+<li><p>
+PACKET_OTHERHOST
+</p>
+
+<p>
+收到帧的目的地址不属于接收的这个卡。这时，如果forward（转发）打开了的话，就转发，否则丢弃。
+</p></li>
+
+<li><p>
+PACKET_LOOPBACK
+</p>
+
+<p>
+包是发送到回环（loopback）设备上。由于这个flag，当处理回环设备的包时，相比真实的设备内核会跳过一些操作。
+</p></li>
+
+<li><p>
+PACKET_FASTROUTE
+</p>
+
+<p>
+包通过fastroute功能进行路由，fastroute在2.6以后内核被支持。
+</p></li>
 </ul></li>
+
+<li><p>
+__u32 priority
+</p>
+
+<p>
+这个成员表示了一个要被传送或转发包的QoS等级（Quality of Service）。如果包是在本地机器生成的，由socket层来定义priority值。而如果是转发的包，rt_tos2priority会根据IP头里的ToS（Type of Service）来填这个priority，是由ip_forward调用rt_tos2priority完成的。
+</p></li>
+
+<li><p>
+__be16 protocol;
+</p>
+
+<p>
+表示了在设备驱动层（L2）看到的上一层，典型的值有：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-C++"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ETH_P_IP</span>    0x0800      <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Internet Protocol packet</span><span style="color: #5F7F5F;"> */</span>
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ETH_P_IPV6</span>  0x86DD      <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">IPv6 over bluebook</span><span style="color: #5F7F5F;">       */</span>
+</pre>
+</div>
+
+<p>
+每种协议都有它自己的处理接受包的函数，该字段由驱动使用用来通知上层使用哪个函数句柄。每个驱动都会调用netif_rx来调用上层的句柄。
+</p></li>
 </ul>
 </div>
 </div>
+
+<div id="outline-container-org1576193" class="outline-3">
+<h3 id="org1576193"><span class="section-number-3">1.4</span> 功能相关的域</h3>
+<div class="outline-text-3" id="text-1-4">
+<p>
+Linux是模块化的，可以允许什么被包括进内核，什么不被包括进内核。因此仅当内核被编译为支持某些功能的时候才会将sk_buff里某些成员包括进内核。比如对于Netfiler或QoS来说就是这样。
+</p>
+</div>
 </div>
 
+<div id="outline-container-org0402680" class="outline-3">
+<h3 id="org0402680"><span class="section-number-3">1.5</span> 管理函数</h3>
+<div class="outline-text-3" id="text-1-5">
+<p>
+内核提供了很多简短的函数用来操纵sk_buff里的元素或者是操作sk_buff列表。在下图的帮助下，本节会介绍几个这样的函数：
+</p>
 
-<div id="outline-container-orgfe2ee80" class="outline-2">
-<h2 id="orgfe2ee80"><span class="section-number-2">2</span> net_device结构体</h2>
+
+<div class="figure">
+<p><img src="./img/skb_ops.png" alt="skb_ops.png" width="30%" height="30%" align="centering">
+</p>
+<p><span class="figure-number">Figure 3: </span>skb操纵函数操作前后，(a): skb_put，(b): skb_push，（c）：skb_pull，(d): skb_reserve</p>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org18eb0fa" class="outline-2">
+<h2 id="org18eb0fa"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-04-21 Wed 22:32</p>
+<p class="date">Created: 2021-04-28 Wed 22:42</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
