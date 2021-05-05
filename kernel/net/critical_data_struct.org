@@ -248,4 +248,37 @@ Linux是模块化的，可以允许什么被包括进内核，什么不被包括
 #+ATTR_HTML: :width 30% :height 30%
 [[./img/skb_ops.png]]
 
+首先会介绍到的是分配与释放buffer，随后是操作skb->data的指针用来在一个帧的head或tail处预留空间。
+
+在内核里经常会看到两个版本的函数，它们的名字像这样：do_something或__do_something。通常前一个函数是第二个的包装函数，它会做一些检查或锁相关的事情。通常内部的__do_something函数不会被直接调用，除非特定的条件满足的话。
+
+*** 分配内存：alloc_skb以及dev_alloc_skb
+alloc_skb实现了分配buffer，定义在skbuff.c里。前述已表达数据buffer（data buffer）和头（header）是两个不同的实体，这意味着创造一个buffer涉及到内存的两次分配，一次是数据buffer一次是sk_buff结构体。
+
+alloc_skb从kmem_cache里获得sk_buff结构体，通过调用函数kmem_cache_alloc_node函数来完成获取。而data buffer是通过kmalloc来获取的，如果cache memory可用的话，kmalloc同样通过cache。代码类似于下面这样（简化过）：
+#+begin_src c
+struct kmem_cache *cache;
+struct sk_buff *skb;
+...
+skb = kmem_cache_alloc_node(cache, gfp_mask & ~GFP_DMA, node);
+size = SKB_DATA_ALIGN(size);
+size += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
+#+end_src
+
+在调用kmalloc_reserve之前，size参数使用SKB_DATA_ALIGN宏来进行对齐。在返回之前，alloc_skb会初始化sk_buff的成员，最后的效果如下图：
+#+CAPTION: alloc_skb函数完成后
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/after_alloc_skb.png]]
+
+在上图右半部分的下部，可以看到为了对齐而添加的padding区域。而skb_shared_info主要用于处理IP分段，后面还会再介绍。
+
+dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使用。
+
+
+*** 释放内存：kfree_skb和dev_kfree_skb
+这两个函数用于释放缓存，这会导致将sk_buff放回到buffer池（pool）。最后一个真正会释放sk_buff的调用是当skb->users为1时。不然该函数只是将users这个counter减1。比如如果一个buffer有三个使用者，仅当第三次调用这些释放函数时才会真正释放内存。
+
+
 * net_device结构体
