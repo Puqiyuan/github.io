@@ -161,3 +161,29 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 ** 自举
 汇编函数startup_32负责使能分页功能，它实现在head_32.S文件里（对于x86的情况）。在vmlinuz里正常的内核代码编译在PAGE_OFFSET + 1MiB的基址处，内核实际上会被加载至第一MB字节处。头一MB的空间预留给某些设备用来和BIOS交互。
 ** 初始化完成
+余下的工作就是交给paging_init去完成了。
+* 映射地址到struct page
+虚拟地址到物理地址的映射要求快速的完成，对于struct page到物理地址也需要快速完成转换。Linux可以做到比较快速的完成转换，这是因为全局mem_map数组拥有所有指向struct page的指针。下面针对x86来介绍下。
+
+** 将物理地址映射到虚拟内核地址
+Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟地址要想转换为物理地址，只需要将虚拟地址减去PAGE_OFFSET即可，这便是virt_to_phys的核心：
+
+#+begin_src c
+static inline unsigned long
+virt_to_phys (volatile void *address)
+{
+	return (unsigned long) address - PAGE_OFFSET;
+}
+#+end_src
+
+
+当然逆向操作，物理地址到虚拟地址，就是加上PAGE_OFFSET了，这由函数phys_to_virt完成。
+** 将struct pages映射到物理地址
+先找到PFN，然后再PAGE_SHIFT即可：
+#+begin_src c
+#define page_to_phys(page)    ((dma_addr_t)page_to_pfn(page) << PAGE_SHIFT)
+#define page_to_pfn __page_to_pfn
+#define __page_to_pfn(page)	((unsigned long)((page) - mem_map) + \
+				 ARCH_PFN_OFFSET)
+#+end_src
+
