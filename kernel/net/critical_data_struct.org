@@ -244,8 +244,9 @@ Linux是模块化的，可以允许什么被包括进内核，什么不被包括
 内核提供了很多简短的函数用来操纵sk_buff里的元素或者是操作sk_buff列表。在下图的帮助下，本节会介绍几个这样的函数：
 
 #+CAPTION: skb操纵函数操作前后，(a): skb_put，(b): skb_push，（c）：skb_pull，(d): skb_reserve
-#+ATTR_HTML: :align centering
-#+ATTR_HTML: :width 30% :height 30%
+#+LABEL: fig:skb_ops
+#+NAME: skb_ops
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/skb_ops.png]]
 
 首先会介绍到的是分配与释放buffer，随后是操作skb->data的指针用来在一个帧的head或tail处预留空间。
@@ -280,5 +281,34 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 *** 释放内存：kfree_skb和dev_kfree_skb
 这两个函数用于释放缓存，这会导致将sk_buff放回到buffer池（pool）。最后一个真正会释放sk_buff的调用是当skb->users为1时。不然该函数只是将users这个counter减1。比如如果一个buffer有三个使用者，仅当第三次调用这些释放函数时才会真正释放内存。
 
+下面的图展示了释放一个buffer的流程。在后面的文章中可以看到sk_buff可以引用到dst_entry数据结构。当sk_buff结构体释放时，dst_release也会被调用以减少到dst_entry的引用。
+
+#+CAPTION: kfree_skb函数
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 35% :height 35%
+[[./img/kfree_skb.png]]
+
+
+当析构器（destructor）被初始化时，此时也会调用。
+
+在前面有看到，sk_buff会关联到另一个内存数据块，这是实际存放数据的地方。然而在这个数据块的底部是skb_shared_info结构体，它可以包含指向其它内存块的指针。kfree_skb也会释放这些内存。最后sk_buff会返回给skbuff_head_cache。
+
+*** 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull
+
+skb_reserve用来在buffer的头部处预留某些空间，在插入头或对齐数据边界时经常用到。这个函数会移动data和tail指针，data和tail分别确定了payload的开始和结束位置。如图 [[skb_ops]] 所示展示了调用skb_reserve后的情况。这个函数通常是在分配buffer不久后调用，这时data和tail还是一样的，此时再预留一部分头部空间，注意在没有填充payload时，data和tail依旧是指向一样的位置。
+
+如果阅读以太网驱动代码的话（比如3c59x.c文件），在刚分配buffer而存放任何实际数据前经常可以看到下面的调用：
+
+#+begin_src c
+skb_reserve(skb, 2);
+#+end_src
+
+因为Ethernet frame具有14B长是已知的，上述调用会在头部处多shift出来2B，这就可以保持IP
+header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下图：
+
+#+CAPTION: skb_reserve操作前后
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/skb_reserve.png]]
 
 * net_device结构体
