@@ -311,4 +311,14 @@ header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下�
 #+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
 [[./img/skb_reserve.png]]
 
+下面的图展示了相反方向的buffer变化：也就是数据传输方向。
+
+#+CAPTION: buffer从TCP层传到link层时是如何变化的
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/buffer_to_link.png]]
+
+1. 当TCP被要求去传输数据时，它会分配符合一定标准大小的buffer，比如TCP Maximum Segment
+  Size(mss)。
+2. TCP使用skb_reserve函数在buffer的头部预留足够多的空间去存放各层的头（包括TCP，IP以及链路层）。
 * net_device结构体

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-05-12 Wed 23:32 -->
+<!-- 2021-05-19 Wed 23:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,22 +62,22 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org713da3d">1. 套接字缓存：sk_buff结构体</a>
+<li><a href="#orgfd30d03">1. 套接字缓存：sk_buff结构体</a>
 <ul>
-<li><a href="#orge910d22">1.1. 网络选项与内核结构体</a></li>
-<li><a href="#org5b89579">1.2. 字段布局</a></li>
-<li><a href="#org42edb19">1.3. 通用字段</a></li>
-<li><a href="#org00a56fe">1.4. 功能相关的域</a></li>
-<li><a href="#org2f06dd1">1.5. 管理函数</a>
+<li><a href="#org6dbe3c7">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#org0740de5">1.2. 字段布局</a></li>
+<li><a href="#org45bf2b8">1.3. 通用字段</a></li>
+<li><a href="#org20413a0">1.4. 功能相关的域</a></li>
+<li><a href="#orgb04b7c4">1.5. 管理函数</a>
 <ul>
-<li><a href="#org7e21153">1.5.1. 分配内存：alloc_skb以及dev_alloc_skb</a></li>
-<li><a href="#orgccd6aaa">1.5.2. 释放内存：kfree_skb和dev_kfree_skb</a></li>
-<li><a href="#org7f65ab6">1.5.3. 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</a></li>
+<li><a href="#org94cd400">1.5.1. 分配内存：alloc_skb以及dev_alloc_skb</a></li>
+<li><a href="#org304e55a">1.5.2. 释放内存：kfree_skb和dev_kfree_skb</a></li>
+<li><a href="#org15750d6">1.5.3. 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#orgefc473e">2. net_device结构体</a></li>
+<li><a href="#org8b75544">2. net_device结构体</a></li>
 </ul>
 </div>
 </div>
@@ -109,8 +109,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-org713da3d" class="outline-2">
-<h2 id="org713da3d"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-orgfd30d03" class="outline-2">
+<h2 id="orgfd30d03"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -137,8 +137,8 @@ struct net_device
 </p>
 </div>
 
-<div id="outline-container-orge910d22" class="outline-3">
-<h3 id="orge910d22"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div id="outline-container-org6dbe3c7" class="outline-3">
+<h3 id="org6dbe3c7"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
@@ -174,8 +174,8 @@ queueing选项得到支持时才考虑加入到sk_buff结构体里来.
 </div>
 </div>
 
-<div id="outline-container-org5b89579" class="outline-3">
-<h3 id="org5b89579"><span class="section-number-3">1.2</span> 字段布局</h3>
+<div id="outline-container-org0740de5" class="outline-3">
+<h3 id="org0740de5"><span class="section-number-3">1.2</span> 字段布局</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 内核在双向链表里维护sk_buff结构体.
@@ -318,8 +318,8 @@ destructor通常不会被初始化. 当buffer属于某个套接字时, 这个成
 </div>
 </div>
 
-<div id="outline-container-org42edb19" class="outline-3">
-<h3 id="org42edb19"><span class="section-number-3">1.3</span> 通用字段</h3>
+<div id="outline-container-org45bf2b8" class="outline-3">
+<h3 id="org45bf2b8"><span class="section-number-3">1.3</span> 通用字段</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 下面介绍一些sk_buff主要的域，这些域不和内核特定的feature关联。
@@ -500,8 +500,8 @@ __be16 protocol;
 </div>
 </div>
 
-<div id="outline-container-org00a56fe" class="outline-3">
-<h3 id="org00a56fe"><span class="section-number-3">1.4</span> 功能相关的域</h3>
+<div id="outline-container-org20413a0" class="outline-3">
+<h3 id="org20413a0"><span class="section-number-3">1.4</span> 功能相关的域</h3>
 <div class="outline-text-3" id="text-1-4">
 <p>
 Linux是模块化的，可以允许什么被包括进内核，什么不被包括进内核。因此仅当内核被编译为支持某些功能的时候才会将sk_buff里某些成员包括进内核。比如对于Netfiler或QoS来说就是这样。
@@ -509,15 +509,15 @@ Linux是模块化的，可以允许什么被包括进内核，什么不被包括
 </div>
 </div>
 
-<div id="outline-container-org2f06dd1" class="outline-3">
-<h3 id="org2f06dd1"><span class="section-number-3">1.5</span> 管理函数</h3>
+<div id="outline-container-orgb04b7c4" class="outline-3">
+<h3 id="orgb04b7c4"><span class="section-number-3">1.5</span> 管理函数</h3>
 <div class="outline-text-3" id="text-1-5">
 <p>
 内核提供了很多简短的函数用来操纵sk_buff里的元素或者是操作sk_buff列表。在下图的帮助下，本节会介绍几个这样的函数：
 </p>
 
 
-<div id="org8c9521d" class="figure">
+<div id="org02b30c9" class="figure">
 <p><img src="./img/skb_ops.png" alt="skb_ops.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>skb操纵函数操作前后，(a): skb_put，(b): skb_push，（c）：skb_pull，(d): skb_reserve</p>
@@ -532,8 +532,8 @@ Linux是模块化的，可以允许什么被包括进内核，什么不被包括
 </p>
 </div>
 
-<div id="outline-container-org7e21153" class="outline-4">
-<h4 id="org7e21153"><span class="section-number-4">1.5.1</span> 分配内存：alloc_skb以及dev_alloc_skb</h4>
+<div id="outline-container-org94cd400" class="outline-4">
+<h4 id="org94cd400"><span class="section-number-4">1.5.1</span> 分配内存：alloc_skb以及dev_alloc_skb</h4>
 <div class="outline-text-4" id="text-1-5-1">
 <p>
 alloc_skb实现了分配buffer，定义在skbuff.c里。前述已表达数据buffer（data buffer）和头（header）是两个不同的实体，这意味着创造一个buffer涉及到内存的两次分配，一次是数据buffer一次是sk_buff结构体。
@@ -557,7 +557,7 @@ data = kmalloc_reserve(size, gfp_mask, node, &amp;pfmemalloc);
 在调用kmalloc_reserve之前，size参数使用SKB_DATA_ALIGN宏来进行对齐。在返回之前，alloc_skb会初始化sk_buff的成员，最后的效果如下图：
 </p>
 
-<div id="org5395f1c" class="figure">
+<div id="org996c258" class="figure">
 <p><img src="./img/after_alloc_skb.png" alt="after_alloc_skb.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 4: </span>alloc_skb函数完成后</p>
@@ -574,8 +574,8 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 </div>
 
 
-<div id="outline-container-orgccd6aaa" class="outline-4">
-<h4 id="orgccd6aaa"><span class="section-number-4">1.5.2</span> 释放内存：kfree_skb和dev_kfree_skb</h4>
+<div id="outline-container-org304e55a" class="outline-4">
+<h4 id="org304e55a"><span class="section-number-4">1.5.2</span> 释放内存：kfree_skb和dev_kfree_skb</h4>
 <div class="outline-text-4" id="text-1-5-2">
 <p>
 这两个函数用于释放缓存，这会导致将sk_buff放回到buffer池（pool）。最后一个真正会释放sk_buff的调用是当skb-&gt;users为1时。不然该函数只是将users这个counter减1。比如如果一个buffer有三个使用者，仅当第三次调用这些释放函数时才会真正释放内存。
@@ -586,7 +586,7 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 </p>
 
 
-<div id="org9c7a86f" class="figure">
+<div id="orgf3a6cc9" class="figure">
 <p><img src="./img/kfree_skb.png" alt="kfree_skb.png" width="35%" height="35%">
 </p>
 <p><span class="figure-number">Figure 5: </span>kfree_skb函数</p>
@@ -603,11 +603,11 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 </div>
 </div>
 
-<div id="outline-container-org7f65ab6" class="outline-4">
-<h4 id="org7f65ab6"><span class="section-number-4">1.5.3</span> 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</h4>
+<div id="outline-container-org15750d6" class="outline-4">
+<h4 id="org15750d6"><span class="section-number-4">1.5.3</span> 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</h4>
 <div class="outline-text-4" id="text-1-5-3">
 <p>
-skb_reserve用来在buffer的头部处预留某些空间，在插入头或对齐数据边界时经常用到。这个函数会移动data和tail指针，data和tail分别确定了payload的开始和结束位置。如图 <a href="#org8c9521d">3</a> 所示展示了调用skb_reserve后的情况。这个函数通常是在分配buffer不久后调用，这时data和tail还是一样的，此时再预留一部分头部空间，注意在没有填充payload时，data和tail依旧是指向一样的位置。
+skb_reserve用来在buffer的头部处预留某些空间，在插入头或对齐数据边界时经常用到。这个函数会移动data和tail指针，data和tail分别确定了payload的开始和结束位置。如图 <a href="#org02b30c9">3</a> 所示展示了调用skb_reserve后的情况。这个函数通常是在分配buffer不久后调用，这时data和tail还是一样的，此时再预留一部分头部空间，注意在没有填充payload时，data和tail依旧是指向一样的位置。
 </p>
 
 <p>
@@ -625,23 +625,39 @@ header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下�
 </p>
 
 
-<div id="org2e2af96" class="figure">
+<div id="orge668d60" class="figure">
 <p><img src="./img/skb_reserve.png" alt="skb_reserve.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 6: </span>skb_reserve操作前后</p>
 </div>
-</div>
-</div>
-</div>
+
+<p>
+下面的图展示了相反方向的buffer变化：也就是数据传输方向。
+</p>
+
+
+<div id="org116970d" class="figure">
+<p><img src="./img/buffer_to_link.png" alt="buffer_to_link.png" width="50%" height="50%">
+</p>
+<p><span class="figure-number">Figure 7: </span>buffer从TCP层传到link层时是如何变化的</p>
 </div>
 
-<div id="outline-container-orgefc473e" class="outline-2">
-<h2 id="orgefc473e"><span class="section-number-2">2</span> net_device结构体</h2>
+<ol class="org-ol">
+<li>当TCP被要求去传输数据时，它会分配符合一定标准大小的buffer，比如TCP Maximum Segment
+Size(mss)。</li>
+<li>TCP使用skb_reserve函数在buffer的头部预留足够多的空间去存放各层的头（包括TCP，IP以及链路层）。</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org8b75544" class="outline-2">
+<h2 id="org8b75544"><span class="section-number-2">2</span> net_device结构体</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-05-12 Wed 23:32</p>
+<p class="date">Created: 2021-05-19 Wed 23:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
