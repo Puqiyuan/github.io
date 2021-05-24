@@ -187,3 +187,6 @@ virt_to_phys (volatile void *address)
 				 ARCH_PFN_OFFSET)
 #+end_src
 
+
+* TLB
+

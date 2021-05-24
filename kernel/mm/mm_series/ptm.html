@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-05-07 Fri 23:35 -->
+<!-- 2021-05-20 Thu 22:58 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之页表管理</title>
@@ -62,21 +62,21 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgdde8f6e">1. 页目录表示</a></li>
-<li><a href="#org3161a22">2. 页表条目表示</a></li>
-<li><a href="#org3902210">3. 使用页表条目</a></li>
-<li><a href="#org10a063f">4. 翻译与设置页表条目</a></li>
-<li><a href="#org6e679bb">5. 分配以及释放页表</a></li>
-<li><a href="#org9baf665">6. 内核页表</a>
+<li><a href="#orgbdb182f">1. 页目录表示</a></li>
+<li><a href="#org951387c">2. 页表条目表示</a></li>
+<li><a href="#org7d8840e">3. 使用页表条目</a></li>
+<li><a href="#org3927da9">4. 翻译与设置页表条目</a></li>
+<li><a href="#orgd39ca39">5. 分配以及释放页表</a></li>
+<li><a href="#orga55c5ed">6. 内核页表</a>
 <ul>
-<li><a href="#org74a7037">6.1. 自举</a></li>
-<li><a href="#orgeceac8c">6.2. 初始化完成</a></li>
+<li><a href="#orgdf44c69">6.1. 自举</a></li>
+<li><a href="#orgdf69034">6.2. 初始化完成</a></li>
 </ul>
 </li>
-<li><a href="#orga19f46d">7. 映射地址到struct page</a>
+<li><a href="#org0c49e11">7. 映射地址到struct page</a>
 <ul>
-<li><a href="#org5f961a1">7.1. 将物理地址映射到虚拟内核地址</a></li>
-<li><a href="#org32e911b">7.2. 将struct pages映射到物理地址</a></li>
+<li><a href="#org30d1d7c">7.1. 将物理地址映射到虚拟内核地址</a></li>
+<li><a href="#orgf076008">7.2. 将struct pages映射到物理地址</a></li>
 </ul>
 </li>
 </ul>
@@ -91,8 +91,8 @@ for the JavaScript code in this tag.
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 </p>
 
-<div id="outline-container-orgdde8f6e" class="outline-2">
-<h2 id="orgdde8f6e"><span class="section-number-2">1</span> 页目录表示</h2>
+<div id="outline-container-orgbdb182f" class="outline-2">
+<h2 id="orgbdb182f"><span class="section-number-2">1</span> 页目录表示</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 每一个进程都有一个指向它自己PGD的指针(mm_struct-&gt;pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
@@ -201,8 +201,8 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 
 
-<div id="outline-container-org3161a22" class="outline-2">
-<h2 id="org3161a22"><span class="section-number-2">2</span> 页表条目表示</h2>
+<div id="outline-container-org951387c" class="outline-2">
+<h2 id="org951387c"><span class="section-number-2">2</span> 页表条目表示</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 如前所述, 对于PTEs, PMDs以及PGDs来说, 分别由结构体pte_t, pmd_t以及pgd_t结构体来表示. 即使这些结构体里的成员只有一个unsigned的成员, 但是依旧被定义成结构体, 这主要有两个目的, 一是起
@@ -267,8 +267,8 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 </div>
 
-<div id="outline-container-org3902210" class="outline-2">
-<h2 id="org3902210"><span class="section-number-2">3</span> 使用页表条目</h2>
+<div id="outline-container-org7d8840e" class="outline-2">
+<h2 id="org7d8840e"><span class="section-number-2">3</span> 使用页表条目</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 定义在pgtable.h中的一些宏, 可以用来检查和查看页表条目. 有三个重要的宏, 用来把线性地址分解为它们的组成部分. pgd_offset使用传入的两个参数, 一个地址以及一个mm_struct结构体, 返回一个pgd条目:
@@ -332,8 +332,8 @@ pte_clear(), pmd_clear()等将会清除对应的条目:
 </ul>
 </div>
 </div>
-<div id="outline-container-org10a063f" class="outline-2">
-<h2 id="org10a063f"><span class="section-number-2">4</span> 翻译与设置页表条目</h2>
+<div id="outline-container-org3927da9" class="outline-2">
+<h2 id="org3927da9"><span class="section-number-2">4</span> 翻译与设置页表条目</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 有一组宏和函数用来映射地址和页面里的PTE条目, 以及设置单个条目.
@@ -353,8 +353,8 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 
-<div id="outline-container-org6e679bb" class="outline-2">
-<h2 id="org6e679bb"><span class="section-number-2">5</span> 分配以及释放页表</h2>
+<div id="outline-container-orgd39ca39" class="outline-2">
+<h2 id="orgd39ca39"><span class="section-number-2">5</span> 分配以及释放页表</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 最后再介绍几个页表的分配与释放函数。如前所述，页表也是物理页面，只不过是包含有许多条目，分配与释放物理页面是一个相对昂贵的操作，昂贵的意思是，时间消耗大，另外在页面分配期间中断不能打开。不论在哪个级别，页表的分配与删除都是十分频繁的操作，所以这些操作保持尽量的快是十分重要的。
@@ -366,23 +366,23 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 
-<div id="outline-container-org9baf665" class="outline-2">
-<h2 id="org9baf665"><span class="section-number-2">6</span> 内核页表</h2>
+<div id="outline-container-orga55c5ed" class="outline-2">
+<h2 id="orga55c5ed"><span class="section-number-2">6</span> 内核页表</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 在系统刚起来的时候，分页功能是没有准备好的，因为页表无法初始化它自己。初始化页表的实现是架构相关的。这里我们只关心X86，这时页表的初始化分为两个阶段，bootstrap（自举）阶段只设置8MB的空间进而可以进一步的初始化分页单元，第二阶段就是初始化余下的部分了。
 </p>
 </div>
-<div id="outline-container-org74a7037" class="outline-3">
-<h3 id="org74a7037"><span class="section-number-3">6.1</span> 自举</h3>
+<div id="outline-container-orgdf44c69" class="outline-3">
+<h3 id="orgdf44c69"><span class="section-number-3">6.1</span> 自举</h3>
 <div class="outline-text-3" id="text-6-1">
 <p>
 汇编函数startup_32负责使能分页功能，它实现在head_32.S文件里（对于x86的情况）。在vmlinuz里正常的内核代码编译在PAGE_OFFSET + 1MiB的基址处，内核实际上会被加载至第一MB字节处。头一MB的空间预留给某些设备用来和BIOS交互。
 </p>
 </div>
 </div>
-<div id="outline-container-orgeceac8c" class="outline-3">
-<h3 id="orgeceac8c"><span class="section-number-3">6.2</span> 初始化完成</h3>
+<div id="outline-container-orgdf69034" class="outline-3">
+<h3 id="orgdf69034"><span class="section-number-3">6.2</span> 初始化完成</h3>
 <div class="outline-text-3" id="text-6-2">
 <p>
 余下的工作就是交给paging_init去完成了。
@@ -390,16 +390,16 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 </div>
-<div id="outline-container-orga19f46d" class="outline-2">
-<h2 id="orga19f46d"><span class="section-number-2">7</span> 映射地址到struct page</h2>
+<div id="outline-container-org0c49e11" class="outline-2">
+<h2 id="org0c49e11"><span class="section-number-2">7</span> 映射地址到struct page</h2>
 <div class="outline-text-2" id="text-7">
 <p>
 虚拟地址到物理地址的映射要求快速的完成，对于struct page到物理地址也需要快速完成转换。Linux可以做到比较快速的完成转换，这是因为全局mem_map数组拥有所有指向struct page的指针。下面针对x86来介绍下。
 </p>
 </div>
 
-<div id="outline-container-org5f961a1" class="outline-3">
-<h3 id="org5f961a1"><span class="section-number-3">7.1</span> 将物理地址映射到虚拟内核地址</h3>
+<div id="outline-container-org30d1d7c" class="outline-3">
+<h3 id="org30d1d7c"><span class="section-number-3">7.1</span> 将物理地址映射到虚拟内核地址</h3>
 <div class="outline-text-3" id="text-7-1">
 <p>
 Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟地址要想转换为物理地址，只需要将虚拟地址减去PAGE_OFFSET即可，这便是virt_to_phys的核心：
@@ -420,8 +420,8 @@ Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟
 </p>
 </div>
 </div>
-<div id="outline-container-org32e911b" class="outline-3">
-<h3 id="org32e911b"><span class="section-number-3">7.2</span> 将struct pages映射到物理地址</h3>
+<div id="outline-container-orgf076008" class="outline-3">
+<h3 id="orgf076008"><span class="section-number-3">7.2</span> 将struct pages映射到物理地址</h3>
 <div class="outline-text-3" id="text-7-2">
 <p>
 先找到PFN，然后再PAGE_SHIFT即可：
@@ -439,7 +439,7 @@ Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-05-07 Fri 23:35</p>
+<p class="date">Created: 2021-05-20 Thu 22:58</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

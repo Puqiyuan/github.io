@@ -335,7 +335,18 @@ GDT的布局如下图示意：
 
 在分页单元和DRAM之间插入了缓存单元。它包括硬件cache内存以及缓存控制器。cache memory存储了实际的内存行。缓存控制器存储了一组条目，一个条目对应缓存中的一行。每个条目包括一个tag和几个flag用来描述cache line的状态。缓存控制器使用tag中的某些bit位来识别当前映射到缓存行中的内存位置。内存物理地址的bit位通常化分为三部分：较高位的某些bit位对应tag，中间的一些对应索引，而低位的对应一个缓存行中的偏移。
 
-当缓存命中时，根据访问类型的不同，缓存控制器的行为也不同。对于读操作，控制器从缓存行中选择数据并且转送给CPU里的寄存器，不经过RAM所以CPU节约了时间。
+当缓存命中时，根据访问类型的不同，缓存控制器的行为也不同。对于读操作，控制器从缓存行中选择数据并且转送给CPU里的寄存器，不经过RAM所以CPU节约了时间。而对于写操作，控制器可以实现两种基本策略，一是write-through，二是write-back。对于write-through，控制器会向RAM和cache line都写入。对于write-back，提供更加高的性能，只有cache line会被更新而RAM的内容未改变。当然，RAM的内容最终会被更新。当CPU执行一个flush指令或硬件的FLUSH信号发生时（这通常意味着一个cache miss），缓存控制器就会将cache line写回到RAM。
+
+当cache miss发生时，cache line就会写入到内存，如果可能会将必要的行从RAM中取到cache entry。
+
+对于多处理器系统，每个处理器都有自己的硬件缓存，因此需要额外的电路来同步cache的内容。如下图所示：
+
+#+CAPTION: 双处理器的缓存
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/dual-processor-cache.png]]
+
+
 *** TLB
 ** Linux中的分页
 * 内存管理
