@@ -421,4 +421,115 @@ read函数的返回值由调用进程去解释：
 
 scull会利用这些规则，尤其是partial-read规则，对scull_read的一次调用仅处理一个数据量子集，不会有一个循环去读取所有数据，这样代码会比较简单可读性较好。如果应用程序需要读取大于一个数据集的数据，可以多次调用scull_read。当然如果使用I/O库函数，用户程序都不会感知到传输数据的量。
 
-如果当前的读位置大于设备的大小，scull的read方法会返回0代表没有数据可提供。
+如果当前的读位置大于设备的大小，scull的read方法会返回0代表没有数据可提供。这种情况是会发生的，比如进程A正在读设备文件，而进程B打开这个文件写，就会把设备文件截断成长度0。进程A突然发现它读过到了文件尾，再一次调用read时就会返回0。
+
+下面是read函数的实现：
+#+begin_src c
+ssize_t scull_read(struct file *filp, char __user *buf, size_t count,
+                loff_t *f_pos)
+{
+	struct scull_dev *dev = filp->private_data; 
+	struct scull_qset *dptr;	/* the first listitem */
+	int quantum = dev->quantum, qset = dev->qset;
+	int itemsize = quantum * qset; /* how many bytes in the listitem */
+	int item, s_pos, q_pos, rest;
+	ssize_t retval = 0;
+
+	if (mutex_lock_interruptible(&dev->lock))
+		return -ERESTARTSYS;
+	if (*f_pos >= dev->size)
+		goto out;
+	if (*f_pos + count > dev->size)
+		count = dev->size - *f_pos;
+
+	/* find listitem, qset index, and offset in the quantum */
+	item = (long)*f_pos / itemsize;
+	rest = (long)*f_pos % itemsize;
+	s_pos = rest / quantum; q_pos = rest % quantum;
+
+	/* follow the list up to the right position (defined elsewhere) */
+	dptr = scull_follow(dev, item);
+
+	if (dptr == NULL || !dptr->data || ! dptr->data[s_pos])
+		goto out; /* don't fill holes */
+
+	/* read only up to the end of this quantum */
+	if (count > quantum - q_pos)
+		count = quantum - q_pos;
+
+	if (copy_to_user(buf, dptr->data[s_pos] + q_pos, count)) {
+		retval = -EFAULT;
+		goto out;
+	}
+	*f_pos += count;
+	retval = count;
+
+  out:
+	mutex_unlock(&dev->lock);
+	return retval;
+}
+#+end_src
+
+
+** write方法
+与read类似，write方法也可以传输少于所请求的数据。返回值按照下面的规则来设定：
++ 如果拷贝的值等于count，所请求的多少数据就都传送了。
++ 如果值是正的但是小于count，那么仅有部分数据被传送。程序很有可能会再次尝试读取剩下的数据。
++ 如果返回的值是0，没有什么会被写入。这不是代表错误，标准函数库可以再次尝试调用write。当介绍blocking　write时，会精确解释它的意义。
++ 负值代表了错误，类似于read，错误值的意义定义在了<linux/errno.h>
+
+write函数如下实现：
+#+begin_src c
+ssize_t scull_write(struct file *filp, const char __user *buf, size_t count,
+                loff_t *f_pos)
+{
+	struct scull_dev *dev = filp->private_data;
+	struct scull_qset *dptr;
+	int quantum = dev->quantum, qset = dev->qset;
+	int itemsize = quantum * qset;
+	int item, s_pos, q_pos, rest;
+	ssize_t retval = -ENOMEM; /* value used in "goto out" statements */
+
+	if (mutex_lock_interruptible(&dev->lock))
+		return -ERESTARTSYS;
+
+	/* find listitem, qset index and offset in the quantum */
+	item = (long)*f_pos / itemsize;
+	rest = (long)*f_pos % itemsize;
+	s_pos = rest / quantum; q_pos = rest % quantum;
+
+	/* follow the list up to the right position */
+	dptr = scull_follow(dev, item);
+	if (dptr == NULL)
+		goto out;
+	if (!dptr->data) {
+		dptr->data = kmalloc(qset * sizeof(char *), GFP_KERNEL);
+		if (!dptr->data)
+			goto out;
+		memset(dptr->data, 0, qset * sizeof(char *));
+	}
+	if (!dptr->data[s_pos]) {
+		dptr->data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+		if (!dptr->data[s_pos])
+			goto out;
+	}
+	/* write only up to the end of this quantum */
+	if (count > quantum - q_pos)
+		count = quantum - q_pos;
+
+	if (copy_from_user(dptr->data[s_pos]+q_pos, buf, count)) {
+		retval = -EFAULT;
+		goto out;
+	}
+	*f_pos += count;
+	retval = count;
+
+        /* update the size */
+	if (dev->size < *f_pos)
+		dev->size = *f_pos;
+
+  out:
+	mutex_unlock(&dev->lock);
+	return retval;
+}
+#+end_src
