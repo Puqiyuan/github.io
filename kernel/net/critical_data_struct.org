@@ -269,7 +269,8 @@ data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
 
 在调用kmalloc_reserve之前，size参数使用SKB_DATA_ALIGN宏来进行对齐。在返回之前，alloc_skb会初始化sk_buff的成员，最后的效果如下图：
 #+CAPTION: alloc_skb函数完成后
-#+LABEL: fig:
+#+NAME:alloc_skb_after
+#+LABEL: fig:alloc_skb_after
 #+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
 [[./img/after_alloc_skb.png]]
 
@@ -320,5 +321,59 @@ header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下�
 
 1. 当TCP被要求去传输数据时，它会分配符合一定标准大小的buffer，比如TCP Maximum Segment
   Size(mss)。
-2. TCP使用skb_reserve函数在buffer的头部预留足够多的空间去存放各层的头（包括TCP，IP以及链路层）。
+2. TCP使用skb_reserve函数在buffer的头部预留足够多的空间去存放各层的头（包括TCP，IP以及链路层）。MAX_TCP_HEADER是考虑了最坏情况下的所有层的所有header大小：TCP并不知道其下什么接口会用来传输数据，就预留每层可能的最大header空间，甚至会考虑多IP头的情况（当内核被编译为支持IP over IP时，就可以有多个IP header）。
+
+3. TCP层的负载被拷贝到buffer里。注意上图只是个例子，TCP负载的组织可以不同，比如它可以组织成fragment的形式。
+4. TCP可以添加它的header了。
+5. TCP现在终于把buffer传递到了下层的IP层，IP层加上了它自己的header。
+6. IP层又交给它的邻居下层，链路层会添加Ethernet头部。
+
+buffer在网络栈从上到下传递时，每层的协议都将skb->data向下移动，然后拷贝它这一层的头，并且更新skb->len。这些操作通过前面介绍过的skb操作函数来完成。
+
+注意skb_reserve并没有真正的往buffer里放入任何东西，它仅仅是更新两个指针。
+#+begin_src c
+static inline void skb_reserve(struct sk_buff *skb, int len)
+{
+	skb->data += len;
+	skb->tail += len;
+}
+#+end_src
+
+skb_push在buffer之起始处放置数据，而skb_put在末尾添加数据。和skb_reserve类似，这些函数也没有真的添加数据，都是简单的在head和tail处移动指针，数据的拷贝由其它函数完成。而skb_pull从Head处移除数据，当然也只是移动指针了。
+
+如图
+[[fig:alloc_skb_after]]
+所示，在data buffer的最后，有一个skb_shared_info结构体用来存储额外的信息。下面是这个结构体的定义：
+
+#+begin_src c
+struct skb_shared_info {
+	__u8		flags;
+	__u8		meta_len;
+	__u8		nr_frags;
+	__u8		tx_flags;
+	unsigned short	gso_size;
+	/* Warning: this field is not always filled in (UFO)! */
+	unsigned short	gso_segs;
+	struct sk_buff	*frag_list;
+	struct skb_shared_hwtstamps hwtstamps;
+	unsigned int	gso_type;
+	u32		tskey;
+
+	/*
+	 * Warning : all fields before dataref are cleared in __alloc_skb()
+	 */
+	atomic_t	dataref;
+
+	/* Intermediate layers must ensure that destructor_arg
+	 * remains valid until skb destructor */
+	void *		destructor_arg;
+
+	/* must be last field, see pskb_expand_head() */
+	skb_frag_t	frags[MAX_SKB_FRAGS];
+};
+#+end_src
+
+dataref代表了这个buffer block有多少个用户。在后面会讨论nr_frags，frag_list以及frags用来处理IP分段。skb_is_nonlinear可以用来检查buffer是否被分段。而skb_linearize*用来将多个分段组成一个单一的buffer。组合单个fragments涉及拷贝，这引入了性能延迟。
+
+
 * net_device结构体
