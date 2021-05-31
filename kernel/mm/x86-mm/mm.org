@@ -346,6 +346,12 @@ GDT的布局如下图示意：
 #+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
 [[./img/dual-processor-cache.png]]
 
+每个CPU都有它自己的局部硬件缓存，这样更新就比较费时了。每当CPU修改硬件缓存时，都必须检查相同的数据是否也在其它的CPU缓存中，如果在的话也要通知其它CPU去更新到最新的值。这个行为叫做缓存监听。幸运的是，这些都是由硬件自动完成的，内核并不关心。
+
+缓存技术在快速的发展，比如，Pentium一代仅包含一个片上缓存叫做L1-cache。而较新的处理器包含更大、更慢的片上缓存叫做L2-cache，L3-cache。不同缓存级别间的一致性由硬件层维护，Linux忽略这些硬件细节并认为只有一块缓存。
+
+cr0寄存器的CD标志可以用来使能或禁用缓存电路。而NW标志，指明了是使用write-through或wrtie-back策略。
+
 
 *** TLB
 ** Linux中的分页

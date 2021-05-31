@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-05-09 Sun 20:38 -->
+<!-- 2021-05-29 Sat 16:45 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>系统编程概要</title>
@@ -62,18 +62,18 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf25de8e">1. 内存模型</a>
+<li><a href="#orgf733951">1. 内存模型</a>
 <ul>
-<li><a href="#orgaaa80f3">1.1. 内存寻址</a></li>
-<li><a href="#orgb096296">1.2. 内存组织</a></li>
+<li><a href="#orge0ccaa9">1.1. 内存寻址</a></li>
+<li><a href="#orgbe7ddeb">1.2. 内存组织</a></li>
 </ul>
 </li>
-<li><a href="#org0cfb8a7">2. 内存管理</a></li>
-<li><a href="#org35502ed">3. 操作模式</a></li>
-<li><a href="#org8e91da8">4. 系统寄存器</a></li>
-<li><a href="#org646c8c9">5. 系统数据结构</a></li>
-<li><a href="#org7a3d137">6. 中断</a></li>
-<li><a href="#orgdbc0061">7. 其它系统编程功能</a></li>
+<li><a href="#org7af89fd">2. 内存管理</a></li>
+<li><a href="#org3dd9b54">3. 操作模式</a></li>
+<li><a href="#orgc04e80e">4. 系统寄存器</a></li>
+<li><a href="#orge3a3d2e">5. 系统数据结构</a></li>
+<li><a href="#orgfc087f4">6. 中断</a></li>
+<li><a href="#org3243f7f">7. 其它系统编程功能</a></li>
 </ul>
 </div>
 </div>
@@ -97,8 +97,8 @@ for the JavaScript code in this tag.
 为了支持64-bit的操作系统和应用，许多遗留下来的功能或特点都有被加强，但同时也向后兼容已经存在的软件。
 </p>
 
-<div id="outline-container-orgf25de8e" class="outline-2">
-<h2 id="orgf25de8e"><span class="section-number-2">1</span> 内存模型</h2>
+<div id="outline-container-orgf733951" class="outline-2">
+<h2 id="orgf733951"><span class="section-number-2">1</span> 内存模型</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 ADM64架构的内存模型被设计成系统软件可以以安全的方式去管理应用软件以及相关的数据，它可以和旧版的内存模型兼容。对于虚拟地址和物理地址之间的转换由硬件机制完成。硬件的翻译机制允许系统软件以透明的方式重定位应用和数据，可以定位到物理内存空间或者是硬盘空间，这些空间都是由系统软件管理的。
@@ -109,8 +109,8 @@ ADM64架构的内存模型被设计成系统软件可以以安全的方式去管
 </p>
 </div>
 
-<div id="outline-container-orgaaa80f3" class="outline-3">
-<h3 id="orgaaa80f3"><span class="section-number-3">1.1</span> 内存寻址</h3>
+<div id="outline-container-orge0ccaa9" class="outline-3">
+<h3 id="orge0ccaa9"><span class="section-number-3">1.1</span> 内存寻址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 AMD64架构支持地址重定位，为了做到这点，几种类型的地址被定义用来完整的描述内存组织，共计四种：
@@ -187,8 +187,8 @@ mode下，线性地址必须是规范地址形式。
 </div>
 </div>
 
-<div id="outline-container-orgb096296" class="outline-3">
-<h3 id="orgb096296"><span class="section-number-3">1.2</span> 内存组织</h3>
+<div id="outline-container-orgbe7ddeb" class="outline-3">
+<h3 id="orgbe7ddeb"><span class="section-number-3">1.2</span> 内存组织</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理内存通常具有不同的大小，通常来说虚拟内存比物理内存大。系统软件负责将应用或数据在物理内存和系统硬盘间重定位，这使得看起来系统里有超过物理内存大小可用的内存。
@@ -200,28 +200,33 @@ AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理
 </div>
 </div>
 </div>
-<div id="outline-container-org0cfb8a7" class="outline-2">
-<h2 id="org0cfb8a7"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-org7af89fd" class="outline-2">
+<h2 id="org7af89fd"><span class="section-number-2">2</span> 内存管理</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+内存管理使用一些方法，总的来说，就是软件生成虚拟地址，然后经由分段或者分页将地址翻译成物理地址。
+</p>
 </div>
-<div id="outline-container-org35502ed" class="outline-2">
-<h2 id="org35502ed"><span class="section-number-2">3</span> 操作模式</h2>
 </div>
-<div id="outline-container-org8e91da8" class="outline-2">
-<h2 id="org8e91da8"><span class="section-number-2">4</span> 系统寄存器</h2>
+<div id="outline-container-org3dd9b54" class="outline-2">
+<h2 id="org3dd9b54"><span class="section-number-2">3</span> 操作模式</h2>
 </div>
-<div id="outline-container-org646c8c9" class="outline-2">
-<h2 id="org646c8c9"><span class="section-number-2">5</span> 系统数据结构</h2>
+<div id="outline-container-orgc04e80e" class="outline-2">
+<h2 id="orgc04e80e"><span class="section-number-2">4</span> 系统寄存器</h2>
 </div>
-<div id="outline-container-org7a3d137" class="outline-2">
-<h2 id="org7a3d137"><span class="section-number-2">6</span> 中断</h2>
+<div id="outline-container-orge3a3d2e" class="outline-2">
+<h2 id="orge3a3d2e"><span class="section-number-2">5</span> 系统数据结构</h2>
 </div>
-<div id="outline-container-orgdbc0061" class="outline-2">
-<h2 id="orgdbc0061"><span class="section-number-2">7</span> 其它系统编程功能</h2>
+<div id="outline-container-orgfc087f4" class="outline-2">
+<h2 id="orgfc087f4"><span class="section-number-2">6</span> 中断</h2>
+</div>
+<div id="outline-container-org3243f7f" class="outline-2">
+<h2 id="org3243f7f"><span class="section-number-2">7</span> 其它系统编程功能</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-05-09 Sun 20:38</p>
+<p class="date">Created: 2021-05-29 Sat 16:45</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
