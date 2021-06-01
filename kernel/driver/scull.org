@@ -410,6 +410,7 @@ unsigned long copy_from_user(void *to, const void __user *from, unsigned long co
 
 * 代码实现
 本节将基于前面的背景介绍而实现scull这个简单驱动。
+
 ** read方法
 read函数的返回值由调用进程去解释：
 + 如果read返回的值等于调用read时传入的参数，这代表所要求的数据都被传递了。这是最好的情况。

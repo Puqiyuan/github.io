@@ -1,0 +1,8 @@
+#+TITLE: 内核调试手段及工具
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+本文介绍内核调试的各种技术，想要指出的是工具或手段都只是一个途径，它不会决定对于问题的本质理解。深刻理解内核的基础，再加以熟练于工具，才能高效而又准确的发现问题根因。
+
+内核编程有它自己的独一无二的调试困难。内核代码不容易在调试器中运行，它也不容易被trace，因为它不是一个进程。内核代码的error也是极其难以复现的。本文会介绍一些技术用来排查内核bug。
+
