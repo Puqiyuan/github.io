@@ -375,5 +375,36 @@ struct skb_shared_info {
 
 dataref代表了这个buffer block有多少个用户。在后面会讨论nr_frags，frag_list以及frags用来处理IP分段。skb_is_nonlinear可以用来检查buffer是否被分段。而skb_linearize*用来将多个分段组成一个单一的buffer。组合单个fragments涉及拷贝，这引入了性能延迟。
 
+某些网卡，可以处理传统上属于CPU处理的任务，最常见的例子就是计算L3和L4层的校验和，某些网卡甚至能维护L4层的状态机。对于这里要展示的代码，仅关心TCP分段卸载，即由NIC实现了TCP层的部分功能，gso_size和gso_seqs使用了这个特点。
+
+注意在sk_buff里没有成员是指向sk_shared_info结构体的。为了访问这个结构体，需要使用skb_shinfo宏。
+
+比如下面的代码，展示了如何递增nr_frags++：
+
+#+begin_src c
+skb_shinfo(skb)->nr_frags++;
+#+end_src
+
+*** 数据克隆与拷贝
+当数据需要由不同的消费者独立的处理时，它们各自可能需要改变sk_buff描述符的内容，内核可以不必完全的拷贝整个sk_buff结构体和关联的data buffer。为效率考虑计，内核可以clone原来的数据结构，即只是增加引用计数（reference count）而避免过早的释放数据块。buffer克隆通过函数skb_clone来做。一个需要使用克隆的情况是进入的包需要被递送到多个接受者，比如协议句柄和更多的网络tap（后文介绍tap）。
+
+克隆出来的buffer没有链接到任何list上，也没有属于任何socket。在克隆出来和原来的buffer里，
+skb->cloned成员都被设置成1。下图展示了一个clone出来的buffer：
+#+CAPTION: skb_clone函数的效果
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/skb_func.png]]
+
+可以看到上图表示了一个分段的buffer，但是现在不需要关心这个细节。
+
+当一个buffer被clone时，数据块的内容是不能更改的。这就是说代码可以访问数据而不需要锁机制。
+当函数不仅需要修改sk_buff而且需要修改buffer数据时，这就需要也clone数据块。当程序员知道仅需
+要修改skb->start和skb->end之间的内容时，可以使用pskb_copy函数。当他认为还可能修改分段的数
+据块时，就要用skb_copy函数了。这两个函数的操作结果如下图：
+#+CAPTION: (a)pskb_copy和skb_copy函数
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/pskb_copy_and_skb_copy.png]]
+
 
 * net_device结构体
