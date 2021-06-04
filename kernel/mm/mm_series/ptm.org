@@ -196,4 +196,14 @@ Linux假设所有的架构都支持某种类型的TLB，当然架构无关的代
 不是所有的架构都支持所有类型的TLB操作，但是，因为某些架构确实需要这么做，所以钩子函数必须存在。对于不需要某些TLB操作的架构情况，这种TLB操作在编译时就被优化成NULL操作了。TLB操作有许多种类，下面介绍了一些例子。但是仅提供一个TLBflush函数操作也是可以的，不过由于tlb flush和tlb重填都是比较昂贵的操作，所以它们的操作应该尽量避免。
 
 + void flush_tlb_all(void)
-  它会flush系统里运行CPU的所有TLB，这是最昂贵的TLB操作。这个函数完成后，对page table的修改就全局可见了。
+  
+  它会flush系统里运行CPU的所有TLB，这是最昂贵的TLB操作。这个函数完成后，对page table的修改就全局可见了。比如内核的页表是全局的，被修改了的话需要调用这个函数。
+
++ void flush_tlb_mm(struct mm_struct *mm)
+  
+  它会刷新mm上下文的usespace部分。在某些架构，比如MIPS这样的，它会在所有处理器上执行刷新，但是通常它是在本地处理器上执行．当某个操作会影响地址空间时，这个函数就会被调用．这些操作包括比如使用函数dup_mmap复制整个地址空间，以及使用exit
+  _mmap删除地址映射．
+  
++ void flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+
+  如名字所示，这个函数是
