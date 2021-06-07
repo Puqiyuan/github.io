@@ -350,10 +350,18 @@ GDT的布局如下图示意：
 
 缓存技术在快速的发展，比如，Pentium一代仅包含一个片上缓存叫做L1-cache。而较新的处理器包含更大、更慢的片上缓存叫做L2-cache，L3-cache。不同缓存级别间的一致性由硬件层维护，Linux忽略这些硬件细节并认为只有一块缓存。
 
-cr0寄存器的CD标志可以用来使能或禁用缓存电路。而NW标志，指明了是使用write-through或wrtie-back策略。
+cr0寄存器的CD标志可以用来使能或禁用缓存电路。而NW标志，指明了是使用write-through或write-back策略。
 
+Pentium缓存的另一个特点是，可以让操作系统来设置每个页帧（page frame）的缓存管理策略．为了实现这个目的，每个页目录和页表条目都包括两个flag，PCD（Page Cache Disable），这个标志指明了在访问页帧里的数据时是否需要开启缓存．而PWT（Page Write-Through），则指明了在往页帧里写数据时采用write-back或write-through策略．Linux清除了PCD和PWT标志，也就是说，缓存对于所有页帧都是使能的，对于写操作则都是采用write-back策略．
 
 *** TLB
+除了通用目的的硬件缓存，80x86处理器还包括另一个缓存叫做Translation Lookaside Buffers（TLB）用来加速线性地址翻译．当一个线性地址第一次使用时，物理地址是通过访问RAM里的Page Table来获得的，这样比较慢．于是将物理地址存在了TLB里，当下次需要访问一样的线性地址就可以快些．
+
+在多处理器系统中，每个CPU都有它自己的TLB，叫做CPU的局部TLB．与硬件Cache相反的是，对应的TLB条目不需要同步，因为进程在一个CPU上运行时可能将相同的线性地址和不同的物理地址关联起来．
+
+当cr3寄存器改变时，硬件自动无效局部TLB所有的条目，因为新的page tables开始使用了，而TLB却依旧指向旧的数据．
+
 ** Linux中的分页
+对于32-bit和64-bit，Linux都采用一套公共的分页模型．
 * 内存管理
 * 进程地址空间
