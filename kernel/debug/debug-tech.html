@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-06-01 Tue 23:26 -->
+<!-- 2021-06-08 Tue 23:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内核调试手段及工具</title>
@@ -65,10 +65,21 @@ for the JavaScript code in this tag.
 <p>
 内核编程有它自己的独一无二的调试困难。内核代码不容易在调试器中运行，它也不容易被trace，因为它不是一个进程。内核代码的error也是极其难以复现的。本文会介绍一些技术用来排查内核bug。
 </p>
+
+<p>
+内核带有一些调试的feature，这需要自己编译内核打开选项．下面介绍一些这些选项，注意不是所有的选项在所有的架构都支持．
+</p>
+
+<ul class="org-ul">
+<li>CONFIG<sub>DEBUG</sub><sub>KERNEL</sub>
+这个选项仅是使得其它调试选项可提供，它应该被打开以使得其它选项可用．</li>
+<li>CONFIG<sub>DEBUG</sub><sub>SLAB</sub>
+这个选项用来检查内核内存分配．</li>
+</ul>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-06-01 Tue 23:26</p>
+<p class="date">Created: 2021-06-08 Tue 23:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
