@@ -397,14 +397,51 @@ skb->cloned成员都被设置成1。下图展示了一个clone出来的buffer：
 
 可以看到上图表示了一个分段的buffer，但是现在不需要关心这个细节。
 
-当一个buffer被clone时，数据块的内容是不能更改的。这就是说代码可以访问数据而不需要锁机制。
-当函数不仅需要修改sk_buff而且需要修改buffer数据时，这就需要也clone数据块。当程序员知道仅需
-要修改skb->start和skb->end之间的内容时，可以使用pskb_copy函数。当他认为还可能修改分段的数
-据块时，就要用skb_copy函数了。这两个函数的操作结果如下图：
+当一个buffer被clone时，数据块的内容是不能更改的。这就是说代码可以访问数据而不需要锁机制。当函数不仅需要修改sk_buff而且需要修改buffer数据时，这就需要也clone数据块。当程序员知道仅需要修改skb->start和skb->end之间的内容时，可以使用pskb_copy函数。当他认为还可能修改分段的数据块时，就要用skb_copy函数了。这两个函数的操作结果如下图：
 #+CAPTION: (a)pskb_copy和skb_copy函数
 #+LABEL: fig:
 #+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
 [[./img/pskb_copy_and_skb_copy.png]]
 
+现在这个图里的一些细节可能还不能理解，但是后面会介绍更多．
+*** list管理函数
+下面介绍一些操作sk_buff列表的函数，列表也叫队列．完全的列表操作函数可以在<include/linux/skbuff.h>和<net/core/sbbuff.c>里看到．这里介绍一些常用的：
+
++ skb_queue_head_init
+  
+  初始化一个sk_buff_head类型，里面没有元素．
+
++ skb_queue_head，skb_queue_tail
+  
+  添加一个buffer到一个队列的头或尾．
+
++ skb_dequeue，skb_dequeue_tail
+  
+  从一个队列的头或尾出队一个元素．
+
++ skb_queue_purge
+  
+  清空一个队列.
+
++ skb_queue_walk
+
+  依次遍历队列里的元素．
+
+所有这些函数都必须以原子的形式执行，也就是说在执行这些函数前必须先获得sk_buff_head里的spin
+lock．否则的话这些函数可能会被异步入队或出队事件中断，比如到期的定时器就可能会调用．这可能会导致竞态（race condition）．
+
+也就是说，这些函数的实现形式如下：
+#+begin_src c
+static inline function_name (param) {
+  unsigned long flags;
+
+  spin_lock_irqsave(...);
+  __function_name(param);
+  spin_unlock_irqrestore(...);
+}
+#+end_src
+
+这些函数包装了一个获得锁的函数．
 
 * net_device结构体
+net_device结构体存储了关于网卡设备的所有信息．对于每个设备就有一个这样的结构体，对于真实和虚拟的设备来说都是如此，所谓虚拟设备，比如bonding和vlan．bonding在Cisco的术语叫EtherChannel，在Sun的术语叫trunking，允许几个接口聚合起来成为一个接口，当在高速带宽上支持点对点连接时，这个特点就很重要了．这样bonding后，虚拟接口的吞吐量几乎就是单个接口的加和．
