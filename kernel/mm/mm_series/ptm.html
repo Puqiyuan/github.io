@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-06-11 Fri 23:33 -->
+<!-- 2021-06-12 Sat 11:28 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内存管理之页表管理</title>
@@ -62,25 +62,25 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9ee1246">1. 页目录表示</a></li>
-<li><a href="#orgecb7b7f">2. 页表条目表示</a></li>
-<li><a href="#org51a5fe0">3. 使用页表条目</a></li>
-<li><a href="#org1724d9a">4. 翻译与设置页表条目</a></li>
-<li><a href="#orgd6f757d">5. 分配以及释放页表</a></li>
-<li><a href="#org2a74e83">6. 内核页表</a>
+<li><a href="#orgf37618e">1. 页目录表示</a></li>
+<li><a href="#orgd2aaaad">2. 页表条目表示</a></li>
+<li><a href="#org9103505">3. 使用页表条目</a></li>
+<li><a href="#orgb2b7347">4. 翻译与设置页表条目</a></li>
+<li><a href="#orgd0ffa3a">5. 分配以及释放页表</a></li>
+<li><a href="#org3a9920d">6. 内核页表</a>
 <ul>
-<li><a href="#orgf27532d">6.1. 自举</a></li>
-<li><a href="#org2286565">6.2. 初始化完成</a></li>
+<li><a href="#org0f1abe0">6.1. 自举</a></li>
+<li><a href="#orgd6a7186">6.2. 初始化完成</a></li>
 </ul>
 </li>
-<li><a href="#org89ef144">7. 映射地址到struct page</a>
+<li><a href="#org1772e5b">7. 映射地址到struct page</a>
 <ul>
-<li><a href="#org69ad0b9">7.1. 将物理地址映射到虚拟内核地址</a></li>
-<li><a href="#org050f30b">7.2. 将struct pages映射到物理地址</a></li>
+<li><a href="#org9477e16">7.1. 将物理地址映射到虚拟内核地址</a></li>
+<li><a href="#org2b123c0">7.2. 将struct pages映射到物理地址</a></li>
 </ul>
 </li>
-<li><a href="#orga8de8dd">8. TLB</a></li>
-<li><a href="#org6814243">9. 第一级CPU缓存管理</a></li>
+<li><a href="#org276000b">8. TLB</a></li>
+<li><a href="#org0c0e14d">9. 第一级CPU缓存管理</a></li>
 </ul>
 </div>
 </div>
@@ -93,8 +93,8 @@ for the JavaScript code in this tag.
 Entry). 还会介绍一些宏用来查找页表. 对启动阶段的页表初始化也会作出阐述, 最后就是TLB和CPU的Cache也会被讲述到.
 </p>
 
-<div id="outline-container-org9ee1246" class="outline-2">
-<h2 id="org9ee1246"><span class="section-number-2">1</span> 页目录表示</h2>
+<div id="outline-container-orgf37618e" class="outline-2">
+<h2 id="orgf37618e"><span class="section-number-2">1</span> 页目录表示</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 每一个进程都有一个指向它自己PGD的指针(mm_struct-&gt;pgd), 这实际是一个页框, 这个页框包含一个pgd_t类型的数组. 这个成员是架构相关的定义, 在asm/page.h中, 比如ia64中是这样定义的:
@@ -203,8 +203,8 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 
 
-<div id="outline-container-orgecb7b7f" class="outline-2">
-<h2 id="orgecb7b7f"><span class="section-number-2">2</span> 页表条目表示</h2>
+<div id="outline-container-orgd2aaaad" class="outline-2">
+<h2 id="orgd2aaaad"><span class="section-number-2">2</span> 页表条目表示</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 如前所述, 对于PTEs, PMDs以及PGDs来说, 分别由结构体pte_t, pmd_t以及pgd_t结构体来表示. 即使这些结构体里的成员只有一个unsigned的成员, 但是依旧被定义成结构体, 这主要有两个目的, 一是起
@@ -269,8 +269,8 @@ PAGE_SHIFT其实就是线性地址中offset部分的比特数目，X86下是12�
 </div>
 </div>
 
-<div id="outline-container-org51a5fe0" class="outline-2">
-<h2 id="org51a5fe0"><span class="section-number-2">3</span> 使用页表条目</h2>
+<div id="outline-container-org9103505" class="outline-2">
+<h2 id="org9103505"><span class="section-number-2">3</span> 使用页表条目</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 定义在pgtable.h中的一些宏, 可以用来检查和查看页表条目. 有三个重要的宏, 用来把线性地址分解为它们的组成部分. pgd_offset使用传入的两个参数, 一个地址以及一个mm_struct结构体, 返回一个pgd条目:
@@ -334,8 +334,8 @@ pte_clear(), pmd_clear()等将会清除对应的条目:
 </ul>
 </div>
 </div>
-<div id="outline-container-org1724d9a" class="outline-2">
-<h2 id="org1724d9a"><span class="section-number-2">4</span> 翻译与设置页表条目</h2>
+<div id="outline-container-orgb2b7347" class="outline-2">
+<h2 id="orgb2b7347"><span class="section-number-2">4</span> 翻译与设置页表条目</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 有一组宏和函数用来映射地址和页面里的PTE条目, 以及设置单个条目.
@@ -355,8 +355,8 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 
-<div id="outline-container-orgd6f757d" class="outline-2">
-<h2 id="orgd6f757d"><span class="section-number-2">5</span> 分配以及释放页表</h2>
+<div id="outline-container-orgd0ffa3a" class="outline-2">
+<h2 id="orgd0ffa3a"><span class="section-number-2">5</span> 分配以及释放页表</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 最后再介绍几个页表的分配与释放函数。如前所述，页表也是物理页面，只不过是包含有许多条目，分配与释放物理页面是一个相对昂贵的操作，昂贵的意思是，时间消耗大，另外在页面分配期间中断不能打开。不论在哪个级别，页表的分配与删除都是十分频繁的操作，所以这些操作保持尽量的快是十分重要的。
@@ -368,23 +368,23 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 
-<div id="outline-container-org2a74e83" class="outline-2">
-<h2 id="org2a74e83"><span class="section-number-2">6</span> 内核页表</h2>
+<div id="outline-container-org3a9920d" class="outline-2">
+<h2 id="org3a9920d"><span class="section-number-2">6</span> 内核页表</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 在系统刚起来的时候，分页功能是没有准备好的，因为页表无法初始化它自己。初始化页表的实现是架构相关的。这里我们只关心X86，这时页表的初始化分为两个阶段，bootstrap（自举）阶段只设置8MB的空间进而可以进一步的初始化分页单元，第二阶段就是初始化余下的部分了。
 </p>
 </div>
-<div id="outline-container-orgf27532d" class="outline-3">
-<h3 id="orgf27532d"><span class="section-number-3">6.1</span> 自举</h3>
+<div id="outline-container-org0f1abe0" class="outline-3">
+<h3 id="org0f1abe0"><span class="section-number-3">6.1</span> 自举</h3>
 <div class="outline-text-3" id="text-6-1">
 <p>
 汇编函数startup_32负责使能分页功能，它实现在head_32.S文件里（对于x86的情况）。在vmlinuz里正常的内核代码编译在PAGE_OFFSET + 1MiB的基址处，内核实际上会被加载至第一MB字节处。头一MB的空间预留给某些设备用来和BIOS交互。
 </p>
 </div>
 </div>
-<div id="outline-container-org2286565" class="outline-3">
-<h3 id="org2286565"><span class="section-number-3">6.2</span> 初始化完成</h3>
+<div id="outline-container-orgd6a7186" class="outline-3">
+<h3 id="orgd6a7186"><span class="section-number-3">6.2</span> 初始化完成</h3>
 <div class="outline-text-3" id="text-6-2">
 <p>
 余下的工作就是交给paging_init去完成了。
@@ -392,16 +392,16 @@ pte_page宏返回struct page, 这个页面对应pte条目. pmd_page返回一个s
 </div>
 </div>
 </div>
-<div id="outline-container-org89ef144" class="outline-2">
-<h2 id="org89ef144"><span class="section-number-2">7</span> 映射地址到struct page</h2>
+<div id="outline-container-org1772e5b" class="outline-2">
+<h2 id="org1772e5b"><span class="section-number-2">7</span> 映射地址到struct page</h2>
 <div class="outline-text-2" id="text-7">
 <p>
 虚拟地址到物理地址的映射要求快速的完成，对于struct page到物理地址也需要快速完成转换。Linux可以做到比较快速的完成转换，这是因为全局mem_map数组拥有所有指向struct page的指针。下面针对x86来介绍下。
 </p>
 </div>
 
-<div id="outline-container-org69ad0b9" class="outline-3">
-<h3 id="org69ad0b9"><span class="section-number-3">7.1</span> 将物理地址映射到虚拟内核地址</h3>
+<div id="outline-container-org9477e16" class="outline-3">
+<h3 id="org9477e16"><span class="section-number-3">7.1</span> 将物理地址映射到虚拟内核地址</h3>
 <div class="outline-text-3" id="text-7-1">
 <p>
 Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟地址要想转换为物理地址，只需要将虚拟地址减去PAGE_OFFSET即可，这便是virt_to_phys的核心：
@@ -422,8 +422,8 @@ Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟
 </p>
 </div>
 </div>
-<div id="outline-container-org050f30b" class="outline-3">
-<h3 id="org050f30b"><span class="section-number-3">7.2</span> 将struct pages映射到物理地址</h3>
+<div id="outline-container-org2b123c0" class="outline-3">
+<h3 id="org2b123c0"><span class="section-number-3">7.2</span> 将struct pages映射到物理地址</h3>
 <div class="outline-text-3" id="text-7-2">
 <p>
 先找到PFN，然后再PAGE_SHIFT即可：
@@ -440,8 +440,8 @@ Linux将物理地址0映射到虚拟地址的PAGE_OFFSET处，换言之，虚拟
 </div>
 
 
-<div id="outline-container-orga8de8dd" class="outline-2">
-<h2 id="orga8de8dd"><span class="section-number-2">8</span> TLB</h2>
+<div id="outline-container-org276000b" class="outline-2">
+<h2 id="org276000b"><span class="section-number-2">8</span> TLB</h2>
 <div class="outline-text-2" id="text-8">
 <p>
 起初，当处理器需要将虚拟地址映射到物理地址时，它必须完整的遍历页目录去搜寻一个恰当的PTE条目。这就是说，每条引用内存的汇编指令都会请求几次额外的页表遍历。为了避免这样的开销，架构上利用了许多程序都有局部性的原理。这就是TLB存在的依据了，这是一个缓存，存放的是虚拟地址到物理地址的转换。
@@ -485,8 +485,8 @@ void flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long en
 </div>
 </div>
 
-<div id="outline-container-org6814243" class="outline-2">
-<h2 id="org6814243"><span class="section-number-2">9</span> 第一级CPU缓存管理</h2>
+<div id="outline-container-org0c0e14d" class="outline-2">
+<h2 id="org0c0e14d"><span class="section-number-2">9</span> 第一级CPU缓存管理</h2>
 <div class="outline-text-2" id="text-9">
 <p>
 Linux管理CPU缓存和管理TLB的方式类似，本节介绍Linux怎样使用和管理CPU缓存．和TLB缓存类似，CPU缓存也利用了程序局部性原理．为了避免每次都要从内存中取数据，CPU都会缓存一部分数据在cache里．常见的有两级缓存，叫做L1和L2缓存．其中L2缓存更大，但是比L1缓存更慢．
@@ -497,14 +497,24 @@ CPU缓存组织成lines．每行的大小都比较小，通常是32 bytes，并�
 </p>
 
 <p>
-地址是如何映射到缓存行在各个架构是不同的．但主要是三种形式，直接映射，全关联映射以及组映射．直接映射是最简单的方式，每个内存块都映射到一个可能的cache行．而全相关，是说任何内存块可以映射到任何缓存行．而组相关是上述两种方式的混合，这时任何内存地址都可以映射到任何缓存行，但是这个缓存行是一组限定的来自所有可提供的缓存行．不论何种映射方式，它们都有一个共同的特点：靠近并与缓存大小对齐的地址很可能使用不同的行．
+地址是如何映射到缓存行在各个架构是不同的．但主要是三种形式，直接映射，全关联映射以及组映射．直接映射是最简单的方式，每个内存块都映射到一个可能的cache行．而全相关，是说任何内存块可以映射到任何缓存行．而组相关是上述两种方式的混合，这时任何内存地址都可以映射到任何缓存行，但是这个缓存行是一组限定的来自所有可提供的缓存行．不论何种映射方式，它们都有一个共同的特点：靠近并与缓存大小对齐的地址很可能使用不同的行．内核采用如下策略来最大化缓存利用率：
+</p>
+<ul class="org-ul">
+<li>频繁访问的成员要放置在结构体的一开始，这样会加大这些成员放在一个行的概率．</li>
+<li>不相关的成员要避开至少一个cache-size byte以避免在CPU间共享引起竞争．</li>
+<li>常见通用的结构体比如mm_struct，要对齐在L1 CPU缓存大小处．</li>
+</ul>
+
+<p>
+如果CPU引用一个地址不在缓存中，cache miss就发生，这时数据会从主存中去取得．cache miss的代
+价是很高的，如果从cache中取数据的话仅需10ns，而引用主存的话将会花费100ns至200ns．
 </p>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-06-11 Fri 23:33</p>
+<p class="date">Created: 2021-06-12 Sat 11:28</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
