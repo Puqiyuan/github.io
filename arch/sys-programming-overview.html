@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-05-29 Sat 16:45 -->
+<!-- 2021-06-13 Sun 15:59 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>系统编程概要</title>
@@ -62,18 +62,23 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf733951">1. 内存模型</a>
+<li><a href="#orga5ff58c">1. 内存模型</a>
 <ul>
-<li><a href="#orge0ccaa9">1.1. 内存寻址</a></li>
-<li><a href="#orgbe7ddeb">1.2. 内存组织</a></li>
+<li><a href="#orgc9b5106">1.1. 内存寻址</a></li>
+<li><a href="#org6efabd4">1.2. 内存组织</a></li>
 </ul>
 </li>
-<li><a href="#org7af89fd">2. 内存管理</a></li>
-<li><a href="#org3dd9b54">3. 操作模式</a></li>
-<li><a href="#orgc04e80e">4. 系统寄存器</a></li>
-<li><a href="#orge3a3d2e">5. 系统数据结构</a></li>
-<li><a href="#orgfc087f4">6. 中断</a></li>
-<li><a href="#org3243f7f">7. 其它系统编程功能</a></li>
+<li><a href="#orgbb8a3c2">2. 内存管理</a>
+<ul>
+<li><a href="#org24d81d6">2.1. 分段</a></li>
+<li><a href="#orge23f3f9">2.2. 分页</a></li>
+</ul>
+</li>
+<li><a href="#orgd5e0027">3. 操作模式</a></li>
+<li><a href="#orgec12f4c">4. 系统寄存器</a></li>
+<li><a href="#org1d4715c">5. 系统数据结构</a></li>
+<li><a href="#org5b11f29">6. 中断</a></li>
+<li><a href="#org7ef0a5e">7. 其它系统编程功能</a></li>
 </ul>
 </div>
 </div>
@@ -97,8 +102,8 @@ for the JavaScript code in this tag.
 为了支持64-bit的操作系统和应用，许多遗留下来的功能或特点都有被加强，但同时也向后兼容已经存在的软件。
 </p>
 
-<div id="outline-container-orgf733951" class="outline-2">
-<h2 id="orgf733951"><span class="section-number-2">1</span> 内存模型</h2>
+<div id="outline-container-orga5ff58c" class="outline-2">
+<h2 id="orga5ff58c"><span class="section-number-2">1</span> 内存模型</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 ADM64架构的内存模型被设计成系统软件可以以安全的方式去管理应用软件以及相关的数据，它可以和旧版的内存模型兼容。对于虚拟地址和物理地址之间的转换由硬件机制完成。硬件的翻译机制允许系统软件以透明的方式重定位应用和数据，可以定位到物理内存空间或者是硬盘空间，这些空间都是由系统软件管理的。
@@ -109,8 +114,8 @@ ADM64架构的内存模型被设计成系统软件可以以安全的方式去管
 </p>
 </div>
 
-<div id="outline-container-orge0ccaa9" class="outline-3">
-<h3 id="orge0ccaa9"><span class="section-number-3">1.1</span> 内存寻址</h3>
+<div id="outline-container-orgc9b5106" class="outline-3">
+<h3 id="orgc9b5106"><span class="section-number-3">1.1</span> 内存寻址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 AMD64架构支持地址重定位，为了做到这点，几种类型的地址被定义用来完整的描述内存组织，共计四种：
@@ -187,8 +192,8 @@ mode下，线性地址必须是规范地址形式。
 </div>
 </div>
 
-<div id="outline-container-orgbe7ddeb" class="outline-3">
-<h3 id="orgbe7ddeb"><span class="section-number-3">1.2</span> 内存组织</h3>
+<div id="outline-container-org6efabd4" class="outline-3">
+<h3 id="org6efabd4"><span class="section-number-3">1.2</span> 内存组织</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理内存通常具有不同的大小，通常来说虚拟内存比物理内存大。系统软件负责将应用或数据在物理内存和系统硬盘间重定位，这使得看起来系统里有超过物理内存大小可用的内存。
@@ -200,33 +205,86 @@ AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理
 </div>
 </div>
 </div>
-<div id="outline-container-org7af89fd" class="outline-2">
-<h2 id="org7af89fd"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-orgbb8a3c2" class="outline-2">
+<h2 id="orgbb8a3c2"><span class="section-number-2">2</span> 内存管理</h2>
 <div class="outline-text-2" id="text-2">
 <p>
-内存管理使用一些方法，总的来说，就是软件生成虚拟地址，然后经由分段或者分页将地址翻译成物理地址。
+内存管理使用一些方法，总的来说，就是软件生成虚拟地址，然后经由分段或者分页将地址翻译成物理地址。内存管理对应用软件是不可见的，它是由系统软件和处理器硬件完成．
+</p>
+</div>
+
+<div id="outline-container-org24d81d6" class="outline-3">
+<h3 id="org24d81d6"><span class="section-number-3">2.1</span> 分段</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+分段最开始是用来隔离进程以及这些进程使用的数据，这会增加系统同时运行多个进程的可靠性．
+</p>
+
+<p>
+AMD64架构支持各种传统分段（legacy segmentation）功能．然而在传统的X86架构上，许多现代的系统软件都不再使用分段特点．通常使用的是分页来做到程序以及数据的隔离．出于这个原因，AMD64采用平坦内存模型．不使用分段使得新写的64-bit程序能够编码的更加简单．并且比起传统的X86架构，其能更加高效的支持多处理程序．
+</p>
+
+<p>
+分段主要用在兼容以及传统模式中．这时，分段是一种基地址的寻址方式，可以允许软件和数据在虚拟地址空间里重定位到任意地址．重定位到虚拟空间的软件或数据可以使用一个或多个变长大小的内存段．传统X86架构提供了多种方式来限制一个段到另一个段的访问，从而保护了软件和数据．
+</p>
+
+<p>
+在兼容或传统模式中，最多16383个段可以定义使用．每个段的基址，段大小（也叫limit），保护以及其它属性包含在一个叫做段描述符的数据结构里．段描述符的集合放在段表里．通过段选择子寄存器（segment selector register）从一个段表里选择某个特定的段描述符．总共有六个段选择子寄存器可供提供，这样就支持一次访问六个段．
+</p>
+
+<p>
+下面的图展示了分段，具体的细节后文还会介绍．
+</p>
+
+
+<div id="org61b80ec" class="figure">
+<p><img src="./img/seg-mem-mod.png" alt="seg-mem-mod.png" width="50%" height="50%">
+</p>
+<p><span class="figure-number">Figure 1: </span>分段内存模型</p>
+</div>
+
+<p>
+<b>平坦分段</b> 一种特别的分段内存叫做平坦内存模型．在传统的平坦内存模型中，所有的段基址从0开始， 并且段大小固定在4G．但是使用平坦内存模型，可以禁用分段翻译．这样的结果就是虚拟地址等于有效地址．下面的图展示了平坦内存模型的例子．
+</p>
+
+
+<div id="orgf15fdb1" class="figure">
+<p><img src="./img/flat-mem-mod.png" alt="flat-mem-mod.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 2: </span>平坦内存模型</p>
+</div>
+
+<p>
+运行在64-bit的软件自动使用平坦内存模型．在64-bit模式下，段基址当作0，段大小忽略了．这样允许有效地址去访问全部的虚拟地址空间．
 </p>
 </div>
 </div>
-<div id="outline-container-org3dd9b54" class="outline-2">
-<h2 id="org3dd9b54"><span class="section-number-2">3</span> 操作模式</h2>
+
+<div id="outline-container-orge23f3f9" class="outline-3">
+<h3 id="orge23f3f9"><span class="section-number-3">2.2</span> 分页</h3>
 </div>
-<div id="outline-container-orgc04e80e" class="outline-2">
-<h2 id="orgc04e80e"><span class="section-number-2">4</span> 系统寄存器</h2>
 </div>
-<div id="outline-container-orge3a3d2e" class="outline-2">
-<h2 id="orge3a3d2e"><span class="section-number-2">5</span> 系统数据结构</h2>
+
+
+<div id="outline-container-orgd5e0027" class="outline-2">
+<h2 id="orgd5e0027"><span class="section-number-2">3</span> 操作模式</h2>
 </div>
-<div id="outline-container-orgfc087f4" class="outline-2">
-<h2 id="orgfc087f4"><span class="section-number-2">6</span> 中断</h2>
+<div id="outline-container-orgec12f4c" class="outline-2">
+<h2 id="orgec12f4c"><span class="section-number-2">4</span> 系统寄存器</h2>
 </div>
-<div id="outline-container-org3243f7f" class="outline-2">
-<h2 id="org3243f7f"><span class="section-number-2">7</span> 其它系统编程功能</h2>
+<div id="outline-container-org1d4715c" class="outline-2">
+<h2 id="org1d4715c"><span class="section-number-2">5</span> 系统数据结构</h2>
+</div>
+<div id="outline-container-org5b11f29" class="outline-2">
+<h2 id="org5b11f29"><span class="section-number-2">6</span> 中断</h2>
+</div>
+<div id="outline-container-org7ef0a5e" class="outline-2">
+<h2 id="org7ef0a5e"><span class="section-number-2">7</span> 其它系统编程功能</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-05-29 Sat 16:45</p>
+<p class="date">Created: 2021-06-13 Sun 15:59</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
