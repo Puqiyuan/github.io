@@ -219,5 +219,25 @@ CPU缓存组织成lines．每行的大小都比较小，通常是32 bytes，并�
 + 不相关的成员要避开至少一个cache-size byte以避免在CPU间共享引起竞争．
 + 常见通用的结构体比如mm_struct，要对齐在L1 CPU缓存大小处．
 
-如果CPU引用一个地址不在缓存中，cache miss就发生，这时数据会从主存中去取得．cache miss的代
-价是很高的，如果从cache中取数据的话仅需10ns，而引用主存的话将会花费100ns至200ns．
+如果CPU引用一个地址不在缓存中，cache miss就发生，这时数据会从主存中去取得．cache miss的代价是很高的，如果从cache中取数据的话仅需10ns，而引用主存的话将会花费100ns至200ns．所以最根本的目的就是尽量提高cache命中率．
+
+就像某些架构不会自动的管理他们的TLB，某些架构也不会自动管理它们的CPU缓存．所以也会在虚拟地址到物理地址发生改变时放置一些钩子函数，比如页表更新时．这些更新操作的顺序是重要的，如下表所示：
+
+#+CAPTION: Cache和TLB刷新的顺序
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+[[./img/cache_tlb_order.png]]
+
+下面介绍一些刷新cache的API．
+
++ flush_cache_all(void)
+
+  该函数会刷新整个CPU缓存系统．当对内核页表作出改变时就会调用这个函数．
+
++ flush_cache_mm(struct mm_struct mm)
+
+  该函数刷新一个关联到mm的地址空间，这个函数完成时，就没有缓存行关联到mm了．
+
++ void flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+
+  该函数刷新地址空间内的一段范围．和TLB版本的等价，这个函数用来提供在支持部分刷新的架构上以更高的性能，相比刷新整个页面来说．

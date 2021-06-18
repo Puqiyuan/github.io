@@ -31,7 +31,9 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
   + 系列文章
     1) [[./kernel/mm/mm_series/des-phy-mem.html][内存管理之描述物理内存]]。
       
-    2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]。
+    2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]．
+
+    3) [[./kernel/mm/mm_series/process_addr_space.html][进程地址空间]]．
 ** 进程管理
   + [[https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf][lkd]]介绍的进程管理知识：
     1) [[./kernel/lkd/proc/proc_mm.html][进程管理]]（参看lkd）。

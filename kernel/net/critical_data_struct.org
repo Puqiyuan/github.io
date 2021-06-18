@@ -444,4 +444,5 @@ static inline function_name (param) {
 这些函数包装了一个获得锁的函数．
 
 * net_device结构体
-net_device结构体存储了关于网卡设备的所有信息．对于每个设备就有一个这样的结构体，对于真实和虚拟的设备来说都是如此，所谓虚拟设备，比如bonding和vlan．bonding在Cisco的术语叫EtherChannel，在Sun的术语叫trunking，允许几个接口聚合起来成为一个接口，当在高速带宽上支持点对点连接时，这个特点就很重要了．这样bonding后，虚拟接口的吞吐量几乎就是单个接口的加和．
+net_device结构体存储了关于网卡设备的所有信息．对于每个设备就有一个这样的结构体，对于真实和虚拟的设备来说都是如此，所谓虚拟设备，比如bonding和vlan．bonding在Cisco的术语叫EtherChannel，在Sun的术语叫trunking，允许几个接口聚合起来成为一个接口，当在高速带宽上支持点对点连接时，这个特点就很重要了．这样bonding后，虚拟接口的吞吐量几乎就是单个接口的加和．而vlan通过一个额外的tag可以做到使用相同的L2层而隔绝流量．本节将交替使用接口和设备这两个词语．
+

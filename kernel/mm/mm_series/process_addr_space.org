@@ -1,0 +1,8 @@
+#+TITLE: 进程地址空间
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+
+虚拟内存的一个主要优点是每个进程都可以有它自己的虚拟地址空间，而虚拟地址空间又由操作系统映射到物理内存．
+
