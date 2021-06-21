@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-06-07 Mon 23:24 -->
+<!-- 2021-06-21 Mon 23:21 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linux内存管理</title>
@@ -62,38 +62,42 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf36d977">1. 内存寻址</a>
+<li><a href="#orgfa37305">1. 内存寻址</a>
 <ul>
-<li><a href="#orgcbd71dc">1.1. 内存地址</a></li>
-<li><a href="#org9d9ea01">1.2. 硬件上的分段</a>
+<li><a href="#org0b2a241">1.1. 内存地址</a></li>
+<li><a href="#org8c14ce8">1.2. 硬件上的分段</a>
 <ul>
-<li><a href="#orgd2801ec">1.2.1. 段选择子与段寄存器</a></li>
-<li><a href="#orgf98eca1">1.2.2. 段描述符</a></li>
-<li><a href="#org57fdee7">1.2.3. 快速访问段描述符</a></li>
-<li><a href="#org4d62984">1.2.4. 分段单元</a></li>
+<li><a href="#org128c970">1.2.1. 段选择子与段寄存器</a></li>
+<li><a href="#org7d248c4">1.2.2. 段描述符</a></li>
+<li><a href="#org5ab4f4d">1.2.3. 快速访问段描述符</a></li>
+<li><a href="#org2eabfc3">1.2.4. 分段单元</a></li>
 </ul>
 </li>
-<li><a href="#org02938cc">1.3. Linux中的分段</a>
+<li><a href="#orga35742e">1.3. Linux中的分段</a>
 <ul>
-<li><a href="#org513c737">1.3.1. Linux GDT</a></li>
-<li><a href="#orgeee547b">1.3.2. Linux LDTs</a></li>
+<li><a href="#orga92cd48">1.3.1. Linux GDT</a></li>
+<li><a href="#orgda9c0c1">1.3.2. Linux LDTs</a></li>
 </ul>
 </li>
-<li><a href="#orga1be5ee">1.4. 硬件上的分页</a>
+<li><a href="#org1943515">1.4. 硬件上的分页</a>
 <ul>
-<li><a href="#org1cf8a1a">1.4.1. 常规分页</a></li>
-<li><a href="#org1bfcd64">1.4.2. 扩展分页</a></li>
-<li><a href="#orgd9039c1">1.4.3. 硬件保护机制</a></li>
-<li><a href="#orgd94addb">1.4.4. 64-bit架构下的分页</a></li>
-<li><a href="#org9978514">1.4.5. 硬件缓存</a></li>
-<li><a href="#orgf5ac78d">1.4.6. TLB</a></li>
+<li><a href="#org42e4e38">1.4.1. 常规分页</a></li>
+<li><a href="#org1c73ad8">1.4.2. 扩展分页</a></li>
+<li><a href="#orgf607877">1.4.3. 硬件保护机制</a></li>
+<li><a href="#orga59fd32">1.4.4. 64-bit架构下的分页</a></li>
+<li><a href="#org379b101">1.4.5. 硬件缓存</a></li>
+<li><a href="#org97d9836">1.4.6. TLB</a></li>
 </ul>
 </li>
-<li><a href="#org78be968">1.5. Linux中的分页</a></li>
+<li><a href="#org414953d">1.5. Linux中的分页</a>
+<ul>
+<li><a href="#org8a36988">1.5.1. 线性地址的字段</a></li>
 </ul>
 </li>
-<li><a href="#org71e67aa">2. 内存管理</a></li>
-<li><a href="#orge656631">3. 进程地址空间</a></li>
+</ul>
+</li>
+<li><a href="#orgb086de5">2. 内存管理</a></li>
+<li><a href="#orga10e48f">3. 进程地址空间</a></li>
 </ul>
 </div>
 </div>
@@ -110,15 +114,15 @@ for the JavaScript code in this tag.
 主要针对的平台是80x86.
 </p>
 
-<div id="outline-container-orgf36d977" class="outline-2">
-<h2 id="orgf36d977"><span class="section-number-2">1</span> 内存寻址</h2>
+<div id="outline-container-orgfa37305" class="outline-2">
+<h2 id="orgfa37305"><span class="section-number-2">1</span> 内存寻址</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内存寻址主要解决的问题是: CPU给出一个虚拟地址, 如何将这个虚拟地址转化为RAM的物理地址来索引其中的内容.
 </p>
 </div>
-<div id="outline-container-orgcbd71dc" class="outline-3">
-<h3 id="orgcbd71dc"><span class="section-number-3">1.1</span> 内存地址</h3>
+<div id="outline-container-org0b2a241" class="outline-3">
+<h3 id="org0b2a241"><span class="section-number-3">1.1</span> 内存地址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 在80x86下要区分三种地址:
@@ -167,15 +171,15 @@ MMU会将逻辑地址转换为物理地址, 其流程如下:
 </div>
 </div>
 
-<div id="outline-container-org9d9ea01" class="outline-3">
-<h3 id="org9d9ea01"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
+<div id="outline-container-org8c14ce8" class="outline-3">
+<h3 id="org8c14ce8"><span class="section-number-3">1.2</span> 硬件上的分段</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 从80286开始, Intel微处理器就分两种方式的地址翻译, 一是实模式, 二是保护模式, 后文的内容主要是针对保护模式开启时的地址翻译. 实模式主要是为了与较旧的处理器兼容以及引导操作系统从实模式过渡到保护模式.
 </p>
 </div>
-<div id="outline-container-orgd2801ec" class="outline-4">
-<h4 id="orgd2801ec"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
+<div id="outline-container-org128c970" class="outline-4">
+<h4 id="org128c970"><span class="section-number-4">1.2.1</span> 段选择子与段寄存器</h4>
 <div class="outline-text-4" id="text-1-2-1">
 <p>
 一个逻辑地址由两部分组成: 段标识符与偏移, 偏移用来指明在段内的相对地址. 段标识符由16比特组成, 叫做段选择子, 而offset是32比特的域. 关于段选择子后文还要介绍, 而下图是段选择子的结构:
@@ -234,8 +238,8 @@ Level,CPL). 0表示最高的权限级, 而3表示最低的权限级, Linux仅使
 </div>
 </div>
 
-<div id="outline-container-orgf98eca1" class="outline-4">
-<h4 id="orgf98eca1"><span class="section-number-4">1.2.2</span> 段描述符</h4>
+<div id="outline-container-org7d248c4" class="outline-4">
+<h4 id="org7d248c4"><span class="section-number-4">1.2.2</span> 段描述符</h4>
 <div class="outline-text-4" id="text-1-2-2">
 <p>
 每个段由八字节的段描述符来表示，这个段描述符描述了段的特性。段描述符存在全局描述符表或局部描述符表中。
@@ -358,8 +362,8 @@ Table）可能会有多个。GDT在内存里的地址和占有的大小通常是
 </ol>
 </div>
 </div>
-<div id="outline-container-org57fdee7" class="outline-4">
-<h4 id="org57fdee7"><span class="section-number-4">1.2.3</span> 快速访问段描述符</h4>
+<div id="outline-container-org5ab4f4d" class="outline-4">
+<h4 id="org5ab4f4d"><span class="section-number-4">1.2.3</span> 快速访问段描述符</h4>
 <div class="outline-text-4" id="text-1-2-3">
 <p>
 前文已述，逻辑地址由16-bit的段选择子和32-bit的偏移组成，段寄存器用来存放段选择子。
@@ -422,8 +426,8 @@ GDT的第一个条目通常设为0。这可以保证逻辑地址为NULL时，可
 </p>
 </div>
 </div>
-<div id="outline-container-org4d62984" class="outline-4">
-<h4 id="org4d62984"><span class="section-number-4">1.2.4</span> 分段单元</h4>
+<div id="outline-container-org2eabfc3" class="outline-4">
+<h4 id="org2eabfc3"><span class="section-number-4">1.2.4</span> 分段单元</h4>
 <div class="outline-text-4" id="text-1-2-4">
 <p>
 下图详细的展示了一个逻辑地址如何被转换为一个线性地址。分段单元执行下面的操作：
@@ -447,8 +451,8 @@ GDT的第一个条目通常设为0。这可以保证逻辑地址为NULL时，可
 </div>
 </div>
 </div>
-<div id="outline-container-org02938cc" class="outline-3">
-<h3 id="org02938cc"><span class="section-number-3">1.3</span> Linux中的分段</h3>
+<div id="outline-container-orga35742e" class="outline-3">
+<h3 id="orga35742e"><span class="section-number-3">1.3</span> Linux中的分段</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 分段在80x86微处理器中得到支持，这鼓励程序员把他们的应用划分为逻辑相关的部分，比如子程序或者、全局以及局部数据区域。然而，Linux却很少使用分段。实际上，分段和分页在某种程度上是冗余的，因为两者都可以划分进程的物理地址空间：分段可以分配给每个进程不同的线性地址空间，而分页可以将相同的线性地址空间映射到不同的物理地址空间。Linux更加偏爱分页而不是分段，因为：
@@ -572,8 +576,8 @@ GDT的第一个条目通常设为0。这可以保证逻辑地址为NULL时，可
 </div>
 
 
-<div id="outline-container-org513c737" class="outline-4">
-<h4 id="org513c737"><span class="section-number-4">1.3.1</span> Linux GDT</h4>
+<div id="outline-container-orga92cd48" class="outline-4">
+<h4 id="orga92cd48"><span class="section-number-4">1.3.1</span> Linux GDT</h4>
 <div class="outline-text-4" id="text-1-3-1">
 <p>
 在单处理器中只有一个GDT，然而在多处理器情况时，每个CPU都会对应一个GDT。所有的GDT都会存在cpu_gdt_table数组里，而GDT的地址和大小则存在cpu_gdt_descr数组里。
@@ -610,8 +614,8 @@ GDT的布局如下图示意：
 </div>
 </div>
 
-<div id="outline-container-orgeee547b" class="outline-4">
-<h4 id="orgeee547b"><span class="section-number-4">1.3.2</span> Linux LDTs</h4>
+<div id="outline-container-orgda9c0c1" class="outline-4">
+<h4 id="orgda9c0c1"><span class="section-number-4">1.3.2</span> Linux LDTs</h4>
 <div class="outline-text-4" id="text-1-3-2">
 <p>
 很多Linux用户模式的应用不会使用局部描述符表, 默认的局部描述符表存在default_ldt数组里. 它共包括五个条目, 但是仅有其中的两个是被内核有效使用的: 针对iBCS可执行文件的调用门以及针对Solaris/x86可执行文件的调用门. 调用门是由80x86微处理器提供的一种机制, 在调用预先定义好的函数时, 可以改变CPU的权限级别. 
@@ -625,8 +629,8 @@ GDT的布局如下图示意：
 </div>
 
 
-<div id="outline-container-orga1be5ee" class="outline-3">
-<h3 id="orga1be5ee"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
+<div id="outline-container-org1943515" class="outline-3">
+<h3 id="org1943515"><span class="section-number-3">1.4</span> 硬件上的分页</h3>
 <div class="outline-text-3" id="text-1-4">
 <p>
 分页单元将线性地址转换为物理地址. 分页单元的一个关键任务就是检查访问的类型和访问权限, 如果内存访问是无效的, 就会生成一个Page Fault的异常.
@@ -645,8 +649,8 @@ GDT的布局如下图示意：
 从80386开始, 所有的80x86处理器都支持分页, 通过设置cr0寄存器的PG标志位来使能分页单元. 而当PG=0时, 线性地址被直接解释为物理地址.
 </p>
 </div>
-<div id="outline-container-org1cf8a1a" class="outline-4">
-<h4 id="org1cf8a1a"><span class="section-number-4">1.4.1</span> 常规分页</h4>
+<div id="outline-container-org42e4e38" class="outline-4">
+<h4 id="org42e4e38"><span class="section-number-4">1.4.1</span> 常规分页</h4>
 <div class="outline-text-4" id="text-1-4-1">
 <p>
 从80386开始, Intel处理器的分页单元可以处理4KB的页
@@ -776,8 +780,8 @@ Global 标志
 </ul>
 </div>
 </div>
-<div id="outline-container-org1bfcd64" class="outline-4">
-<h4 id="org1bfcd64"><span class="section-number-4">1.4.2</span> 扩展分页</h4>
+<div id="outline-container-org1c73ad8" class="outline-4">
+<h4 id="org1c73ad8"><span class="section-number-4">1.4.2</span> 扩展分页</h4>
 <div class="outline-text-4" id="text-1-4-2">
 <p>
 从Pentium开始, 80x86微处理器引入了扩展分页(Extended Paging), 它允许页帧成为4MB大小, 而不是原先的4KB, 如下图:
@@ -832,8 +836,8 @@ Offset
 </p>
 </div>
 </div>
-<div id="outline-container-orgd9039c1" class="outline-4">
-<h4 id="orgd9039c1"><span class="section-number-4">1.4.3</span> 硬件保护机制</h4>
+<div id="outline-container-orgf607877" class="outline-4">
+<h4 id="orgf607877"><span class="section-number-4">1.4.3</span> 硬件保护机制</h4>
 <div class="outline-text-4" id="text-1-4-3">
 <p>
 分页单元采用的保护机制不同于分段单元。对于一个段来说，80x86的处理器允许四个可能的权限级，
@@ -845,8 +849,8 @@ Offset
 </p>
 </div>
 </div>
-<div id="outline-container-orgd94addb" class="outline-4">
-<h4 id="orgd94addb"><span class="section-number-4">1.4.4</span> 64-bit架构下的分页</h4>
+<div id="outline-container-orga59fd32" class="outline-4">
+<h4 id="orga59fd32"><span class="section-number-4">1.4.4</span> 64-bit架构下的分页</h4>
 <div class="outline-text-4" id="text-1-4-4">
 <p>
 如前所述，32bit的处理器常用的就是两级页表。然而这对于64-bit架构就不是那么适合了，下面的例子解释了原因：
@@ -871,8 +875,8 @@ Offset
 
 
 
-<div id="outline-container-org9978514" class="outline-4">
-<h4 id="org9978514"><span class="section-number-4">1.4.5</span> 硬件缓存</h4>
+<div id="outline-container-org379b101" class="outline-4">
+<h4 id="org379b101"><span class="section-number-4">1.4.5</span> 硬件缓存</h4>
 <div class="outline-text-4" id="text-1-4-5">
 <p>
 今天的微处理器时钟频率都达到了几个G，而动态RAM（DRAM）的访问可以花费达到几百个时钟周期。这意味着，当CPU想要从RAM取回指令或者存储结果回RAM时，可能会被牵扯暂停很久。
@@ -913,7 +917,7 @@ Offset
 </p>
 
 
-<div id="orgfd9894d" class="figure">
+<div id="orgd7179a5" class="figure">
 <p><img src="./img/dual-processor-cache.png" alt="dual-processor-cache.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 11: </span>双处理器的缓存</p>
@@ -937,8 +941,8 @@ Pentium缓存的另一个特点是，可以让操作系统来设置每个页帧�
 </div>
 </div>
 
-<div id="outline-container-orgf5ac78d" class="outline-4">
-<h4 id="orgf5ac78d"><span class="section-number-4">1.4.6</span> TLB</h4>
+<div id="outline-container-org97d9836" class="outline-4">
+<h4 id="org97d9836"><span class="section-number-4">1.4.6</span> TLB</h4>
 <div class="outline-text-4" id="text-1-4-6">
 <p>
 除了通用目的的硬件缓存，80x86处理器还包括另一个缓存叫做Translation Lookaside Buffers（TLB）用来加速线性地址翻译．当一个线性地址第一次使用时，物理地址是通过访问RAM里的Page Table来获得的，这样比较慢．于是将物理地址存在了TLB里，当下次需要访问一样的线性地址就可以快些．
@@ -955,25 +959,82 @@ Pentium缓存的另一个特点是，可以让操作系统来设置每个页帧�
 </div>
 </div>
 
-<div id="outline-container-org78be968" class="outline-3">
-<h3 id="org78be968"><span class="section-number-3">1.5</span> Linux中的分页</h3>
+<div id="outline-container-org414953d" class="outline-3">
+<h3 id="org414953d"><span class="section-number-3">1.5</span> Linux中的分页</h3>
 <div class="outline-text-3" id="text-1-5">
 <p>
-对于32-bit和64-bit，Linux都采用一套公共的分页模型．
+对于32-bit和64-bit，Linux都采用一套公共的分页模型．如前所提到的，两级页表对于32bit架构已经
+够用了，但是对于64bit架构却需要更多级别的页表，四级页表的组成如下：
+</p>
+<ul class="org-ul">
+<li>全局页目录（PGD）</li>
+<li>上级页目录（PUD）</li>
+<li>中级页目录（PMD）</li>
+<li>页表</li>
+</ul>
+
+<p>
+全局页目录包含的是上级页目录表的地址，而上级页目录表包含的是中级页目录表的地址，中级页目录表包含的又是页表的地址．每个页表条目指向的就是Page Frame的地址了．因此线性地址可以被划分为5部分．注意下图没有包含各级有多少bit数，因为各个部分到底有多少bit数目是依架构而定的．
+</p>
+
+
+<div id="org92ad44c" class="figure">
+<p><img src="./img/linux-page-mod.png" alt="linux-page-mod.png" width="40%" height="40%">
+</p>
+<p><span class="figure-number">Figure 12: </span>Linux分页模型</p>
+</div>
+
+<p>
+对于没有开启PAE（Physical Address Extension）的32bit架构，两级页目录就足够了．通过在PUD和PMD部分设置0，Linux就可以达到消除这两级页表的目的了．
+</p>
+
+<p>
+Linux对于进程的处理严重依赖于分页．分页机制的存在使得下面的目的可以达到：
+</p>
+<ol class="org-ol">
+<li>给每个进程分配不同的物理地址空间，可以有效的防止寻址相关的错误．</li>
+<li>对页面（数据的集合）和页框（主存中的物理地址）作出区分，这就允许相同的页面可以存到页框里，随后存到磁盘上，最后重新加载到内存时可以到不同的页框里去．</li>
+</ol>
+
+<p>
+每个进程都有它自己的PGD和页表．当进程切换发生时，Linux会将之前运行进程的cr3寄存器存到它的进程描述符里，并且将下个要运行进程的进程描述符里的cr3值加载到cr3寄存器．
+</p>
+
+<p>
+下面会介绍一些函数和宏，主要是提供给内核用来找出物理地址以及管理各级表．
 </p>
 </div>
+
+<div id="outline-container-org8a36988" class="outline-4">
+<h4 id="org8a36988"><span class="section-number-4">1.5.1</span> 线性地址的字段</h4>
+<div class="outline-text-4" id="text-1-5-1">
+<p>
+下面的一些宏简化了页表的处理：
+</p>
+
+<ul class="org-ul">
+<li><p>
+PAGE_SHIFT
+</p>
+
+<p>
+指明了OFFSET域的长度．
+</p></li>
+</ul>
 </div>
 </div>
-<div id="outline-container-org71e67aa" class="outline-2">
-<h2 id="org71e67aa"><span class="section-number-2">2</span> 内存管理</h2>
 </div>
-<div id="outline-container-orge656631" class="outline-2">
-<h2 id="orge656631"><span class="section-number-2">3</span> 进程地址空间</h2>
+</div>
+<div id="outline-container-orgb086de5" class="outline-2">
+<h2 id="orgb086de5"><span class="section-number-2">2</span> 内存管理</h2>
+</div>
+<div id="outline-container-orga10e48f" class="outline-2">
+<h2 id="orga10e48f"><span class="section-number-2">3</span> 进程地址空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-06-07 Mon 23:24</p>
+<p class="date">Created: 2021-06-21 Mon 23:21</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
