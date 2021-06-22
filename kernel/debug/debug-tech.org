@@ -34,4 +34,54 @@
 
 + CONFIG_DEBUG_INFO
 
+  该选项会使得内核包含最为完整的debug信息．如果打算用gdb的话，就可以打开这个选项．
+
++ CONFIG_MAGIC_SYSRQ
+
+  打开SysRq键，后面会具体介绍SysRq键．
+
++ CONFIG_DEBUG_STACKOVERFLOW
++ CONFIG_DEBUG_STACK_USAGE
+
+  这些选项有助于追踪内核栈溢出．首先是添加溢出检查到内核，其次是可以通过SysRq键来监视栈使用情况和一些统计工作．
+
++ CONFIG_KALLSYMS
+
+  该选项（在"General setup/Standard features"下）可以导出内核的符号信息．没有这些符号信息，内核的trace信息就是十六进制了，没有多大用处．
+
++ CONFIG_ACPI_DEBUG
+  在"Power management/ACPI"下．该选项可以输出详细的ACPI详细，在怀疑问题来自ACPI相关时比较有用．
+
++ CONFIG_DEBUG_DRIVER
+
+  在"Device drivers"下，打开核心驱动的调试信息，在调试地层代码时比较有用，后面还会介绍核心驱动．
+
++ CONFIG_SCSI_CONSTANTS
+
+  在"Device drivers/SCSI　device support"下，用于输出详细的SCSI错误信息．在调试SCSI驱动时，这个选项比较有用．
+
++ CONFIG_INPUT_EVBUG
+
+  在"Device drivers/Input device support"下，可以打印输入事件的详细信息．如果在调试一个输入设备的驱动时，这个选项可以打开．但是这个选项是有潜在的安全风险的，它会记录你键入的任何输入，包括密码．
+
++ CONFIG_PROFILING
+
+  在"Profiling support"下．Profiling主要用于调测系统性能，但有时也可以用来追踪某些内核挂住的问题．
+
+后面在追踪各种内核问题时会重新调查这些选项．不过先可以先看看经典的内核调试技术：打印．
+
+内核调试的打印函数是printk．printk和printf类似，不过也有一些不一样的地方，其中一个不同就是，printk可以依据问题严重程度来归类不同的log，也就是loglevels．通常用宏来表示loglevels，比如KERN_INFO．总共有8种可能的loglevel，定义在<linux/kernel.h>，这里按递减的严重性列出：
+
++ KERN_EMERG
   
+  用于紧急信息，通常其后就是crash了．
+
++ KERN_ALERT
+
+  需要立即处理的情形．
+
++ KERN_CRIT
+
+  通常意味着严重的硬件或软件问题．
+
++ KERN_ERR
