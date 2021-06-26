@@ -1,0 +1,111 @@
+#+TITLE: Unix系统概要
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+
+本文介绍Unix系统编程环境．
+
+* 输入和输出
+*文件描述符*
+
+文件描述符通常是一个小而非负的整数由内核用来识别被进程访问的文件．每当打开一个存在的文件或创建新的文件时，内核都会返回一个文件描述符，用户也可以使用这个文件描述符来读或写文件．
+
+*标准输入，标准输出以及标准错误*
+
+传统上，当一个新的程序运行时，shell都会打开三个描述符，标准输入，标准输出以及标准错误．如果没有什么特殊的处理，比如就像简单的ls命令，那么这三个描述符都会连接到终端．许多shell一般都提供重定向它们中一个或所有到文件中，比如:
+
+: ls > file.list
+
+执行ls命令，并且将它的标准输出重定向到叫file.list的文件中．
+
+*无缓冲I/O*
+
+无缓存I/O由函数open，read，write，lseek以及close提供，这些函数都要依赖文件描述符而工作．
+
+*Example*
+
+如果可以读出标准输入而写入到标准输出，下面的程序示例在Unix系统上可以拷贝任何常规文件：
+#+begin_src c
+#include "apue.h"
+
+#define BUFFSIZE 4096
+
+int main(int argc, char *argv[])
+{
+	int n;
+	char buf[BUFFSIZE];
+
+	while ((n = read(STDIN_FILENO, buf, BUFFSIZE)) > 0)
+		if (write(STDOUT_FILENO, buf, n) != n)
+			err_sys("write error");
+
+	if (n < 0)
+		err_sys("read error");
+	
+    return 0;
+}
+
+#+end_src
+
+包含在apue.h中的unistd.h文件，里面有两个常量就是STDIN_FILENO以及STDOUT_FILENO，都是POSIX标准的一部分．这个头文件还包括许多Unix系统服务的函数原型，比如这里调用的read以及write函数．
+
+定义在unistd.h里常量STDIN_FILENO以及STDOUT_FILENO定义了标准输入和标准输出的文件描述符，分别为0和1，使用这个名字可读性更好．
+
+后面还会详细介绍BUFFSIZE常量的细节，其不同的大小会影响到程序的效率．
+
+read函数返回我们读取到的字节数，这个数值又用来作为write的写入字节数．当读取到文件的末尾时，read返回0并且程序停止，如果read有错误的话，就会返回-1．许多系统在有错误时都是返回-1．
+
+将这个程序编译为标准的名字（a.out），并且如下执行：
+: ./a.out > data
+
+标准输入是终端，标准输出重定向到了data文件，当然标准错误还是终端．如果输出文件不存在，默认情况下shell会创建它．程序会拷贝输入到标准输出，又重定向到文件data，输入end-of-file（通常就是Control-D）字符时程序可以停止．
+
+而下面的命令，可以将infile拷贝到outfile．
+
+: ./a.out < infile > outfile
+
+后面还会更细节的讨论无缓冲I/O函数．
+
+*标准I/O*
+
+标准I/O函数给无缓冲I/O函数提供了一个接口．使用标准I/O函数就可以不用去选择最优的buffer大小，比如上述程序中的BUFFSIZE．标准I/O函数也会简化对于多行输入的处理，比如fgets函数，一次读取一整行，作为对比，read是读取指定数目的字节数．
+
+最常见的标准I/O函数就是printf了．
+
+*Example*
+
+下面程序的功能类似前面的程序．
+
+#+begin_src c
+#include "apue.h"
+
+int main(int argc, char *argv[])
+{
+	int c;
+
+	while ((c = getc(stdin)) != EOF)
+		if (putc(c, stdout) == EOF)
+			err_sys("output error");
+
+	if (ferror(stdin))
+		err_sys("input error");
+    
+    return 0;
+}
+#+end_src
+
+getc一次读取一个字符，而这个字符又被putc写入到标准输出．标准I/O常量stdin和stdout定义在stdio.h里，用来引用到标准输入和标准输出．
+
+* 程序与进程
+
+* 错误处理
+
+* 用户识别
+
+* 信号
+
+* 时间值
+
+* 系统调用与库函数
+
+* 小结

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-06-26 Sat 18:11 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unix系统概要</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Unix系统概要</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org012af75">1. 输入和输出</a></li>
+<li><a href="#org1ce56d9">2. 程序与进程</a></li>
+<li><a href="#orga6a625d">3. 错误处理</a></li>
+<li><a href="#org4de5e40">4. 用户识别</a></li>
+<li><a href="#orgb8c611c">5. 信号</a></li>
+<li><a href="#org2593ef0">6. 时间值</a></li>
+<li><a href="#org7496869">7. 系统调用与库函数</a></li>
+<li><a href="#org73f452e">8. 小结</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文介绍Unix系统编程环境．
+</p>
+
+<div id="outline-container-org012af75" class="outline-2">
+<h2 id="org012af75"><span class="section-number-2">1</span> 输入和输出</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+<b>文件描述符</b>
+</p>
+
+<p>
+文件描述符通常是一个小而非负的整数由内核用来识别被进程访问的文件．每当打开一个存在的文件或创建新的文件时，内核都会返回一个文件描述符，用户也可以使用这个文件描述符来读或写文件．
+</p>
+
+<p>
+<b>标准输入，标准输出以及标准错误</b>
+</p>
+
+<p>
+传统上，当一个新的程序运行时，shell都会打开三个描述符，标准输入，标准输出以及标准错误．如果没有什么特殊的处理，比如就像简单的ls命令，那么这三个描述符都会连接到终端．许多shell一般都提供重定向它们中一个或所有到文件中，比如:
+</p>
+
+<pre class="example">
+ls &gt; file.list
+</pre>
+
+
+<p>
+执行ls命令，并且将它的标准输出重定向到叫file.list的文件中．
+</p>
+
+<p>
+<b>无缓冲I/O</b>
+</p>
+
+<p>
+无缓存I/O由函数open，read，write，lseek以及close提供，这些函数都要依赖文件描述符而工作．
+</p>
+
+<p>
+<b>Example</b>
+</p>
+
+<p>
+如果可以读出标准输入而写入到标准输出，下面的程序示例在Unix系统上可以拷贝任何常规文件：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">"apue.h"</span>
+
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">BUFFSIZE</span> 4096
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">n</span>;
+    <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">buf</span>[BUFFSIZE];
+
+    <span style="color: #F0DFAF; font-weight: bold;">while</span> ((n = read(STDIN_FILENO, buf, BUFFSIZE)) &gt; 0)
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (write(STDOUT_FILENO, buf, n) != n)
+            err_sys(<span style="color: #CC9393;">"write error"</span>);
+
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (n &lt; 0)
+        err_sys(<span style="color: #CC9393;">"read error"</span>);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+
+</pre>
+</div>
+
+<p>
+包含在apue.h中的unistd.h文件，里面有两个常量就是STDIN<sub>FILENO以及STDOUT</sub><sub>FILENO</sub>，都是POSIX标准的一部分．这个头文件还包括许多Unix系统服务的函数原型，比如这里调用的read以及write函数．
+</p>
+
+<p>
+定义在unistd.h里常量STDIN<sub>FILENO以及STDOUT</sub><sub>FILENO定义了标准输入和标准输出的文件描述符</sub>，分别为0和1，使用这个名字可读性更好．
+</p>
+
+<p>
+后面还会详细介绍BUFFSIZE常量的细节，其不同的大小会影响到程序的效率．
+</p>
+
+<p>
+read函数返回我们读取到的字节数，这个数值又用来作为write的写入字节数．当读取到文件的末尾时，read返回0并且程序停止，如果read有错误的话，就会返回-1．许多系统在有错误时都是返回-1．
+</p>
+
+<p>
+将这个程序编译为标准的名字（a.out），并且如下执行：
+</p>
+<pre class="example">
+./a.out &gt; data
+</pre>
+
+
+<p>
+标准输入是终端，标准输出重定向到了data文件，当然标准错误还是终端．如果输出文件不存在，默认情况下shell会创建它．程序会拷贝输入到标准输出，又重定向到文件data，输入end-of-file（通常就是Control-D）字符时程序可以停止．
+</p>
+
+<p>
+而下面的命令，可以将infile拷贝到outfile．
+</p>
+
+<pre class="example">
+./a.out &lt; infile &gt; outfile
+</pre>
+
+
+<p>
+后面还会更细节的讨论无缓冲I/O函数．
+</p>
+
+<p>
+<b>标准I/O</b>
+</p>
+
+<p>
+标准I/O函数给无缓冲I/O函数提供了一个接口．使用标准I/O函数就可以不用去选择最优的buffer大小，比如上述程序中的BUFFSIZE．标准I/O函数也会简化对于多行输入的处理，比如fgets函数，一次读取一整行，作为对比，read是读取指定数目的字节数．
+</p>
+
+<p>
+最常见的标准I/O函数就是printf了．
+</p>
+
+<p>
+<b>Example</b>
+</p>
+
+<p>
+下面程序的功能类似前面的程序．
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">"apue.h"</span>
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">c</span>;
+
+    <span style="color: #F0DFAF; font-weight: bold;">while</span> ((c = getc(stdin)) != EOF)
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (putc(c, stdout) == EOF)
+            err_sys(<span style="color: #CC9393;">"output error"</span>);
+
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (ferror(stdin))
+        err_sys(<span style="color: #CC9393;">"input error"</span>);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+getc一次读取一个字符，而这个字符又被putc写入到标准输出．标准I/O常量stdin和stdout定义在stdio.h里，用来引用到标准输入和标准输出．
+</p>
+</div>
+</div>
+
+<div id="outline-container-org1ce56d9" class="outline-2">
+<h2 id="org1ce56d9"><span class="section-number-2">2</span> 程序与进程</h2>
+</div>
+
+<div id="outline-container-orga6a625d" class="outline-2">
+<h2 id="orga6a625d"><span class="section-number-2">3</span> 错误处理</h2>
+</div>
+
+<div id="outline-container-org4de5e40" class="outline-2">
+<h2 id="org4de5e40"><span class="section-number-2">4</span> 用户识别</h2>
+</div>
+
+<div id="outline-container-orgb8c611c" class="outline-2">
+<h2 id="orgb8c611c"><span class="section-number-2">5</span> 信号</h2>
+</div>
+
+<div id="outline-container-org2593ef0" class="outline-2">
+<h2 id="org2593ef0"><span class="section-number-2">6</span> 时间值</h2>
+</div>
+
+<div id="outline-container-org7496869" class="outline-2">
+<h2 id="org7496869"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+</div>
+
+<div id="outline-container-org73f452e" class="outline-2">
+<h2 id="org73f452e"><span class="section-number-2">8</span> 小结</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-06-26 Sat 18:11</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
