@@ -391,6 +391,35 @@ Linux对于进程的处理严重依赖于分页．分页机制的存在使得下
 
 + PAGE_SHIFT
   
- 指明了OFFSET域的长度．
+ 指明了OFFSET域的长度．在80x86上，就是12．所以80x86上一个页面的大小就是2**12次方也即4096个字节．宏PAGE_SIZE用来返回一个页面的大小．最后宏PAGE_MASK用来屏蔽所有Offset域的比特值．
+
++ PMD_SHIFT
+
+  线性地址的Offset和Table域的合计比特数目，换言之，就是一个Page Middle Directory条目能够映射的大小（以2的对数计算）．宏PMD_SIZE可以返回这个大小．而PMD_MASK宏可以屏蔽所有Offset和Table域的比特．
+
++ PUD_SHIFT
+
+  确定一个PUD（Page Upper Directory）条目能映射多大的空间，PUD_SIZE返回这个大小．类似的有PUD_MASK．
+
++ PGDIR_SHIFT
+
+  确定一个PGD条目能映射多大空间．同样的有PGDIR_SIZE和PGDIR_MASK．
+
++ PTRS_PER_PTE，PTRS_PER_PMD，PTRS_PER_PUD以及PTRS_PER_PGD
+
+  分别计算了Page Table，Page Middle Directory，Page Upper Directory以及Page Global
+  Directory能包含的条目数．
+
+*** 页表处理
+pte_t，pmd_t，pud_t以及pgd_t分别描述了一个Page Table，Page Middle Directory，Page Upper
+Directory以及Page Global Directory条目的格式．而pgprot_t数据类型是用来表示一个条目的保护标志．
+
+
+
+*** 物理内存分布
+*** 进程页表
+*** 内核页表
+*** 固定映射线性地址
+*** 硬件Cache和TLB的处理
 * 内存管理
 * 进程地址空间
