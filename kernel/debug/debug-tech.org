@@ -85,3 +85,25 @@
   通常意味着严重的硬件或软件问题．
 
 + KERN_ERR
+
+  报告错误状态，设备驱动通常是用这个来报告硬件错误．
+
++ KERN_WARNING
+
+  一种警告，通常并不是有严重的问题．
+
++ KERN_NOTICE
+
+  在正常的情况下，但是依旧需要注意下，一些安全相关的事项在这个级别上打印日志．
+
++ KERN_INFO
+
+  打印一些消息．许多驱动在启动时会在这个级别上打印一下它们发现的硬件．
+
++ KERN_DEBUG
+
+  用来打印debug信息．
+
+基于loglevel，内核或许会把消息打印到当前console，可以是文本终端，串口，或者串行打印机．如果权限小于整数变量console_loglevel（通过tags很容易找见它的定义为#define
+CONFIG_CONSOLE_LOGLEVEL_DEFAULT 7），消息一次一行的打印出来．如果系统里运行着klogd和syslogd的话，内核消息就会附加到/var/log/messages文件里，这时和console_loglevel是独立的．如果klogd没有运行的话，消息不会传递到用户空间，当然读/proc/kmsg（dmesg命令）是另一种方式来获得内核打印信息．使用klogd时，连续相同的行，仅保留第一次出现的．
+
