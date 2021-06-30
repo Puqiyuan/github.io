@@ -459,12 +459,43 @@ net_device结构体可以划分为以下类别：
 + 函数指针（或者VFT）
 
 ** 标识符
-net_device结构体包含三个标识符，不应该混淆它们：
+net_device结构体包含几个标识符，不应该混淆它们：
 1) int ifindex
 
-   
-   
+   唯一标识ID，当设备在注册时通过调用dev_new_index来获得．
+
+2) unsigned short dev_id
+
+   用来区分相同的链路地址的设备．
+
 ** 配置
+依据网络设备的类型，某些配置值由内核给出默认值，而某些字段留给驱动来填充．当然驱动可以改变默认的值，甚至某些字段还可以在运行时修改，比如通过命令ifconfig和ip命令．实际上在针对设备的模块加载时，有几个参数比如base_addr，if_port，dma以及irq等可以通过用户设定．并且这些参数不由虚拟设备所使用．
+
+1) char name[IFNAMSIZ]
+   设备的名字，比如eh0．
+
+2) unsigned long mem_start\\
+   unsigned long mem_end
+
+   一块共享内存，设备用来和内核沟通．是由设备驱动进行初始化并且访问．高层通常不关心．
+
+3) unsigned long base_addr
+
+   起始I/O地址．
+
+4) int irq
+
+   设备用来和内核交流的中断号码．可以由多个设备共享，驱动使用request_irq来分配这个变量，使用free_irq来释放．
+
+5) unsigned char if_port
+
+   用于这个接口的端口类型．
+
+6) unsigned char dma
+
+   设备使用的DMA通道（如果有的话）．使用函数request_dma和free_dma来获得或请求DMA通道，它们定义在kernel/dma.c里．而使用enable_dma和disable_dma来使能或禁止DMA通道，这两个函数是定义在各架构里的．主要是用于ISA设备．PCI设备不需要．
+
+7) 
 *** 接口类型以及端口
 *** 混杂模式
 ** 统计
