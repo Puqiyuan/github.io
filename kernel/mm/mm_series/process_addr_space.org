@@ -20,8 +20,18 @@
 #+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
 [[./img/kas.png]]
 
-
 * 管理地址空间
+进程用到的地址空间，由mm_struct结构体管理着，它类似于BSD里的vmspace．
+
+每个地址空间都由一些页对齐的内存组成，这些页不会重叠．进程虚拟地址空间里又分许多的region，这些region由struct vm_area_struct结构体表示，举个具体的例子，一个region(struct
+vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内存映射文件，以及mmap出来的匿名内存．针对区域里的页，也许是等待分配，也许是活跃的，也许在物理内存里，也许换出了．
+
+如果一个region映射到一个文件，那么它的vm_file就会被设置．通过vm_file(file)->f_mapping(address_space)->host(inode)就可找到对应的文件不同结构体间的关系如下图：
+
+#+CAPTION: 地址空间相关的结构体
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/ds_as.png]]
 
 * 进程地址空间描述符
 

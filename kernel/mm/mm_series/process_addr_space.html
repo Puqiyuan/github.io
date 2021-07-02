@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-06-26 Sat 11:49 -->
+<!-- 2021-07-02 Fri 23:07 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程地址空间</title>
@@ -62,13 +62,13 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9a74558">1. 线性地址空间</a></li>
-<li><a href="#org194602a">2. 管理地址空间</a></li>
-<li><a href="#org13b5191">3. 进程地址空间描述符</a></li>
-<li><a href="#org60ff820">4. 内存区域（regions）</a></li>
-<li><a href="#org9a16ced">5. 异常处理</a></li>
-<li><a href="#orgb540734">6. Page Fault</a></li>
-<li><a href="#org1a6e0cf">7. 拷贝到/拷贝自用户空间</a></li>
+<li><a href="#orgb0ea201">1. 线性地址空间</a></li>
+<li><a href="#org40eece2">2. 管理地址空间</a></li>
+<li><a href="#org39f1aea">3. 进程地址空间描述符</a></li>
+<li><a href="#org9593d4b">4. 内存区域（regions）</a></li>
+<li><a href="#org4eb2661">5. 异常处理</a></li>
+<li><a href="#orgb66ea0f">6. Page Fault</a></li>
+<li><a href="#orge656a48">7. 拷贝到/拷贝自用户空间</a></li>
 </ul>
 </div>
 </div>
@@ -88,14 +88,14 @@ for the JavaScript code in this tag.
 本文首先介绍线性地址是如何划分以及各个部分的目的．随后会介绍描述每个进程的结构体，这些结构体是如何被分配，初始化以及怎么销毁的．随后会介绍进程的地址空间是如何创建的以及相关联的函数．这些会引入关于进程地址空间的异常处理，pagefault等其它机制．最后会介绍下如何安全的向用户空间拷贝数据或者从用户空间拷贝数据到内核空间．
 </p>
 
-<div id="outline-container-org9a74558" class="outline-2">
-<h2 id="org9a74558"><span class="section-number-2">1</span> 线性地址空间</h2>
+<div id="outline-container-orgb0ea201" class="outline-2">
+<h2 id="orgb0ea201"><span class="section-number-2">1</span> 线性地址空间</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 从用户的观点来说，线性地址空间是平坦的．但是从内核空间来说就很不一样了．地址空间被划分为两部分，用户空间部分，在上下文切换后可能会改变，而内核空间，保持不变．而划分出这个位置的就是PAGE_OFFSET，对于X86来说这个值是0xC0000000．这意味着3GB留给进程，而1GB留给内核空间，内核所看到的地址空间划分如下图：
 </p>
 
-<div id="org42208e9" class="figure">
+<div id="orge47f1fe" class="figure">
 <p><img src="./img/kas.png" alt="kas.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 1: </span>内核看到的地址空间</p>
@@ -103,34 +103,54 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
+<div id="outline-container-org40eece2" class="outline-2">
+<h2 id="org40eece2"><span class="section-number-2">2</span> 管理地址空间</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+进程用到的地址空间，由mm_struct结构体管理着，它类似于BSD里的vmspace．
+</p>
 
-<div id="outline-container-org194602a" class="outline-2">
-<h2 id="org194602a"><span class="section-number-2">2</span> 管理地址空间</h2>
+<p>
+每个地址空间都由一些页对齐的内存组成，这些页不会重叠．进程虚拟地址空间里又分许多的region，这些region由struct vm_area_struct结构体表示，举个具体的例子，一个region(struct
+vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内存映射文件，以及mmap出来的匿名内存．针对区域里的页，也许是等待分配，也许是活跃的，也许在物理内存里，也许换出了．
+</p>
+
+<p>
+如果一个region映射到一个文件，那么它的vm_file就会被设置．通过vm_file(file)-&gt;f_mapping(address_space)-&gt;host(inode)就可找到对应的文件不同结构体间的关系如下图：
+</p>
+
+
+<div id="orge47d3b6" class="figure">
+<p><img src="./img/ds_as.png" alt="ds_as.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 2: </span>地址空间相关的结构体</p>
+</div>
+</div>
 </div>
 
-<div id="outline-container-org13b5191" class="outline-2">
-<h2 id="org13b5191"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
+<div id="outline-container-org39f1aea" class="outline-2">
+<h2 id="org39f1aea"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
 </div>
 
-<div id="outline-container-org60ff820" class="outline-2">
-<h2 id="org60ff820"><span class="section-number-2">4</span> 内存区域（regions）</h2>
+<div id="outline-container-org9593d4b" class="outline-2">
+<h2 id="org9593d4b"><span class="section-number-2">4</span> 内存区域（regions）</h2>
 </div>
 
-<div id="outline-container-org9a16ced" class="outline-2">
-<h2 id="org9a16ced"><span class="section-number-2">5</span> 异常处理</h2>
+<div id="outline-container-org4eb2661" class="outline-2">
+<h2 id="org4eb2661"><span class="section-number-2">5</span> 异常处理</h2>
 </div>
 
-<div id="outline-container-orgb540734" class="outline-2">
-<h2 id="orgb540734"><span class="section-number-2">6</span> Page Fault</h2>
+<div id="outline-container-orgb66ea0f" class="outline-2">
+<h2 id="orgb66ea0f"><span class="section-number-2">6</span> Page Fault</h2>
 </div>
 
-<div id="outline-container-org1a6e0cf" class="outline-2">
-<h2 id="org1a6e0cf"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
+<div id="outline-container-orge656a48" class="outline-2">
+<h2 id="orge656a48"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-06-26 Sat 11:49</p>
+<p class="date">Created: 2021-07-02 Fri 23:07</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
