@@ -98,6 +98,39 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 
 * 程序与进程
 
+*程序*
+
+程序是存在于磁盘上某个目录下的可执行文件．程序可以被七个exec函数调用读入到内存里并且由内核执行．
+
+*进程以及进程ID*
+
+一个程序的执行实体叫进程．某些操作系统采用任务（task）来指代正在执行的程序．
+
+UNIX系统保证每个进程都有一个唯一的数字标识符，叫做进程ID．进程ID总是非负的整数．
+
+*Example*
+
+下面的程序可以打印出进程ID：
+#+begin_src c
+#include "apue.h"
+
+int main(int argc, char *argv[])
+{
+	printf("helllo world from process ID %ld\n", (long)getpid());
+	
+    return 0;
+}
+#+end_src
+
+运行上面的程序：
+: ~/.../bin(master)$ ./1.6
+: helllo world from process ID 14055
+: ~/.../bin(master)$ ./1.6
+: helllo world from process ID 14066
+
+当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid_t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+
+
 * 错误处理
 
 * 用户识别

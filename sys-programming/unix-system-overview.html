@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-06-26 Sat 18:11 -->
+<!-- 2021-07-03 Sat 21:04 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unix系统概要</title>
@@ -62,14 +62,14 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org012af75">1. 输入和输出</a></li>
-<li><a href="#org1ce56d9">2. 程序与进程</a></li>
-<li><a href="#orga6a625d">3. 错误处理</a></li>
-<li><a href="#org4de5e40">4. 用户识别</a></li>
-<li><a href="#orgb8c611c">5. 信号</a></li>
-<li><a href="#org2593ef0">6. 时间值</a></li>
-<li><a href="#org7496869">7. 系统调用与库函数</a></li>
-<li><a href="#org73f452e">8. 小结</a></li>
+<li><a href="#org236383d">1. 输入和输出</a></li>
+<li><a href="#org4563a8e">2. 程序与进程</a></li>
+<li><a href="#org2179bc0">3. 错误处理</a></li>
+<li><a href="#orgb541a2c">4. 用户识别</a></li>
+<li><a href="#orgccbf2b4">5. 信号</a></li>
+<li><a href="#org588bec4">6. 时间值</a></li>
+<li><a href="#org9c7accb">7. 系统调用与库函数</a></li>
+<li><a href="#org33ea200">8. 小结</a></li>
 </ul>
 </div>
 </div>
@@ -77,8 +77,8 @@ for the JavaScript code in this tag.
 本文介绍Unix系统编程环境．
 </p>
 
-<div id="outline-container-org012af75" class="outline-2">
-<h2 id="org012af75"><span class="section-number-2">1</span> 输入和输出</h2>
+<div id="outline-container-org236383d" class="outline-2">
+<h2 id="org236383d"><span class="section-number-2">1</span> 输入和输出</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>文件描述符</b>
@@ -229,37 +229,93 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 </div>
 </div>
 
-<div id="outline-container-org1ce56d9" class="outline-2">
-<h2 id="org1ce56d9"><span class="section-number-2">2</span> 程序与进程</h2>
+<div id="outline-container-org4563a8e" class="outline-2">
+<h2 id="org4563a8e"><span class="section-number-2">2</span> 程序与进程</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+<b>程序</b>
+</p>
+
+<p>
+程序是存在于磁盘上某个目录下的可执行文件．程序可以被七个exec函数调用读入到内存里并且由内核执行．
+</p>
+
+<p>
+<b>进程以及进程ID</b>
+</p>
+
+<p>
+一个程序的执行实体叫进程．某些操作系统采用任务（task）来指代正在执行的程序．
+</p>
+
+<p>
+UNIX系统保证每个进程都有一个唯一的数字标识符，叫做进程ID．进程ID总是非负的整数．
+</p>
+
+<p>
+<b>Example</b>
+</p>
+
+<p>
+下面的程序可以打印出进程ID：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">"apue.h"</span>
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    printf(<span style="color: #CC9393;">"helllo world from process ID %ld\n"</span>, (<span style="color: #7CB8BB;">long</span>)getpid());
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
 </div>
 
-<div id="outline-container-orga6a625d" class="outline-2">
-<h2 id="orga6a625d"><span class="section-number-2">3</span> 错误处理</h2>
+<p>
+运行上面的程序：
+</p>
+<pre class="example">
+~/.../bin(master)$ ./1.6
+helllo world from process ID 14055
+~/.../bin(master)$ ./1.6
+helllo world from process ID 14066
+</pre>
+
+
+<p>
+当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid<sub>t类型</sub>．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+</p>
+</div>
 </div>
 
-<div id="outline-container-org4de5e40" class="outline-2">
-<h2 id="org4de5e40"><span class="section-number-2">4</span> 用户识别</h2>
+
+<div id="outline-container-org2179bc0" class="outline-2">
+<h2 id="org2179bc0"><span class="section-number-2">3</span> 错误处理</h2>
 </div>
 
-<div id="outline-container-orgb8c611c" class="outline-2">
-<h2 id="orgb8c611c"><span class="section-number-2">5</span> 信号</h2>
+<div id="outline-container-orgb541a2c" class="outline-2">
+<h2 id="orgb541a2c"><span class="section-number-2">4</span> 用户识别</h2>
 </div>
 
-<div id="outline-container-org2593ef0" class="outline-2">
-<h2 id="org2593ef0"><span class="section-number-2">6</span> 时间值</h2>
+<div id="outline-container-orgccbf2b4" class="outline-2">
+<h2 id="orgccbf2b4"><span class="section-number-2">5</span> 信号</h2>
 </div>
 
-<div id="outline-container-org7496869" class="outline-2">
-<h2 id="org7496869"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+<div id="outline-container-org588bec4" class="outline-2">
+<h2 id="org588bec4"><span class="section-number-2">6</span> 时间值</h2>
 </div>
 
-<div id="outline-container-org73f452e" class="outline-2">
-<h2 id="org73f452e"><span class="section-number-2">8</span> 小结</h2>
+<div id="outline-container-org9c7accb" class="outline-2">
+<h2 id="org9c7accb"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+</div>
+
+<div id="outline-container-org33ea200" class="outline-2">
+<h2 id="org33ea200"><span class="section-number-2">8</span> 小结</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-06-26 Sat 18:11</p>
+<p class="date">Created: 2021-07-03 Sat 21:04</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
