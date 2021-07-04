@@ -21,6 +21,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 
 * Linux系统管理
 - [[./sys-admin/pipe-redirection.html][管道与重定向]]。
+- [[./sys-admin/packaging-system.html][包管理系统－工具以及基本原理]]．
 * Linux系统开发
 - [[./sys-programming/unix-system-overview.html][Unix系统概要]].
 - [[./sys-programming/thread.html][Linux线程之一]]。

@@ -1,0 +1,11 @@
+#+TITLE: 包管理系统－工具以及基本原理
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+
+本文章介绍二进制包（binary）和源码包（source）的结构和内容．前者是直接由dpkg处理的文件，而后者包含源代码，以及一些说明指明如何构建二进制包．
+
+* 二进制包的结构
+* 包元信息
+* 源代码的结构
+* 用dpkg操作包
