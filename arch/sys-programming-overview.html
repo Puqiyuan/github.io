@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-06-27 Sun 22:02 -->
+<!-- 2021-07-04 Sun 10:52 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>系统编程概要</title>
@@ -62,25 +62,33 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org5f7ac82">1. 内存模型</a>
+<li><a href="#org5450cc7">1. 内存模型</a>
 <ul>
-<li><a href="#org6a2a8b2">1.1. 内存寻址</a></li>
-<li><a href="#orgdb34815">1.2. 内存组织</a></li>
+<li><a href="#org9121518">1.1. 内存寻址</a></li>
+<li><a href="#org3e7fe52">1.2. 内存组织</a></li>
 </ul>
 </li>
-<li><a href="#org9a277a8">2. 内存管理</a>
+<li><a href="#org54b9d29">2. 内存管理</a>
 <ul>
-<li><a href="#orgf4610ae">2.1. 分段</a></li>
-<li><a href="#org92c43bb">2.2. 分页</a></li>
-<li><a href="#orgead006a">2.3. 分页与分段混合</a></li>
-<li><a href="#orgb7f794f">2.4. 实模式</a></li>
+<li><a href="#org179d5a9">2.1. 分段</a></li>
+<li><a href="#org6b3b8eb">2.2. 分页</a></li>
+<li><a href="#orgad5a9ef">2.3. 分页与分段混合</a></li>
+<li><a href="#org419d840">2.4. 实模式</a></li>
 </ul>
 </li>
-<li><a href="#org08ccd9c">3. 操作模式</a></li>
-<li><a href="#org2e1dfa2">4. 系统寄存器</a></li>
-<li><a href="#org22f8fd2">5. 系统数据结构</a></li>
-<li><a href="#orgd96d5a8">6. 中断</a></li>
-<li><a href="#org7a8dc51">7. 其它系统编程功能</a></li>
+<li><a href="#orgd978fe3">3. 操作模式</a>
+<ul>
+<li><a href="#org53cb394">3.1. Long模式</a></li>
+<li><a href="#org342de1d">3.2. 64-bit模式</a></li>
+<li><a href="#org9e1d436">3.3. 兼容模式</a></li>
+<li><a href="#orgd562ca1">3.4. 传统模式</a></li>
+<li><a href="#org8f402f3">3.5. 系统管理模式</a></li>
+</ul>
+</li>
+<li><a href="#orgbd87989">4. 系统寄存器</a></li>
+<li><a href="#org7a985f1">5. 系统数据结构</a></li>
+<li><a href="#org091ba98">6. 中断</a></li>
+<li><a href="#orgd8a33b3">7. 其它系统编程功能</a></li>
 </ul>
 </div>
 </div>
@@ -104,8 +112,8 @@ for the JavaScript code in this tag.
 为了支持64-bit的操作系统和应用，许多遗留下来的功能或特点都有被加强，但同时也向后兼容已经存在的软件。
 </p>
 
-<div id="outline-container-org5f7ac82" class="outline-2">
-<h2 id="org5f7ac82"><span class="section-number-2">1</span> 内存模型</h2>
+<div id="outline-container-org5450cc7" class="outline-2">
+<h2 id="org5450cc7"><span class="section-number-2">1</span> 内存模型</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 ADM64架构的内存模型被设计成系统软件可以以安全的方式去管理应用软件以及相关的数据，它可以和旧版的内存模型兼容。对于虚拟地址和物理地址之间的转换由硬件机制完成。硬件的翻译机制允许系统软件以透明的方式重定位应用和数据，可以定位到物理内存空间或者是硬盘空间，这些空间都是由系统软件管理的。
@@ -116,8 +124,8 @@ ADM64架构的内存模型被设计成系统软件可以以安全的方式去管
 </p>
 </div>
 
-<div id="outline-container-org6a2a8b2" class="outline-3">
-<h3 id="org6a2a8b2"><span class="section-number-3">1.1</span> 内存寻址</h3>
+<div id="outline-container-org9121518" class="outline-3">
+<h3 id="org9121518"><span class="section-number-3">1.1</span> 内存寻址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 AMD64架构支持地址重定位，为了做到这点，几种类型的地址被定义用来完整的描述内存组织，共计四种：
@@ -194,8 +202,8 @@ mode下，线性地址必须是规范地址形式。
 </div>
 </div>
 
-<div id="outline-container-orgdb34815" class="outline-3">
-<h3 id="orgdb34815"><span class="section-number-3">1.2</span> 内存组织</h3>
+<div id="outline-container-org3e7fe52" class="outline-3">
+<h3 id="org3e7fe52"><span class="section-number-3">1.2</span> 内存组织</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理内存通常具有不同的大小，通常来说虚拟内存比物理内存大。系统软件负责将应用或数据在物理内存和系统硬盘间重定位，这使得看起来系统里有超过物理内存大小可用的内存。
@@ -207,16 +215,16 @@ AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理
 </div>
 </div>
 </div>
-<div id="outline-container-org9a277a8" class="outline-2">
-<h2 id="org9a277a8"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-org54b9d29" class="outline-2">
+<h2 id="org54b9d29"><span class="section-number-2">2</span> 内存管理</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 内存管理使用一些方法，总的来说，就是软件生成虚拟地址，然后经由分段或者分页将地址翻译成物理地址。内存管理对应用软件是不可见的，它是由系统软件和处理器硬件完成．
 </p>
 </div>
 
-<div id="outline-container-orgf4610ae" class="outline-3">
-<h3 id="orgf4610ae"><span class="section-number-3">2.1</span> 分段</h3>
+<div id="outline-container-org179d5a9" class="outline-3">
+<h3 id="org179d5a9"><span class="section-number-3">2.1</span> 分段</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 分段最开始是用来隔离进程以及这些进程使用的数据，这会增加系统同时运行多个进程的可靠性．
@@ -239,8 +247,8 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="orgdb35ed8" class="figure">
-<p><img src="./img/seg-mem-mod.png" alt="seg-mem-mod.png" width="50%" height="50%">
+<div id="org54a5f07" class="figure">
+<p><img src="./img/seg-mem-mod.png" alt="seg-mem-mod.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 1: </span>分段内存模型</p>
 </div>
@@ -250,7 +258,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="org4312ed7" class="figure">
+<div id="org5ab446d" class="figure">
 <p><img src="./img/flat-mem-mod.png" alt="flat-mem-mod.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>平坦内存模型</p>
@@ -262,8 +270,8 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </div>
 </div>
 
-<div id="outline-container-org92c43bb" class="outline-3">
-<h3 id="org92c43bb"><span class="section-number-3">2.2</span> 分页</h3>
+<div id="outline-container-org6b3b8eb" class="outline-3">
+<h3 id="org6b3b8eb"><span class="section-number-3">2.2</span> 分页</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 分页使得软件和数据可以在物理地址空间中以固定大小的块（物理页面）来进行重定位．传统的X86架构支持三种页面大小，包括4Kb，2Mb，4Mb．使用段翻译权限较低的软件可以限制访问物理页面．
@@ -282,7 +290,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="org3b21194" class="figure">
+<div id="orgeaf2b95" class="figure">
 <p><img src="./img/page-mem-mod.png" alt="page-mem-mod.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>分页内存模型</p>
@@ -293,8 +301,8 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 </div>
 </div>
-<div id="outline-container-orgead006a" class="outline-3">
-<h3 id="orgead006a"><span class="section-number-3">2.3</span> 分页与分段混合</h3>
+<div id="outline-container-orgad5a9ef" class="outline-3">
+<h3 id="orgad5a9ef"><span class="section-number-3">2.3</span> 分页与分段混合</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 进行内存管理的软件，可以组合起来使用分段内存和分页内存．因为分段不能禁止，并且分页内存管理也需要初始化一点分段资源．而分页则是可以完全禁止的，所以分段内存管理不需要分页资源的初始化．
@@ -313,7 +321,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="orga4b7efd" class="figure">
+<div id="org76bd2aa" class="figure">
 <p><img src="./img/64bit-flat.png" alt="64bit-flat.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 4: </span>64bit平坦分页内存模型</p>
@@ -321,34 +329,98 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </div>
 </div>
 
-<div id="outline-container-orgb7f794f" class="outline-3">
-<h3 id="orgb7f794f"><span class="section-number-3">2.4</span> 实模式</h3>
+<div id="outline-container-org419d840" class="outline-3">
+<h3 id="org419d840"><span class="section-number-3">2.4</span> 实模式</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
-实
+实模式地址是一种传统模式地址翻译方式，主要用在实模式下．主要是为了兼容8086处理器，在这种模式下，16-bit的有效地址映射到20-bit的物理地址，提供1MB的物理地址空间．
 </p>
+
+<p>
+在实模式下，段选择子也会被使用到，不过不是作为描述符表的索引．而是，16-bit的段选择子左移4bit形成20-bit的段基址．16-bit的有效地址会加到这个20-bit的段基址，形成最后的20-bit物理地址．
+</p>
+
+<p>
+A20地址线仅在实模式下使用，其它模式下使用会导致地址翻译错误．下面的图展示了实模式地址翻译：
+</p>
+
+
+<div id="orge819f48" class="figure">
+<p><img src="./img/real_mode.png" alt="real_mode.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 5: </span>实模式内存模型</p>
 </div>
 </div>
 </div>
-<div id="outline-container-org08ccd9c" class="outline-2">
-<h2 id="org08ccd9c"><span class="section-number-2">3</span> 操作模式</h2>
 </div>
-<div id="outline-container-org2e1dfa2" class="outline-2">
-<h2 id="org2e1dfa2"><span class="section-number-2">4</span> 系统寄存器</h2>
+
+<div id="outline-container-orgd978fe3" class="outline-2">
+<h2 id="orgd978fe3"><span class="section-number-2">3</span> 操作模式</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+传统x86架构支持四种操作模式，可以支持各种内存管理，比如各种虚拟内存和物理内存大小，以及不同的保护功能：
+</p>
+
+<ul class="org-ul">
+<li>实模式</li>
+<li>保护模式</li>
+<li>虚拟8086模式</li>
+<li>系统管理模式</li>
+</ul>
+
+<p>
+AMD64架构支持所有这些传统模式，并且它加入了一个新的操作模式叫做long mode．下面的表展示了这些模式间的不同：
+</p>
+
+<div id="org42cc738" class="figure">
+<p><img src="./img/operating-mode.png" alt="operating-mode.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 6: </span>操作模式</p>
 </div>
-<div id="outline-container-org22f8fd2" class="outline-2">
-<h2 id="org22f8fd2"><span class="section-number-2">5</span> 系统数据结构</h2>
+
+<p>
+而软件可以通过下图在各种模式间移动：
+</p>
+
+<div id="orgb1b0bbf" class="figure">
+<p><img src="./img/operating-mode-convert.png" alt="operating-mode-convert.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 7: </span>AMD64架构的操作模式</p>
 </div>
-<div id="outline-container-orgd96d5a8" class="outline-2">
-<h2 id="orgd96d5a8"><span class="section-number-2">6</span> 中断</h2>
 </div>
-<div id="outline-container-org7a8dc51" class="outline-2">
-<h2 id="org7a8dc51"><span class="section-number-2">7</span> 其它系统编程功能</h2>
+
+<div id="outline-container-org53cb394" class="outline-3">
+<h3 id="org53cb394"><span class="section-number-3">3.1</span> Long模式</h3>
+</div>
+<div id="outline-container-org342de1d" class="outline-3">
+<h3 id="org342de1d"><span class="section-number-3">3.2</span> 64-bit模式</h3>
+</div>
+<div id="outline-container-org9e1d436" class="outline-3">
+<h3 id="org9e1d436"><span class="section-number-3">3.3</span> 兼容模式</h3>
+</div>
+<div id="outline-container-orgd562ca1" class="outline-3">
+<h3 id="orgd562ca1"><span class="section-number-3">3.4</span> 传统模式</h3>
+</div>
+<div id="outline-container-org8f402f3" class="outline-3">
+<h3 id="org8f402f3"><span class="section-number-3">3.5</span> 系统管理模式</h3>
+</div>
+</div>
+<div id="outline-container-orgbd87989" class="outline-2">
+<h2 id="orgbd87989"><span class="section-number-2">4</span> 系统寄存器</h2>
+</div>
+<div id="outline-container-org7a985f1" class="outline-2">
+<h2 id="org7a985f1"><span class="section-number-2">5</span> 系统数据结构</h2>
+</div>
+<div id="outline-container-org091ba98" class="outline-2">
+<h2 id="org091ba98"><span class="section-number-2">6</span> 中断</h2>
+</div>
+<div id="outline-container-orgd8a33b3" class="outline-2">
+<h2 id="orgd8a33b3"><span class="section-number-2">7</span> 其它系统编程功能</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-06-27 Sun 22:02</p>
+<p class="date">Created: 2021-07-04 Sun 10:52</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
