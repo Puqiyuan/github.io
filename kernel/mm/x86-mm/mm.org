@@ -414,8 +414,13 @@ Linux对于进程的处理严重依赖于分页．分页机制的存在使得下
 pte_t，pmd_t，pud_t以及pgd_t分别描述了一个Page Table，Page Middle Directory，Page Upper
 Directory以及Page Global Directory条目的格式．而pgprot_t数据类型是用来表示一个条目的保护标志．
 
+__pte，__pmd，__pud，__pgd以及__pgprot可以把相应的C类型转换为对应的类型．而另外五个类型转换的函数，pte_val，pmd_val，pud_val，pgd_val以及pgprot_val又可以执行相反的操作把相应的类型转换为C的基本类型．
 
+内核也提供一些宏来修改或读取页表条目：
 
++ pte_none，pmd_none，pud_none以及pgd_none返回1，如果对应的值为0．否则，就返回0.
++ pte_clear，pmd_clear，pud_clear以及pgd_clear清除对应页表的条目．因此可以禁止进程使用由对应页表条目对应的线性地址．而ptep_get_and_clear函数清除页表条目并且返回之前的值．
++ set_pte，set_pmd，set_pud以及
 *** 物理内存分布
 *** 进程页表
 *** 内核页表
