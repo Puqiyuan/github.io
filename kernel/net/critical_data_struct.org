@@ -495,7 +495,33 @@ net_device结构体包含几个标识符，不应该混淆它们：
 
    设备使用的DMA通道（如果有的话）．使用函数request_dma和free_dma来获得或请求DMA通道，它们定义在kernel/dma.c里．而使用enable_dma和disable_dma来使能或禁止DMA通道，这两个函数是定义在各架构里的．主要是用于ISA设备．PCI设备不需要．
 
-7) 
+7) unsigned short flags\\
+   unsigned short gflags\\
+   unsigned short priv_flags
+
+   flag域中的某些bit代表了网络设备具有的能力，比方说IFF_MULTICAST，而另一些代表了状态改变，比如IFF_UP或者IFF_RUNNING．设备驱动在初始化阶段设置能力标志位，而状态标志由内核管理以响应外部事件，这些标志可以通过ifconfig命令来查看：
+   #+CAPTION: ifconfig的标志
+   #+LABEL: fig:
+   #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+   [[./img/ifconfig-lo.png]]
+
+   在上面这个例子里，UP，LOOPBACK以及RUNNING分别对应IFF_UP，IFF_LOOPBACK以及IFF_RUNNING标志．
+
+   priv_flags存放的是不被上层用户软件可见的标志．比如被VLAN和Bridge虚拟设备使用．gflags的存在主要是为了兼容目的．标志可以通过dev_change_flags函数改变．
+8) u64 features
+
+   以bitmap的形式存储的设备具有的其它能力．这个变量和前面的flag标志并不冗余，features可以显示网卡和CPU沟通时具有哪些能力．比如网卡是否可以在高端内存做DMA，又或者能否在硬件层面做校验和．
+
+9) unsigned int mtu
+   
+   MTU代表就是Maximum Transmission Unit，代表了设备能处理的最大frame大小．下面的表列出了常见网络技术的MTU：
+   #+CAPTION: 不同设备类型的MTU
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/mtus.png]]
+
+对于Ethernet类型的MTU需要多说两点，Ethernet frame标准定义了最大的payload为1500字节．有些时候又会发现1518或1514的大小值，1518是包括了以太网的头，而后者包括头却没有包括帧校验序列（校验和长4字节）．
+   
 *** 接口类型以及端口
 *** 混杂模式
 ** 统计
