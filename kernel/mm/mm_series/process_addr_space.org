@@ -26,14 +26,54 @@
 每个地址空间都由一些页对齐的内存组成，这些页不会重叠．进程虚拟地址空间里又分许多的region，这些region由struct vm_area_struct结构体表示，举个具体的例子，一个region(struct
 vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内存映射文件，以及mmap出来的匿名内存．针对区域里的页，也许是等待分配，也许是活跃的，也许在物理内存里，也许换出了．
 
-如果一个region映射到一个文件，那么它的vm_file就会被设置．通过vm_file(file)->f_mapping(address_space)->host(inode)就可找到对应的文件不同结构体间的关系如下图：
+如果一个region映射到一个文件，那么它的vm_file就会被设置．通过vm_file(file)->f_mapping(address_space)->host(inode)就可找到对应的文件，不同结构体间的关系如下图：
 
 #+CAPTION: 地址空间相关的结构体
 #+LABEL: fig:
 #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/ds_as.png]]
 
+下面列出一些和内存区域相关的syscall：
+
++ fork
+  
+  创建一个新的进程并赋予一个新的地址空间．所有的页都被标记为Copy-On-Write（COW），并且这两个进程共享这些页，直到一个page fault缺页发生时．一旦一个写错误发生，对于引起错误的进程，将会拷贝一个新的COW页．
+
++ clone
+
+  clone允许一个新的进程按部分共享它的环境，以及怎样实现线程．不给clone传CLONE_VM的话，就会创建一个新的地址空间，这就和fork完全一样了．
+
++ mmap
+
+  mmap在进程的线性地址空间创建一个新的区域．
+
++ mremap
+
+  重新映射或者调整一段内存的大小．如果将要unmap的区域位于存在区域的中间，那么这个存在的区域将会被划分为两个独立的内存区域．
+
++ munmap
+
+  销毁部分或全部的内存区域．如果要被unmap的区域位于存在内存区域的中间，那么这个存在的区域将会被划分为两个独立的内存区域．
+
++ shmat
+
+  附加一个共享的内存段到进程地址空间．
+
++ shmdt
+
+  从进程地址空间移除一个共享内存段．
+
++ execve
+
+  加载一个新的可执行文件并且替代当前的进程地址空间．
+
++ exit
+
+  销毁地址空间．
+  
 * 进程地址空间描述符
+进程地址空间由mm_struct描述，就是说对于一个进程来说，仅有一个mm_struct，并且这个mm_struct由用户线程共享．实际上，线程的寻找方式就是，找出所有指向同一个mm_strcut的task_struct(s).
+
 
 * 内存区域（regions）
 
