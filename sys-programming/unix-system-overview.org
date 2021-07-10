@@ -2,6 +2,7 @@
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+#+OPTIONS: ^:nil
 
 本文介绍Unix系统编程环境．
 
@@ -128,7 +129,7 @@ int main(int argc, char *argv[])
 : ~/.../bin(master)$ ./1.6
 : helllo world from process ID 14066
 
-当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid_t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
 
 *进程控制*
 

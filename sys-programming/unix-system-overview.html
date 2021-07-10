@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-10 Sat 20:24 -->
+<!-- 2021-07-10 Sat 20:27 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unix系统概要</title>
@@ -62,14 +62,14 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org7049959">1. 输入和输出</a></li>
-<li><a href="#orgd47cbd4">2. 程序与进程</a></li>
-<li><a href="#orgff4be7a">3. 错误处理</a></li>
-<li><a href="#org9aa4b30">4. 用户识别</a></li>
-<li><a href="#orgaeb8d67">5. 信号</a></li>
-<li><a href="#org83b596c">6. 时间值</a></li>
-<li><a href="#orga998233">7. 系统调用与库函数</a></li>
-<li><a href="#org8898036">8. 小结</a></li>
+<li><a href="#orgb1a99fe">1. 输入和输出</a></li>
+<li><a href="#orgd3a711f">2. 程序与进程</a></li>
+<li><a href="#org5ce9903">3. 错误处理</a></li>
+<li><a href="#org0849349">4. 用户识别</a></li>
+<li><a href="#orgb580807">5. 信号</a></li>
+<li><a href="#org8198dda">6. 时间值</a></li>
+<li><a href="#orgd6eab6b">7. 系统调用与库函数</a></li>
+<li><a href="#org3b9e163">8. 小结</a></li>
 </ul>
 </div>
 </div>
@@ -77,8 +77,8 @@ for the JavaScript code in this tag.
 本文介绍Unix系统编程环境．
 </p>
 
-<div id="outline-container-org7049959" class="outline-2">
-<h2 id="org7049959"><span class="section-number-2">1</span> 输入和输出</h2>
+<div id="outline-container-orgb1a99fe" class="outline-2">
+<h2 id="orgb1a99fe"><span class="section-number-2">1</span> 输入和输出</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>文件描述符</b>
@@ -144,11 +144,11 @@ ls &gt; file.list
 </div>
 
 <p>
-包含在apue.h中的unistd.h文件，里面有两个常量就是STDIN<sub>FILENO以及STDOUT</sub><sub>FILENO</sub>，都是POSIX标准的一部分．这个头文件还包括许多Unix系统服务的函数原型，比如这里调用的read以及write函数．
+包含在apue.h中的unistd.h文件，里面有两个常量就是STDIN_FILENO以及STDOUT_FILENO，都是POSIX标准的一部分．这个头文件还包括许多Unix系统服务的函数原型，比如这里调用的read以及write函数．
 </p>
 
 <p>
-定义在unistd.h里常量STDIN<sub>FILENO以及STDOUT</sub><sub>FILENO定义了标准输入和标准输出的文件描述符</sub>，分别为0和1，使用这个名字可读性更好．
+定义在unistd.h里常量STDIN_FILENO以及STDOUT_FILENO定义了标准输入和标准输出的文件描述符，分别为0和1，使用这个名字可读性更好．
 </p>
 
 <p>
@@ -229,8 +229,8 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 </div>
 </div>
 
-<div id="outline-container-orgd47cbd4" class="outline-2">
-<h2 id="orgd47cbd4"><span class="section-number-2">2</span> 程序与进程</h2>
+<div id="outline-container-orgd3a711f" class="outline-2">
+<h2 id="orgd3a711f"><span class="section-number-2">2</span> 程序与进程</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>程序</b>
@@ -283,7 +283,7 @@ helllo world from process ID 14066
 
 
 <p>
-当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid_t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
 </p>
 
 <p>
@@ -356,7 +356,7 @@ helllo world from process ID 14066
 运行这个函数有下图的结果：
 </p>
 
-<div id="orgf897e77" class="figure">
+<div id="org6044dc3" class="figure">
 <p><img src="./img/simple-shell.png" alt="simple-shell.png" width="30%" height="30%">
 </p>
 </div>
@@ -366,33 +366,33 @@ helllo world from process ID 14066
 </p>
 </div>
 </div>
-<div id="outline-container-orgff4be7a" class="outline-2">
-<h2 id="orgff4be7a"><span class="section-number-2">3</span> 错误处理</h2>
+<div id="outline-container-org5ce9903" class="outline-2">
+<h2 id="org5ce9903"><span class="section-number-2">3</span> 错误处理</h2>
 </div>
 
-<div id="outline-container-org9aa4b30" class="outline-2">
-<h2 id="org9aa4b30"><span class="section-number-2">4</span> 用户识别</h2>
+<div id="outline-container-org0849349" class="outline-2">
+<h2 id="org0849349"><span class="section-number-2">4</span> 用户识别</h2>
 </div>
 
-<div id="outline-container-orgaeb8d67" class="outline-2">
-<h2 id="orgaeb8d67"><span class="section-number-2">5</span> 信号</h2>
+<div id="outline-container-orgb580807" class="outline-2">
+<h2 id="orgb580807"><span class="section-number-2">5</span> 信号</h2>
 </div>
 
-<div id="outline-container-org83b596c" class="outline-2">
-<h2 id="org83b596c"><span class="section-number-2">6</span> 时间值</h2>
+<div id="outline-container-org8198dda" class="outline-2">
+<h2 id="org8198dda"><span class="section-number-2">6</span> 时间值</h2>
 </div>
 
-<div id="outline-container-orga998233" class="outline-2">
-<h2 id="orga998233"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+<div id="outline-container-orgd6eab6b" class="outline-2">
+<h2 id="orgd6eab6b"><span class="section-number-2">7</span> 系统调用与库函数</h2>
 </div>
 
-<div id="outline-container-org8898036" class="outline-2">
-<h2 id="org8898036"><span class="section-number-2">8</span> 小结</h2>
+<div id="outline-container-org3b9e163" class="outline-2">
+<h2 id="org3b9e163"><span class="section-number-2">8</span> 小结</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-10 Sat 20:24</p>
+<p class="date">Created: 2021-07-10 Sat 20:27</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
