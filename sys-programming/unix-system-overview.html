@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-03 Sat 21:04 -->
+<!-- 2021-07-10 Sat 20:24 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unix系统概要</title>
@@ -62,14 +62,14 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org236383d">1. 输入和输出</a></li>
-<li><a href="#org4563a8e">2. 程序与进程</a></li>
-<li><a href="#org2179bc0">3. 错误处理</a></li>
-<li><a href="#orgb541a2c">4. 用户识别</a></li>
-<li><a href="#orgccbf2b4">5. 信号</a></li>
-<li><a href="#org588bec4">6. 时间值</a></li>
-<li><a href="#org9c7accb">7. 系统调用与库函数</a></li>
-<li><a href="#org33ea200">8. 小结</a></li>
+<li><a href="#org7049959">1. 输入和输出</a></li>
+<li><a href="#orgd47cbd4">2. 程序与进程</a></li>
+<li><a href="#orgff4be7a">3. 错误处理</a></li>
+<li><a href="#org9aa4b30">4. 用户识别</a></li>
+<li><a href="#orgaeb8d67">5. 信号</a></li>
+<li><a href="#org83b596c">6. 时间值</a></li>
+<li><a href="#orga998233">7. 系统调用与库函数</a></li>
+<li><a href="#org8898036">8. 小结</a></li>
 </ul>
 </div>
 </div>
@@ -77,8 +77,8 @@ for the JavaScript code in this tag.
 本文介绍Unix系统编程环境．
 </p>
 
-<div id="outline-container-org236383d" class="outline-2">
-<h2 id="org236383d"><span class="section-number-2">1</span> 输入和输出</h2>
+<div id="outline-container-org7049959" class="outline-2">
+<h2 id="org7049959"><span class="section-number-2">1</span> 输入和输出</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>文件描述符</b>
@@ -229,8 +229,8 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 </div>
 </div>
 
-<div id="outline-container-org4563a8e" class="outline-2">
-<h2 id="org4563a8e"><span class="section-number-2">2</span> 程序与进程</h2>
+<div id="outline-container-orgd47cbd4" class="outline-2">
+<h2 id="orgd47cbd4"><span class="section-number-2">2</span> 程序与进程</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>程序</b>
@@ -283,39 +283,116 @@ helllo world from process ID 14066
 
 
 <p>
-当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid<sub>t类型</sub>．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+</p>
+
+<p>
+<b>进程控制</b>
+</p>
+
+<p>
+有三个主要的函数用于进程控制：fork，exec以及waitpid．exec有六个变体，但是通常都是叫它们exec．
+</p>
+
+<p>
+<b>Example</b>
+</p>
+
+<p>
+下面的例子，演示了进程控制功能．下面这个类似shell的程序，从标准输入中读入命令，并且执行命令．
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">"apue.h"</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;sys/wait.h&gt;</span>
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">buf</span>[MAXLINE];
+    <span style="color: #7CB8BB;">pid_t</span> <span style="color: #DFAF8F;">pid</span>;
+    <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">status</span>;
+
+    printf(<span style="color: #CC9393;">"%% "</span>);
+    <span style="color: #F0DFAF; font-weight: bold;">while</span> (fgets(buf, MAXLINE, stdin) != <span style="color: #BFEBBF;">NULL</span>) {
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (buf[strlen(buf) - 1] == <span style="color: #CC9393;">'\n'</span>)
+            buf[strlen(buf) - 1] = 0;
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> ((pid = fork()) &lt; 0) {
+            err_sys(<span style="color: #CC9393;">"fork error"</span>);
+        } <span style="color: #F0DFAF; font-weight: bold;">else</span> <span style="color: #F0DFAF; font-weight: bold;">if</span> (pid == 0) {
+            execlp(buf, buf, (<span style="color: #7CB8BB;">char</span>*)0);
+            err_ret(<span style="color: #CC9393;">"couldn't execute: %s"</span>, buf);
+            exit(127);
+        }
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> ((pid = waitpid(pid, &amp;status, 0)) &lt; 0)
+            err_sys(<span style="color: #CC9393;">"waitpid error"</span>);
+        printf(<span style="color: #CC9393;">"%% "</span>);
+    }
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+这三十行代码有以下几点需要注意：
+</p>
+<ul class="org-ul">
+<li>用fets来从标准输入中一次读一行．当输入end-of-file字符时，通常就是Control-D，作为一行的第一个字符时，fgets返回null空指针，循环就结束了，进程就结束了．后面还会介绍一些特殊的终端字符，文件结束符，删除一个字符，删除整行等等．</li>
+
+<li>由fgets返回的行，以newline字符结尾，使用strlen计算字符串的长度，使用null字节替代新行．这是因为execlp函数期待一个null结尾的参数，而不是新行结尾的参数．</li>
+
+<li>调用fork去创建新进程，新进程是调用者的复制．这样调用者是父进程，而新创建的进程叫做子进程．随后fork返回非负的进程ID给父进程，这个ID就是子进程的pid，而返回0给子进程．因为fork创建新进程，把这叫做由父进程调用一次，但是返回了两次，分别返回给父进程和子进程．</li>
+
+<li>在子进程里，调用execlp去执行由标准输入读到的命令．这会替代子进程为新的可执行文件．fork和exec的组合在某些操作系统上叫做产生新进程．后面还会介绍更多．</li>
+
+<li>子进程调用execlp去执行新的程序文件了，而父进程会等待子进程结束．这通过调用waitpid来做到，通过pid来指明等待哪个进程结束，这里是子进程的pid．waitpid也会返回子进程的结束状态到status变量里．但是在这个简单的程序里，我们未用这个变量做任何事情．可以用这个值来检测子进程是如何结束的．</li>
+
+<li>有一个基本的限制就是我们不能传递参数到这个程序．举个例子，我们不能传递目录名．ls只能列出当前工作目录的内容．为了做到可以传递参数，需要解析输入的行，通常以空格或tab来分割参数，然后传递给execlp函数．</li>
+</ul>
+
+<p>
+运行这个函数有下图的结果：
+</p>
+
+<div id="orgf897e77" class="figure">
+<p><img src="./img/simple-shell.png" alt="simple-shell.png" width="30%" height="30%">
+</p>
+</div>
+
+<p>
+注意这里的提示符是%.
 </p>
 </div>
 </div>
-
-
-<div id="outline-container-org2179bc0" class="outline-2">
-<h2 id="org2179bc0"><span class="section-number-2">3</span> 错误处理</h2>
+<div id="outline-container-orgff4be7a" class="outline-2">
+<h2 id="orgff4be7a"><span class="section-number-2">3</span> 错误处理</h2>
 </div>
 
-<div id="outline-container-orgb541a2c" class="outline-2">
-<h2 id="orgb541a2c"><span class="section-number-2">4</span> 用户识别</h2>
+<div id="outline-container-org9aa4b30" class="outline-2">
+<h2 id="org9aa4b30"><span class="section-number-2">4</span> 用户识别</h2>
 </div>
 
-<div id="outline-container-orgccbf2b4" class="outline-2">
-<h2 id="orgccbf2b4"><span class="section-number-2">5</span> 信号</h2>
+<div id="outline-container-orgaeb8d67" class="outline-2">
+<h2 id="orgaeb8d67"><span class="section-number-2">5</span> 信号</h2>
 </div>
 
-<div id="outline-container-org588bec4" class="outline-2">
-<h2 id="org588bec4"><span class="section-number-2">6</span> 时间值</h2>
+<div id="outline-container-org83b596c" class="outline-2">
+<h2 id="org83b596c"><span class="section-number-2">6</span> 时间值</h2>
 </div>
 
-<div id="outline-container-org9c7accb" class="outline-2">
-<h2 id="org9c7accb"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+<div id="outline-container-orga998233" class="outline-2">
+<h2 id="orga998233"><span class="section-number-2">7</span> 系统调用与库函数</h2>
 </div>
 
-<div id="outline-container-org33ea200" class="outline-2">
-<h2 id="org33ea200"><span class="section-number-2">8</span> 小结</h2>
+<div id="outline-container-org8898036" class="outline-2">
+<h2 id="org8898036"><span class="section-number-2">8</span> 小结</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-03 Sat 21:04</p>
+<p class="date">Created: 2021-07-10 Sat 20:24</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

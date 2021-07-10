@@ -128,9 +128,68 @@ int main(int argc, char *argv[])
 : ~/.../bin(master)$ ./1.6
 : helllo world from process ID 14066
 
-当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid_t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
+当这个程序运行时，它会调用getpid来获得进程的ID．后面会看到，getpid返回的是pid t类型．这个类型的精确大小可能无法知道，但是标准会担保它在一个long型之内．这样转换成最大的类型，可以提高程序的可移植性．
 
+*进程控制*
 
+有三个主要的函数用于进程控制：fork，exec以及waitpid．exec有六个变体，但是通常都是叫它们exec．
+
+*Example*
+
+下面的例子，演示了进程控制功能．下面这个类似shell的程序，从标准输入中读入命令，并且执行命令．
+
+#+begin_src c
+#include "apue.h"
+#include <sys/wait.h>
+
+int main(int argc, char *argv[])
+{
+	char buf[MAXLINE];
+	pid_t pid;
+	int status;
+
+	printf("%% ");
+	while (fgets(buf, MAXLINE, stdin) != NULL) {
+		if (buf[strlen(buf) - 1] == '\n')
+			buf[strlen(buf) - 1] = 0;
+
+		if ((pid = fork()) < 0) {
+			err_sys("fork error");
+		} else if (pid == 0) {
+			execlp(buf, buf, (char*)0);
+			err_ret("couldn't execute: %s", buf);
+			exit(127);
+		}
+
+		if ((pid = waitpid(pid, &status, 0)) < 0)
+			err_sys("waitpid error");
+		printf("%% ");
+	}
+    
+    return 0;
+}
+#+end_src
+
+这三十行代码有以下几点需要注意：
++ 用fets来从标准输入中一次读一行．当输入end-of-file字符时，通常就是Control-D，作为一行的第一个字符时，fgets返回null空指针，循环就结束了，进程就结束了．后面还会介绍一些特殊的终端字符，文件结束符，删除一个字符，删除整行等等．
+
++ 由fgets返回的行，以newline字符结尾，使用strlen计算字符串的长度，使用null字节替代新行．这是因为execlp函数期待一个null结尾的参数，而不是新行结尾的参数．
+
++ 调用fork去创建新进程，新进程是调用者的复制．这样调用者是父进程，而新创建的进程叫做子进程．随后fork返回非负的进程ID给父进程，这个ID就是子进程的pid，而返回0给子进程．因为fork创建新进程，把这叫做由父进程调用一次，但是返回了两次，分别返回给父进程和子进程．
+
++ 在子进程里，调用execlp去执行由标准输入读到的命令．这会替代子进程为新的可执行文件．fork和exec的组合在某些操作系统上叫做产生新进程．后面还会介绍更多．
+
++ 子进程调用execlp去执行新的程序文件了，而父进程会等待子进程结束．这通过调用waitpid来做到，通过pid来指明等待哪个进程结束，这里是子进程的pid．waitpid也会返回子进程的结束状态到status变量里．但是在这个简单的程序里，我们未用这个变量做任何事情．可以用这个值来检测子进程是如何结束的．
+
++ 有一个基本的限制就是我们不能传递参数到这个程序．举个例子，我们不能传递目录名．ls只能列出当前工作目录的内容．为了做到可以传递参数，需要解析输入的行，通常以空格或tab来分割参数，然后传递给execlp函数．
+
+运行这个函数有下图的结果：
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/simple-shell.png]]
+
+注意这里的提示符是%.
 * 错误处理
 
 * 用户识别
