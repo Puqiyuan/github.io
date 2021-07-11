@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-04 Sun 17:54 -->
+<!-- 2021-07-11 Sun 11:31 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>包管理系统－工具以及基本原理</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org95f1d4e">1. 二进制包的结构</a></li>
-<li><a href="#orgb3e49d1">2. 包元信息</a></li>
-<li><a href="#org2e19e67">3. 源代码的结构</a></li>
-<li><a href="#org64ef00b">4. 用dpkg操作包</a></li>
+<li><a href="#orgee35c6d">1. 二进制包的结构</a></li>
+<li><a href="#org31bc54f">2. 包元信息</a></li>
+<li><a href="#org1dc4b88">3. 源代码的结构</a></li>
+<li><a href="#org3e6a4c2">4. 用dpkg操作包</a></li>
 </ul>
 </div>
 </div>
@@ -73,22 +73,73 @@ for the JavaScript code in this tag.
 本文章介绍二进制包（binary）和源码包（source）的结构和内容．前者是直接由dpkg处理的文件，而后者包含源代码，以及一些说明指明如何构建二进制包．
 </p>
 
-<div id="outline-container-org95f1d4e" class="outline-2">
-<h2 id="org95f1d4e"><span class="section-number-2">1</span> 二进制包的结构</h2>
+<div id="outline-container-orgee35c6d" class="outline-2">
+<h2 id="orgee35c6d"><span class="section-number-2">1</span> 二进制包的结构</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+使用命令ar可以查看一个.deb包的内容：
+</p>
+
+<pre class="example">
+.../sawfish$ ar t sawfish-merlin-ugliness_1.3.1-1_all.deb                                                                                                                                                                                       
+debian-binary                                                                                                                                                                                                                                   
+control.tar.gz                                                                                                                                                                                                                                  
+data.tar.gz                                                                                                                                                                                                                                     
+.../sawfish$ ar x sawfish-merlin-ugliness_1.3.1-1_all.deb                                                                                                                                                                                       
+.../sawfish$ ls                                                                                                                                                                                                                                 
+control.tar.gz  data.tar.gz  debian-binary  sawfish-merlin-ugliness_1.3.1-1_all.deb                                                                                                                                                             
+.../sawfish$ tar -ztvf data.tar.gz |head -n 10                                                                                                                                                                                                  
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./                                                                                                                                                                                              
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./usr/                                                                                                                                                                                          
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./usr/share/                                                                                                                                                                                    
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./usr/share/sawfish/                                                                                                                                                                            
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./usr/share/sawfish/site-lisp/                                                                                                                                                                  
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./usr/share/sawfish/site-lisp/merlin/                                                                                                                                                           
+-rw-r--r-- root/root      6515 2004-07-28 21:28 ./usr/share/sawfish/site-lisp/merlin/uglicon.jl                                                                                                                                                 
+-rw-r--r-- root/root     15444 2004-07-28 21:28 ./usr/share/sawfish/site-lisp/merlin/ugliness.jl                                                                                                                                                
+-rw-r--r-- root/root      7499 2004-07-28 21:28 ./usr/share/sawfish/site-lisp/merlin/message.jl                                                                                                                                                 
+-rw-r--r-- root/root      5033 2004-07-28 21:28 ./usr/share/sawfish/site-lisp/merlin/util.jl                                                                                                                                                    
+.../sawfish$ tar -ztvf control.tar.gz                                                                                                                                                                                                           
+drwxr-xr-x root/root         0 2004-07-28 21:28 ./                                                                                                                                                                                              
+-rwxr-xr-x root/root       270 2004-07-28 21:28 ./postinst                                                                                                                                                                                      
+-rw-r--r-- root/root        41 2004-07-28 21:28 ./conffiles                                                                                                                                                                                     
+-rw-r--r-- root/root       737 2004-07-28 21:28 ./md5sums                                                                                                                                                                                       
+-rw-r--r-- root/root       471 2004-07-28 21:28 ./control                                                                                                                                                                                       
+.../sawfish$ cat debian-binary                                                                                                                                                                                                                  
+2.0
+</pre>
+
+<p>
+如图可以看到，一个debian包的ar压缩包由三个文件组成：
+</p>
+
+<p>
+<b>debian-binary</b> 这是一个文本文件，仅用于表明.deb文件的版本．在debian buster时，为2.0．
+</p>
+
+<p>
+<b>control.tar.xz</b> 包含一些元信息，比如包的名字和版本，以及一些脚本，用来在安装之前，安装的过程中，安装后执行．某些元信息提供给包管理工具用来确定安装或卸载是否可以进行．
+</p>
+
+<p>
+<b>data.tar.xz，data.tar.bz2，data.tar.gz</b> 这是从压缩包里要提取的文件了，包括可执行文件，库，文档等．可以使用不同的压缩格式．
+</p>
 </div>
-<div id="outline-container-orgb3e49d1" class="outline-2">
-<h2 id="orgb3e49d1"><span class="section-number-2">2</span> 包元信息</h2>
 </div>
-<div id="outline-container-org2e19e67" class="outline-2">
-<h2 id="org2e19e67"><span class="section-number-2">3</span> 源代码的结构</h2>
+
+<div id="outline-container-org31bc54f" class="outline-2">
+<h2 id="org31bc54f"><span class="section-number-2">2</span> 包元信息</h2>
 </div>
-<div id="outline-container-org64ef00b" class="outline-2">
-<h2 id="org64ef00b"><span class="section-number-2">4</span> 用dpkg操作包</h2>
+<div id="outline-container-org1dc4b88" class="outline-2">
+<h2 id="org1dc4b88"><span class="section-number-2">3</span> 源代码的结构</h2>
+</div>
+<div id="outline-container-org3e6a4c2" class="outline-2">
+<h2 id="org3e6a4c2"><span class="section-number-2">4</span> 用dpkg操作包</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-04 Sun 17:54</p>
+<p class="date">Created: 2021-07-11 Sun 11:31</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
