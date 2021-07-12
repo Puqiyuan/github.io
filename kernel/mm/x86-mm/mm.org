@@ -420,7 +420,23 @@ __pte，__pmd，__pud，__pgd以及__pgprot可以把相应的C类型转换为对
 
 + pte_none，pmd_none，pud_none以及pgd_none返回1，如果对应的值为0．否则，就返回0.
 + pte_clear，pmd_clear，pud_clear以及pgd_clear清除对应页表的条目．因此可以禁止进程使用由对应页表条目对应的线性地址．而ptep_get_and_clear函数清除页表条目并且返回之前的值．
-+ set_pte，set_pmd，set_pud以及
++ set_pte，set_pmd，set_pud以及set_pgd，将给定的值写到指定的页表条目中．
++ pte_same(a,b) 如果两个页表条目a和b指向同一个页面，并且权限也相同，就返回1，否则返回0．
++ pmd_large(e) 如果PMD条目e指向一个大页，比如2MB或4MB，就返回1，否则是0.
++ pmd_bad 该宏以PMD条目作为参数．返回1如果这个PMD条目指向一个坏的页表，也就是至少一个如下的情形：
+  + 页面不在主存中，也就是Present标志被清掉．
+  + 页面只被允许读访问．
+  + Accessed或Dirty被清掉．
+
+pte_bad宏是不存在的，因为页表条目是引用一个页面的，对于一个页面来说，它不在内存里，不可写，甚至不可访问都是合法的，
+
+当pte条目的Present标志或者是Page Size的标志为1时，pte_present宏返回1，否则就是返回0．
+
+下面列出一些函数用来查询pte的当前flag.
+
+| 函数名     | 描述                    |
+| pte_user() | 读取User/Supervisor标志 |
+| pte_read() |                         |
 *** 物理内存分布
 *** 进程页表
 *** 内核页表
