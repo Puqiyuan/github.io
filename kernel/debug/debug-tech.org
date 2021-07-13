@@ -107,3 +107,9 @@
 基于loglevel，内核或许会把消息打印到当前console，可以是文本终端，串口，或者串行打印机．如果权限小于整数变量console_loglevel（通过tags很容易找见它的定义为#define
 CONFIG_CONSOLE_LOGLEVEL_DEFAULT 7），消息一次一行的打印出来．如果系统里运行着klogd和syslogd的话，内核消息就会附加到/var/log/messages文件里，这时和console_loglevel是独立的．如果klogd没有运行的话，消息不会传递到用户空间，当然读/proc/kmsg（dmesg命令）是另一种方式来获得内核打印信息．使用klogd时，连续相同的行，仅保留第一次出现的．
 
+读或写终端log level也可以通过/proc/sys/kernel/printk．这个文件包括四个整数，当前的loglevel，
+对于没有显示指明loglevel的默认level．最小可能的loglevel，启动时的默认level．向这个文件写单
+个值，改变的是当前的loglevel．举个例子，下面的命令可以使得所有的内核消息打印在终端：
+: echo 8 > /proc/sys/kernel/printk
+
+
