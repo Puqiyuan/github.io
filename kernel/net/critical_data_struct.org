@@ -271,7 +271,7 @@ data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
 #+CAPTION: alloc_skb函数完成后
 #+NAME:alloc_skb_after
 #+LABEL: fig:alloc_skb_after
-#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/after_alloc_skb.png]]
 
 在上图右半部分的下部，可以看到为了对齐而添加的padding区域。而skb_shared_info主要用于处理IP分段，后面还会再介绍。
@@ -309,14 +309,14 @@ header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下�
 
 #+CAPTION: skb_reserve操作前后
 #+LABEL: fig:
-#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/skb_reserve.png]]
 
 下面的图展示了相反方向的buffer变化：也就是数据传输方向。
 
 #+CAPTION: buffer从TCP层传到link层时是如何变化的
 #+LABEL: fig:
-#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/buffer_to_link.png]]
 
 1. 当TCP被要求去传输数据时，它会分配符合一定标准大小的buffer，比如TCP Maximum Segment
@@ -392,7 +392,7 @@ skb_shinfo(skb)->nr_frags++;
 skb->cloned成员都被设置成1。下图展示了一个clone出来的buffer：
 #+CAPTION: skb_clone函数的效果
 #+LABEL: fig:
-#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/skb_func.png]]
 
 可以看到上图表示了一个分段的buffer，但是现在不需要关心这个细节。
@@ -400,7 +400,7 @@ skb->cloned成员都被设置成1。下图展示了一个clone出来的buffer：
 当一个buffer被clone时，数据块的内容是不能更改的。这就是说代码可以访问数据而不需要锁机制。当函数不仅需要修改sk_buff而且需要修改buffer数据时，这就需要也clone数据块。当程序员知道仅需要修改skb->start和skb->end之间的内容时，可以使用pskb_copy函数。当他认为还可能修改分段的数据块时，就要用skb_copy函数了。这两个函数的操作结果如下图：
 #+CAPTION: (a)pskb_copy和skb_copy函数
 #+LABEL: fig:
-#+ATTR_HTML: alt="" title="" align="center" :width 50% :height 50%
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/pskb_copy_and_skb_copy.png]]
 
 现在这个图里的一些细节可能还不能理解，但是后面会介绍更多．
@@ -516,16 +516,72 @@ net_device结构体包含几个标识符，不应该混淆它们：
    
    MTU代表就是Maximum Transmission Unit，代表了设备能处理的最大frame大小．下面的表列出了常见网络技术的MTU：
    #+CAPTION: 不同设备类型的MTU
+   #+LABEL: fig:
+   #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+   [[./img/mtus.png]]
+
+   对于Ethernet类型的MTU需要多说两点，Ethernet frame标准定义了最大的payload为1500字节．有些时候又会发现1518或1514的大小值，1518是包括了以太网的头，而后者包括头却没有包括帧校验序列（校验和长4字节）．
+
+10) unsigned short type
+    
+    设备的类别，比如是属于Ethernet，Frame Relay等．
+
+11) unsigned short hard_header_len
+    
+    设备头的长度．比如Ethernet头的长度是14字节，定义为ETH_HLEN．
+
+12) unsigned char broadcast[MAX_ADDR_LEN]
+    
+    链路层的广播地址．
+
+13) unsigned char dev_addr[MAX_ADDR_LEN]\\
+    unsigned char addr_len
+    
+    dev_addr是设备的链路层地址，地址长度由addr_len给出．
+
+14) int promiscuity
+    
+    混杂模式，后文介绍．
+    
+*** 接口类型以及端口
+某些设备不止一个连接端口，并且允许用户根据需要去选择某个端口．if_port参数就是用来设置端口类型的．下面的代码片段展示了如何根据配置来设置相应的端口：
+
+#+CAPTION: 设置端口
 #+LABEL: fig:
 #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
-[[./img/mtus.png]]
+[[./img/set_port.png]]
 
-对于Ethernet类型的MTU需要多说两点，Ethernet frame标准定义了最大的payload为1500字节．有些时候又会发现1518或1514的大小值，1518是包括了以太网的头，而后者包括头却没有包括帧校验序列（校验和长4字节）．
-   
-*** 接口类型以及端口
 *** 混杂模式
+某些管理任务要求系统可以接受所有经过共享介质上的数据，而不仅是单播到自己的数据，一个能接收所有包的设备被叫做混杂模式．举个例子，需要检测应用的性能或者检查安全违规是否发生等．在桥接代码（后面会介绍）中也会用到．当然，恶意探测软件也可以利用这个特点，因为这个原因，在局域网内的数据如果不加密都是不安全的．
+
+在net_device里有一个计数器叫做promiscuity，可以用来表征设备是否处于混杂模式．选择一个计数器而不是一个简单的比特标志是因为可能有不止一个客户端处于该模式，因此有客户端进入混杂模式时就增加该计数器，有离开混杂模式就递减该计数器．而设备本身不会离开混杂模式，直到该计数器到达0．可以通过dev_set_promiscuity来操该计数器．
+
+如果promiscuity不为0的话，那么flags的IFF_PROMISC也会置上．
+
+下面从drivers/net/3c59x.c里摘取的代码，演示了基于flags里bit位如何设置而配置接收模式：
+
+#+CAPTION: 配置接收模式
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/receive-mode.png]]
+
+如果flag里的IFF_PROMISC比特被设置的话，new_mode变量就被初始化为可以接收到本卡（RxStation），多播(RxMulticast)，广播(RxBroadcast)以及所有其它的流量(RxProm)．EL3_CMD是一个相对于ioaddr的偏移，表示把命令写往何处，以达到和设备交互的目的．
 ** 统计
+
+最新的内核代码已经没有priv成员了，不过ml_priv应该可以达到一样的记录统计，它是一个void类型的指针．
 ** 设备状态
+
+为了控制和NIC卡的交互，每个设备驱动都必须维护一些设备的信息，这些信息包括接口在什么时间要
+求了什么种类的行为以及对应的状态等．而对于SMP系统来说，内核还必须确保对于相同设备的并发访
+问可以被正确处理．下面介绍几个在net_device中出现的这样的成员：
+
+1) unsigned long state
+
+  由网络排队子系统使用的一些标志．这些标志可以通过netdev_state_t枚举类型里的常量进行索引，比如__LINK_STATE_START枚举常量．对于单个比特的清除或设置，可以通过通用的接口比如set_bit和clear_bit，但通常都有一个包装函数以隐藏使用比特的细节．比如调用netif_stop_queue可以停止设备队列．而流量控制子系统后面还会介绍
+
+2) enum {...} reg_state
+   
+   
 ** 列表管理
 ** 链路层多播
 ** 流量管理
