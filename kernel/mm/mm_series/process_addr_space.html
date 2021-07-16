@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-10 Sat 00:39 -->
+<!-- 2021-07-16 Fri 21:42 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程地址空间</title>
@@ -62,13 +62,17 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orga7b2dd4">1. 线性地址空间</a></li>
-<li><a href="#org56fd009">2. 管理地址空间</a></li>
-<li><a href="#orgcc7caf2">3. 进程地址空间描述符</a></li>
-<li><a href="#org19fe479">4. 内存区域（regions）</a></li>
-<li><a href="#orgad53930">5. 异常处理</a></li>
-<li><a href="#org76cc327">6. Page Fault</a></li>
-<li><a href="#org1047a66">7. 拷贝到/拷贝自用户空间</a></li>
+<li><a href="#org067c862">1. 线性地址空间</a></li>
+<li><a href="#org4fcb8c0">2. 管理地址空间</a></li>
+<li><a href="#org17aed26">3. 进程地址空间描述符</a>
+<ul>
+<li><a href="#org32589a9">3.1. 分配mm_struct描述符</a></li>
+</ul>
+</li>
+<li><a href="#org9f94845">4. 内存区域（regions）</a></li>
+<li><a href="#org7854370">5. 异常处理</a></li>
+<li><a href="#orgb409fbe">6. Page Fault</a></li>
+<li><a href="#orga8d5bf9">7. 拷贝到/拷贝自用户空间</a></li>
 </ul>
 </div>
 </div>
@@ -88,14 +92,14 @@ for the JavaScript code in this tag.
 本文首先介绍线性地址是如何划分以及各个部分的目的．随后会介绍描述每个进程的结构体，这些结构体是如何被分配，初始化以及怎么销毁的．随后会介绍进程的地址空间是如何创建的以及相关联的函数．这些会引入关于进程地址空间的异常处理，pagefault等其它机制．最后会介绍下如何安全的向用户空间拷贝数据或者从用户空间拷贝数据到内核空间．
 </p>
 
-<div id="outline-container-orga7b2dd4" class="outline-2">
-<h2 id="orga7b2dd4"><span class="section-number-2">1</span> 线性地址空间</h2>
+<div id="outline-container-org067c862" class="outline-2">
+<h2 id="org067c862"><span class="section-number-2">1</span> 线性地址空间</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 从用户的观点来说，线性地址空间是平坦的．但是从内核空间来说就很不一样了．地址空间被划分为两部分，用户空间部分，在上下文切换后可能会改变，而内核空间，保持不变．而划分出这个位置的就是PAGE_OFFSET，对于X86来说这个值是0xC0000000．这意味着3GB留给进程，而1GB留给内核空间，内核所看到的地址空间划分如下图：
 </p>
 
-<div id="orgee9279b" class="figure">
+<div id="org89cfb90" class="figure">
 <p><img src="./img/kas.png" alt="kas.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 1: </span>内核看到的地址空间</p>
@@ -103,8 +107,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org56fd009" class="outline-2">
-<h2 id="org56fd009"><span class="section-number-2">2</span> 管理地址空间</h2>
+<div id="outline-container-org4fcb8c0" class="outline-2">
+<h2 id="org4fcb8c0"><span class="section-number-2">2</span> 管理地址空间</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 进程用到的地址空间，由mm_struct结构体管理着，它类似于BSD里的vmspace．
@@ -120,7 +124,7 @@ vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内�
 </p>
 
 
-<div id="orgd57955f" class="figure">
+<div id="org105ff10" class="figure">
 <p><img src="./img/ds_as.png" alt="ds_as.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>地址空间相关的结构体</p>
@@ -206,35 +210,102 @@ exit
 </div>
 </div>
 
-<div id="outline-container-orgcc7caf2" class="outline-2">
-<h2 id="orgcc7caf2"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
+<div id="outline-container-org17aed26" class="outline-2">
+<h2 id="org17aed26"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 进程地址空间由mm_struct描述，就是说对于一个进程来说，仅有一个mm_struct，并且这个mm_struct由用户线程共享．实际上，线程的寻找方式就是，找出所有指向同一个mm_strcut的task_struct(s).
 </p>
+
+<p>
+对于内核线程来说mm_struct是不需要的，因为除了vmalloc其它情况是不会page fault的．
+</p>
+
+<p>
+mm_struct有两个引用计数成员，mm_user和mm_count．mm_user计数了有多少个进程访问mm_struct的用户空间部分．mm_count则是计数了对于mm_struct整个空间有多少用户在使用．当这个计数器降到0时，mm_struct就会被销毁．
+</p>
+
+<p>
+mm_struct结构体成员如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mm_struct</span> {
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">vm_area_struct</span> *<span style="color: #DFAF8F;">mmap</span>
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> rb_root mm_rb;
+    <span style="color: #7CB8BB;">pgd_t</span> * <span style="color: #DFAF8F;">pgd</span>;
+    <span style="color: #7CB8BB;">atomic_t</span> <span style="color: #DFAF8F;">mm_users</span>;
+    <span style="color: #7CB8BB;">atomic_t</span> <span style="color: #DFAF8F;">mm_count</span>;
+    <span style="color: #7CB8BB;">spinlock_t</span> <span style="color: #DFAF8F;">page_table_lock</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">list_head</span> <span style="color: #DFAF8F;">mmlist</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">start_code</span>, <span style="color: #DFAF8F;">end_code</span>, <span style="color: #DFAF8F;">start_data</span>, <span style="color: #DFAF8F;">end_data</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">start_brk</span>, <span style="color: #DFAF8F;">brk</span>, <span style="color: #DFAF8F;">start_stack</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">arg_start</span>, <span style="color: #DFAF8F;">arg_end</span>, <span style="color: #DFAF8F;">env_start</span>, <span style="color: #DFAF8F;">env_end</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">total_vm</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">locked_vm</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">def_flags</span>;
+    <span style="color: #7CB8BB;">mm_context_t</span> <span style="color: #DFAF8F;">context</span>;
+}
+
+</pre>
+</div>
+<p>
+下面解释下各个成员的意义：
+</p>
+<ul class="org-ul">
+<li>mmap：在地址空间中所有VMA的头vma．</li>
+<li>mm_rb：VMAs组织成链表或者红黑树的形式，红黑树是为了快速查询，该成员就是这颗树的根．</li>
+<li>pgd：该进程的pgd．</li>
+<li>mm_users：访问地址空间的用户空间部分的用户数．</li>
+<li>mm_count：mm_struct的用户数．</li>
+<li>page_table_lock：保护在mm_struct中的成员，包括page table等．</li>
+<li>mmlist：所有的mm_structs通过这个成员连接起来．</li>
+<li>start_code，end_code：代码段的开始和结束位置．</li>
+<li>start_data，end_data：数据段的开始和结束位置．</li>
+<li>start_brk，brk：堆的开始和结束位置．</li>
+<li>start_stack：栈的开始位置．</li>
+<li>arg_start，arg_end：命令行参数的开始和结尾处．</li>
+<li>env_start，env_end：环境变量的开始和结束处．</li>
+<li>total_vm：进程里被所有VMA占有的虚拟内存空间．</li>
+<li>locked_vm：锁在内存中的常驻页面，也就是设置有PG_mlocked的页面．</li>
+<li>def_flags：仅可能有一个值，VM_LOCKED，用来表征未来的映射是否都是上锁的．</li>
+<li>context：架构相关的MMU上下文．</li>
+</ul>
+
+<p>
+下面介绍几个函数用来处理mm_struct结构体：<br>
+mm_init()：设置mm_struct中成员的初始值，比如PGD，初始化锁等．<br>
+allocate_mm：从slab分配器中分配一个mm_struct结构体．<br>
+mm_alloc：通过调用allocate_mm分配mm_struct，并用mm_init来初始化．<br>
+exit_mmap：遍历mm_struct，解除所有的VMA映射．<br>
+copy_mm：仅在fork中使用，将当前的mm_struct精确的拷贝一份到新的任务中．<br>
+free_mm：将mm_struct返回到slab分配器．
+</p>
+</div>
+
+<div id="outline-container-org32589a9" class="outline-3">
+<h3 id="org32589a9"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
 </div>
 </div>
 
-
-<div id="outline-container-org19fe479" class="outline-2">
-<h2 id="org19fe479"><span class="section-number-2">4</span> 内存区域（regions）</h2>
+<div id="outline-container-org9f94845" class="outline-2">
+<h2 id="org9f94845"><span class="section-number-2">4</span> 内存区域（regions）</h2>
 </div>
 
-<div id="outline-container-orgad53930" class="outline-2">
-<h2 id="orgad53930"><span class="section-number-2">5</span> 异常处理</h2>
+<div id="outline-container-org7854370" class="outline-2">
+<h2 id="org7854370"><span class="section-number-2">5</span> 异常处理</h2>
 </div>
 
-<div id="outline-container-org76cc327" class="outline-2">
-<h2 id="org76cc327"><span class="section-number-2">6</span> Page Fault</h2>
+<div id="outline-container-orgb409fbe" class="outline-2">
+<h2 id="orgb409fbe"><span class="section-number-2">6</span> Page Fault</h2>
 </div>
 
-<div id="outline-container-org1047a66" class="outline-2">
-<h2 id="org1047a66"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
+<div id="outline-container-orga8d5bf9" class="outline-2">
+<h2 id="orga8d5bf9"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-10 Sat 00:39</p>
+<p class="date">Created: 2021-07-16 Fri 21:42</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

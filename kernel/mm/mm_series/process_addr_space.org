@@ -74,6 +74,58 @@ vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内�
 * 进程地址空间描述符
 进程地址空间由mm_struct描述，就是说对于一个进程来说，仅有一个mm_struct，并且这个mm_struct由用户线程共享．实际上，线程的寻找方式就是，找出所有指向同一个mm_strcut的task_struct(s).
 
+对于内核线程来说mm_struct是不需要的，因为除了vmalloc其它情况是不会page fault的．
+
+mm_struct有两个引用计数成员，mm_user和mm_count．mm_user计数了有多少个进程访问mm_struct的用户空间部分．mm_count则是计数了对于mm_struct整个空间有多少用户在使用．当这个计数器降到0时，mm_struct就会被销毁．
+
+mm_struct结构体成员如下：
+#+begin_src c
+struct mm_struct {
+    struct vm_area_struct *mmap
+    struct rb_root mm_rb;
+    pgd_t * pgd;
+    atomic_t mm_users;
+    atomic_t mm_count;
+    spinlock_t page_table_lock;
+    struct list_head mmlist;
+    unsigned long start_code, end_code, start_data, end_data;
+    unsigned long start_brk, brk, start_stack;
+    unsigned long arg_start, arg_end, env_start, env_end;
+    unsigned long total_vm;
+    unsigned long locked_vm;
+    unsigned long def_flags;
+    mm_context_t context;
+}
+
+#+end_src
+下面解释下各个成员的意义：
++ mmap：在地址空间中所有VMA的头vma．
++ mm_rb：VMAs组织成链表或者红黑树的形式，红黑树是为了快速查询，该成员就是这颗树的根．
++ pgd：该进程的pgd．
++ mm_users：访问地址空间的用户空间部分的用户数．
++ mm_count：mm_struct的用户数．
++ page_table_lock：保护在mm_struct中的成员，包括page table等．
++ mmlist：所有的mm_structs通过这个成员连接起来．
++ start_code，end_code：代码段的开始和结束位置．
++ start_data，end_data：数据段的开始和结束位置．
++ start_brk，brk：堆的开始和结束位置．
++ start_stack：栈的开始位置．
++ arg_start，arg_end：命令行参数的开始和结尾处．
++ env_start，env_end：环境变量的开始和结束处．
++ total_vm：进程里被所有VMA占有的虚拟内存空间．
++ locked_vm：锁在内存中的常驻页面，也就是设置有PG_mlocked的页面．
++ def_flags：仅可能有一个值，VM_LOCKED，用来表征未来的映射是否都是上锁的．
++ context：架构相关的MMU上下文．
+
+下面介绍几个函数用来处理mm_struct结构体：\\
+mm_init()：设置mm_struct中成员的初始值，比如PGD，初始化锁等．\\
+allocate_mm：从slab分配器中分配一个mm_struct结构体．\\
+mm_alloc：通过调用allocate_mm分配mm_struct，并用mm_init来初始化．\\
+exit_mmap：遍历mm_struct，解除所有的VMA映射．\\
+copy_mm：仅在fork中使用，将当前的mm_struct精确的拷贝一份到新的任务中．\\
+free_mm：将mm_struct返回到slab分配器．
+
+** 分配mm_struct描述符
 
 * 内存区域（regions）
 
