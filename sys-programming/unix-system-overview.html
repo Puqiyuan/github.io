@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-10 Sat 20:27 -->
+<!-- 2021-07-16 Fri 22:13 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unix系统概要</title>
@@ -62,14 +62,14 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb1a99fe">1. 输入和输出</a></li>
-<li><a href="#orgd3a711f">2. 程序与进程</a></li>
-<li><a href="#org5ce9903">3. 错误处理</a></li>
-<li><a href="#org0849349">4. 用户识别</a></li>
-<li><a href="#orgb580807">5. 信号</a></li>
-<li><a href="#org8198dda">6. 时间值</a></li>
-<li><a href="#orgd6eab6b">7. 系统调用与库函数</a></li>
-<li><a href="#org3b9e163">8. 小结</a></li>
+<li><a href="#orgadef2e4">1. 输入和输出</a></li>
+<li><a href="#org34e625d">2. 程序与进程</a></li>
+<li><a href="#org3e0bfc4">3. 错误处理</a></li>
+<li><a href="#orgb03aef0">4. 用户识别</a></li>
+<li><a href="#org67f9dfb">5. 信号</a></li>
+<li><a href="#org70b0e19">6. 时间值</a></li>
+<li><a href="#org4681d0f">7. 系统调用与库函数</a></li>
+<li><a href="#org2858545">8. 小结</a></li>
 </ul>
 </div>
 </div>
@@ -77,8 +77,8 @@ for the JavaScript code in this tag.
 本文介绍Unix系统编程环境．
 </p>
 
-<div id="outline-container-orgb1a99fe" class="outline-2">
-<h2 id="orgb1a99fe"><span class="section-number-2">1</span> 输入和输出</h2>
+<div id="outline-container-orgadef2e4" class="outline-2">
+<h2 id="orgadef2e4"><span class="section-number-2">1</span> 输入和输出</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>文件描述符</b>
@@ -229,8 +229,8 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 </div>
 </div>
 
-<div id="outline-container-orgd3a711f" class="outline-2">
-<h2 id="orgd3a711f"><span class="section-number-2">2</span> 程序与进程</h2>
+<div id="outline-container-org34e625d" class="outline-2">
+<h2 id="org34e625d"><span class="section-number-2">2</span> 程序与进程</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>程序</b>
@@ -356,7 +356,7 @@ helllo world from process ID 14066
 运行这个函数有下图的结果：
 </p>
 
-<div id="org6044dc3" class="figure">
+<div id="org34a9fff" class="figure">
 <p><img src="./img/simple-shell.png" alt="simple-shell.png" width="30%" height="30%">
 </p>
 </div>
@@ -364,35 +364,58 @@ helllo world from process ID 14066
 <p>
 注意这里的提示符是%.
 </p>
+
+<p>
+<b>线程和线程ID</b>
+</p>
+
+<p>
+通常，一个进程仅有一个线程来控制．但是某些问题如果有多个线程会更加容易解决，因为这些线程可以在问题的不同部分同时计算．此外，多线程也可以利用多处理器的平行性．
+</p>
+
+<p>
+在一个进程中的线程共享地址空间，文件描述符，栈以及进程相关的属性．每个线程在它自己的栈上执行，当然每个线程也可以访问相同进程中的其它线程的栈．因为这些线程可以访问相同的内存，对于共享数据的访问需要同步来避免不一致性．
+</p>
+
+<p>
+与进程类似，线程由ID标识，也就是线程ID．然而线程ID是局部于进程的．在一个进程中的线程ID在另外的进程中可能是没有意义的．
+</p>
 </div>
-</div>
-<div id="outline-container-org5ce9903" class="outline-2">
-<h2 id="org5ce9903"><span class="section-number-2">3</span> 错误处理</h2>
 </div>
 
-<div id="outline-container-org0849349" class="outline-2">
-<h2 id="org0849349"><span class="section-number-2">4</span> 用户识别</h2>
+<div id="outline-container-org3e0bfc4" class="outline-2">
+<h2 id="org3e0bfc4"><span class="section-number-2">3</span> 错误处理</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+当调用一个UNIX系统时出现了错误，通常这个系统调用返回一个负值，并且设置整数变量errno，通过这个值可以知道失败的原因．比如，如果一切顺利的话，open系统返回一个非负的文件描述符，如果错误发生的话，就返回-1．open有15个可能的errno值，比如文件不存在，权限问题等．而另外一些返回指针的函数，以返回NULL来表征错误．
+</p>
+</div>
 </div>
 
-<div id="outline-container-orgb580807" class="outline-2">
-<h2 id="orgb580807"><span class="section-number-2">5</span> 信号</h2>
+
+<div id="outline-container-orgb03aef0" class="outline-2">
+<h2 id="orgb03aef0"><span class="section-number-2">4</span> 用户识别</h2>
 </div>
 
-<div id="outline-container-org8198dda" class="outline-2">
-<h2 id="org8198dda"><span class="section-number-2">6</span> 时间值</h2>
+<div id="outline-container-org67f9dfb" class="outline-2">
+<h2 id="org67f9dfb"><span class="section-number-2">5</span> 信号</h2>
 </div>
 
-<div id="outline-container-orgd6eab6b" class="outline-2">
-<h2 id="orgd6eab6b"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+<div id="outline-container-org70b0e19" class="outline-2">
+<h2 id="org70b0e19"><span class="section-number-2">6</span> 时间值</h2>
 </div>
 
-<div id="outline-container-org3b9e163" class="outline-2">
-<h2 id="org3b9e163"><span class="section-number-2">8</span> 小结</h2>
+<div id="outline-container-org4681d0f" class="outline-2">
+<h2 id="org4681d0f"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+</div>
+
+<div id="outline-container-org2858545" class="outline-2">
+<h2 id="org2858545"><span class="section-number-2">8</span> 小结</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-10 Sat 20:27</p>
+<p class="date">Created: 2021-07-16 Fri 22:13</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
