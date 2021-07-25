@@ -126,8 +126,45 @@ copy_mm：仅在fork中使用，将当前的mm_struct精确的拷贝一份到新
 free_mm：将mm_struct返回到slab分配器．
 
 ** 分配mm_struct描述符
+有两个函数可以用于分配mm_struct，它们看起来容易混淆．一是allocate_mm，它是一个预定义的宏，单纯从slab allocator里分配mm_struct．而mm_alloc除了调用allocate_mm分配一个mm_struct，还得调用mm_init初始化．
 
+** 初始化描述符
+系统里的第一个mm_struct叫做init_mm．后面的mm_struct都是父进程mm_struct的拷贝．init_mm在编译时静态的初始化好了．如下：
+#+begin_src c
+struct mm_struct init_mm = {
+	.mm_rb		= RB_ROOT,
+	.pgd		= swapper_pg_dir,
+	.mm_users	= ATOMIC_INIT(2),
+	.mm_count	= ATOMIC_INIT(1),
+	.write_protect_seq = SEQCNT_ZERO(init_mm.write_protect_seq),
+	MMAP_LOCK_INITIALIZER(init_mm)
+	.page_table_lock =  __SPIN_LOCK_UNLOCKED(init_mm.page_table_lock),
+	.arg_lock	=  __SPIN_LOCK_UNLOCKED(init_mm.arg_lock),
+	.mmlist		= LIST_HEAD_INIT(init_mm.mmlist),
+	.user_ns	= &init_user_ns,
+	.cpu_bitmap	= CPU_BITS_NONE,
+	INIT_MM_CONTEXT(init_mm)
+};
+#+end_src
+
+而复制mm_struct的函数是copy_mm．
+
+** 销毁mm_struct
+使用atomic_inc(&mm->mm_users)可以增加用户计数，而mmput会递减这个数字．如果减到0，所有的映射就都会被exit_mmap取消．
 * 内存区域（regions）
+一个进程的完整地址空间是很少使用到的，仅有稀疏的几个区域会被用到，这样的每个区域被vm_area_struct结构体表示，这样的vm_area_struct不会重叠，并且一个vm_area_struct内具有相同的保护目的．举个例子，一个只读的共享库就会被加载到同一个地址空间（内存区域）．通过/proc/PID/maps可以查看一个进程映射的所有内存区域．
+
+一个内存区域可以有许多不同的结构体，就vm_area_struct它自己可以用来表示匿名内存．
+
+如果一个内存区域映射到文件，file类型的vm_file成员可以代表这个文件．它有类型为struct inode指针的成员，而inode又有struct address_space，这里面包括了文件的私有信息，包括许多函数指针用来执行特定于文件系统相关的一些操作，比如读写一个页到磁盘．
+
+vm_area_struct定义如下：
+
+#+begin_src c
+struct vm_area_struct {
+    unsigned long vm_start;
+}
+#+end_src
 
 * 异常处理
 
