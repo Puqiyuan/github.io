@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-16 Fri 22:13 -->
+<!-- 2021-07-25 Sun 16:26 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unix系统概要</title>
@@ -62,14 +62,14 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgadef2e4">1. 输入和输出</a></li>
-<li><a href="#org34e625d">2. 程序与进程</a></li>
-<li><a href="#org3e0bfc4">3. 错误处理</a></li>
-<li><a href="#orgb03aef0">4. 用户识别</a></li>
-<li><a href="#org67f9dfb">5. 信号</a></li>
-<li><a href="#org70b0e19">6. 时间值</a></li>
-<li><a href="#org4681d0f">7. 系统调用与库函数</a></li>
-<li><a href="#org2858545">8. 小结</a></li>
+<li><a href="#org949f562">1. 输入和输出</a></li>
+<li><a href="#org72118d3">2. 程序与进程</a></li>
+<li><a href="#org2558a2c">3. 错误处理</a></li>
+<li><a href="#org2eabf3f">4. 用户识别</a></li>
+<li><a href="#orgf0df644">5. 信号</a></li>
+<li><a href="#org13fa0c2">6. 时间值</a></li>
+<li><a href="#org042edec">7. 系统调用与库函数</a></li>
+<li><a href="#org8bc34ac">8. 小结</a></li>
 </ul>
 </div>
 </div>
@@ -77,8 +77,8 @@ for the JavaScript code in this tag.
 本文介绍Unix系统编程环境．
 </p>
 
-<div id="outline-container-orgadef2e4" class="outline-2">
-<h2 id="orgadef2e4"><span class="section-number-2">1</span> 输入和输出</h2>
+<div id="outline-container-org949f562" class="outline-2">
+<h2 id="org949f562"><span class="section-number-2">1</span> 输入和输出</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>文件描述符</b>
@@ -229,8 +229,8 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 </div>
 </div>
 
-<div id="outline-container-org34e625d" class="outline-2">
-<h2 id="org34e625d"><span class="section-number-2">2</span> 程序与进程</h2>
+<div id="outline-container-org72118d3" class="outline-2">
+<h2 id="org72118d3"><span class="section-number-2">2</span> 程序与进程</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>程序</b>
@@ -356,7 +356,7 @@ helllo world from process ID 14066
 运行这个函数有下图的结果：
 </p>
 
-<div id="org34a9fff" class="figure">
+<div id="org71d5a40" class="figure">
 <p><img src="./img/simple-shell.png" alt="simple-shell.png" width="30%" height="30%">
 </p>
 </div>
@@ -383,39 +383,120 @@ helllo world from process ID 14066
 </div>
 </div>
 
-<div id="outline-container-org3e0bfc4" class="outline-2">
-<h2 id="org3e0bfc4"><span class="section-number-2">3</span> 错误处理</h2>
+<div id="outline-container-org2558a2c" class="outline-2">
+<h2 id="org2558a2c"><span class="section-number-2">3</span> 错误处理</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 当调用一个UNIX系统时出现了错误，通常这个系统调用返回一个负值，并且设置整数变量errno，通过这个值可以知道失败的原因．比如，如果一切顺利的话，open系统返回一个非负的文件描述符，如果错误发生的话，就返回-1．open有15个可能的errno值，比如文件不存在，权限问题等．而另外一些返回指针的函数，以返回NULL来表征错误．
+</p>
+
+<p>
+文件errno.h定义了errno符号以及一些errno可以使用的常量．这些常量都以字符E开始．举个例子，如果errno等于EACCESS，表明有权限问题，比如打开文件时权限不够.
+</p>
+
+<p>
+使用errno有以下两个原则，一是如果没有错误发生，它的值是不会清除的．所以当系统调用返回小于0的错误值时，就应该查看这个errno的值．二是errno的值不会被系统调用设置为0，并且在errno.h里页没有一个错误常量的值为0．
+</p>
+
+<p>
+有两个函数可以用来打印错误信息．
+</p>
+
+<div id="org29d079a" class="figure">
+<p><img src="./img/strerror.png" alt="strerror.png" width="30%" height="30%">
+</p>
+</div>
+
+<p>
+这个函数，将errnum的值（通常就是errno）映射到一个错误信息串，并且返回指向这个串的指针．
+</p>
+
+<p>
+而perror函数可以可以将错误信息打印到标准错误上．
+</p>
+
+<div id="orgf0b4f1f" class="figure">
+<p><img src="./img/perror.png" alt="perror.png" width="30%" height="30%">
+</p>
+</div>
+
+<p>
+它输出由msg指向的字符串，其后是冒号，然后是空格，然后是对应于errno的错误信息，最后是换行符．
+</p>
+
+<p>
+<b>Example</b>
+</p>
+
+<p>
+下面的例子演示了如何使用这两个函数．
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">"apue.h"</span>
+<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;errno.h&gt;</span>
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">argc</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">argv</span>[])
+{
+    fprintf(stderr, <span style="color: #CC9393;">"EACCES: %s\n"</span>, strerror(EACCES));
+    errno = ENOENT;
+    perror(argv[0]);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+
+<p>
+运行有输出：
+</p>
+<pre class="example">
+~/.../bin(master)$ ./1.8 
+EACCES: Permission denied
+./1.8: No such file or directory
+</pre>
+
+<p>
+注意程序里将运行程序的名字argv[0]也就是1.8作为参数传给了perror．这是UNIX系统上的惯例了，通
+过这种方式，如果程序以pipeline的方式执行的话，比如：
+</p>
+<pre class="example">
+prog1 &lt; inputfile | prog2 | prog3 &gt; outputfile
+</pre>
+
+<p>
+就可以知道是哪个特定的程序输出了特定的错误信息．
+</p>
+
+<p>
+<b>错误恢复</b>
 </p>
 </div>
 </div>
 
 
-<div id="outline-container-orgb03aef0" class="outline-2">
-<h2 id="orgb03aef0"><span class="section-number-2">4</span> 用户识别</h2>
+<div id="outline-container-org2eabf3f" class="outline-2">
+<h2 id="org2eabf3f"><span class="section-number-2">4</span> 用户识别</h2>
 </div>
 
-<div id="outline-container-org67f9dfb" class="outline-2">
-<h2 id="org67f9dfb"><span class="section-number-2">5</span> 信号</h2>
+<div id="outline-container-orgf0df644" class="outline-2">
+<h2 id="orgf0df644"><span class="section-number-2">5</span> 信号</h2>
 </div>
 
-<div id="outline-container-org70b0e19" class="outline-2">
-<h2 id="org70b0e19"><span class="section-number-2">6</span> 时间值</h2>
+<div id="outline-container-org13fa0c2" class="outline-2">
+<h2 id="org13fa0c2"><span class="section-number-2">6</span> 时间值</h2>
 </div>
 
-<div id="outline-container-org4681d0f" class="outline-2">
-<h2 id="org4681d0f"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+<div id="outline-container-org042edec" class="outline-2">
+<h2 id="org042edec"><span class="section-number-2">7</span> 系统调用与库函数</h2>
 </div>
 
-<div id="outline-container-org2858545" class="outline-2">
-<h2 id="org2858545"><span class="section-number-2">8</span> 小结</h2>
+<div id="outline-container-org8bc34ac" class="outline-2">
+<h2 id="org8bc34ac"><span class="section-number-2">8</span> 小结</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-16 Fri 22:13</p>
+<p class="date">Created: 2021-07-25 Sun 16:26</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

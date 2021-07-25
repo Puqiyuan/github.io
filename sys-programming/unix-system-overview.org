@@ -204,6 +204,60 @@ int main(int argc, char *argv[])
 
 当调用一个UNIX系统时出现了错误，通常这个系统调用返回一个负值，并且设置整数变量errno，通过这个值可以知道失败的原因．比如，如果一切顺利的话，open系统返回一个非负的文件描述符，如果错误发生的话，就返回-1．open有15个可能的errno值，比如文件不存在，权限问题等．而另外一些返回指针的函数，以返回NULL来表征错误．
 
+文件errno.h定义了errno符号以及一些errno可以使用的常量．这些常量都以字符E开始．举个例子，如果errno等于EACCESS，表明有权限问题，比如打开文件时权限不够.
+
+使用errno有以下两个原则，一是如果没有错误发生，它的值是不会清除的．所以当系统调用返回小于0的错误值时，就应该查看这个errno的值．二是errno的值不会被系统调用设置为0，并且在errno.h里页没有一个错误常量的值为0．
+
+有两个函数可以用来打印错误信息．
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/strerror.png]]
+
+这个函数，将errnum的值（通常就是errno）映射到一个错误信息串，并且返回指向这个串的指针．
+
+而perror函数可以可以将错误信息打印到标准错误上．
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/perror.png]]
+
+它输出由msg指向的字符串，其后是冒号，然后是空格，然后是对应于errno的错误信息，最后是换行符．
+
+*Example*
+
+下面的例子演示了如何使用这两个函数．
+#+begin_src c
+#include "apue.h"
+#include <errno.h>
+
+int main(int argc, char *argv[])
+{
+	fprintf(stderr, "EACCES: %s\n", strerror(EACCES));
+	errno = ENOENT;
+	perror(argv[0]);
+		
+    return 0;
+}
+#+end_src
+
+运行有输出：
+#+begin_example
+~/.../bin(master)$ ./1.8 
+EACCES: Permission denied
+./1.8: No such file or directory
+#+end_example
+
+注意程序里将运行程序的名字argv[0]也就是1.8作为参数传给了perror．这是UNIX系统上的惯例了，通
+过这种方式，如果程序以pipeline的方式执行的话，比如：
+#+begin_example
+prog1 < inputfile | prog2 | prog3 > outputfile
+#+end_example
+
+就可以知道是哪个特定的程序输出了特定的错误信息．
+
+*错误恢复*
+
 
 * 用户识别
 
