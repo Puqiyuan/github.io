@@ -112,4 +112,20 @@ CONFIG_CONSOLE_LOGLEVEL_DEFAULT 7），消息一次一行的打印出来．如�
 个值，改变的是当前的loglevel．举个例子，下面的命令可以使得所有的内核消息打印在终端：
 : echo 8 > /proc/sys/kernel/printk
 
+有些时候打印太多，淹没掉有用的信息，也可能使得系统很慢从而没有响应，甚至是死机，这时可以使
+用函数：
+: int printk_ratelimit(void);
 
+在需要打印重复的信息时可以考虑使用这个．如果这个函数返回的是非零的值，就可以继续并且打印你
+自己添加的信息，否则就跳过．因此常见的调用代码如下：
+#+begin_src c
+if (printk_ratelimit())
+    printk(KERN_NOTICE "The printer is still on fire\n");
+#+end_src
+
+
+printk_ratelimit的工作方式是，通过追踪有多少条信息打印到了终端，当它超过了阀值时，就会返回0．
+
+printk_ratelimit的行为可以通过/proc/sys/kernel/printk_ratelimit来改变，就是说重新打开输出信息时需要过多少秒．而/proc/sys/kernel/printk_ratelimit_burst控制了在第一个阀值前可以接收多少条信息．
+
+在驱动里面有时候也想打印设备号，

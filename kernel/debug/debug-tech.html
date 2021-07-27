@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-13 Tue 22:55 -->
+<!-- 2021-07-27 Tue 22:30 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内核调试手段及工具</title>
@@ -274,10 +274,43 @@ CONFIG_CONSOLE_LOGLEVEL_DEFAULT 7），消息一次一行的打印出来．如�
 <pre class="example">
 echo 8 &gt; /proc/sys/kernel/printk
 </pre>
+
+
+<p>
+有些时候打印太多，淹没掉有用的信息，也可能使得系统很慢从而没有响应，甚至是死机，这时可以使
+用函数：
+</p>
+<pre class="example">
+int printk_ratelimit(void);
+</pre>
+
+
+<p>
+在需要打印重复的信息时可以考虑使用这个．如果这个函数返回的是非零的值，就可以继续并且打印你
+自己添加的信息，否则就跳过．因此常见的调用代码如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (printk_ratelimit())
+    <span style="color: #93E0E3;">printk</span>(KERN_NOTICE <span style="color: #CC9393;">"The printer is still on fire\n"</span>);
+</pre>
+</div>
+
+
+<p>
+printk_ratelimit的工作方式是，通过追踪有多少条信息打印到了终端，当它超过了阀值时，就会返回0．
+</p>
+
+<p>
+printk_ratelimit的行为可以通过/proc/sys/kernel/printk_ratelimit来改变，就是说重新打开输出信息时需要过多少秒．而/proc/sys/kernel/printk_ratelimit_burst控制了在第一个阀值前可以接收多少条信息．
+</p>
+
+<p>
+在驱动里面有时候也想打印设备号，
+</p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-13 Tue 22:55</p>
+<p class="date">Created: 2021-07-27 Tue 22:30</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
