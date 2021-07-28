@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-21 Wed 21:42 -->
+<!-- 2021-07-28 Wed 21:10 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>关键数据结构</title>
@@ -62,38 +62,38 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3a904ea">1. 套接字缓存：sk_buff结构体</a>
+<li><a href="#org19f3071">1. 套接字缓存：sk_buff结构体</a>
 <ul>
-<li><a href="#org531400e">1.1. 网络选项与内核结构体</a></li>
-<li><a href="#org280dc14">1.2. 字段布局</a></li>
-<li><a href="#orgd6f9fe6">1.3. 通用字段</a></li>
-<li><a href="#org2818e69">1.4. 功能相关的域</a></li>
-<li><a href="#orgeebce6a">1.5. 管理函数</a>
+<li><a href="#orgcc34125">1.1. 网络选项与内核结构体</a></li>
+<li><a href="#orgbea9063">1.2. 字段布局</a></li>
+<li><a href="#orgeb84096">1.3. 通用字段</a></li>
+<li><a href="#org0e3ab96">1.4. 功能相关的域</a></li>
+<li><a href="#org8ad34b0">1.5. 管理函数</a>
 <ul>
-<li><a href="#org2db58df">1.5.1. 分配内存：alloc_skb以及dev_alloc_skb</a></li>
-<li><a href="#org102bd5d">1.5.2. 释放内存：kfree_skb和dev_kfree_skb</a></li>
-<li><a href="#orgcc9fe11">1.5.3. 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</a></li>
-<li><a href="#org688e790">1.5.4. 数据克隆与拷贝</a></li>
-<li><a href="#org0da7581">1.5.5. list管理函数</a></li>
+<li><a href="#org5da6a9c">1.5.1. 分配内存：alloc_skb以及dev_alloc_skb</a></li>
+<li><a href="#org2fff090">1.5.2. 释放内存：kfree_skb和dev_kfree_skb</a></li>
+<li><a href="#org7b35041">1.5.3. 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</a></li>
+<li><a href="#org5cdfffb">1.5.4. 数据克隆与拷贝</a></li>
+<li><a href="#org6a99d73">1.5.5. list管理函数</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org9673081">2. net_device结构体</a>
+<li><a href="#org8869d02">2. net_device结构体</a>
 <ul>
-<li><a href="#org0ee2c02">2.1. 标识符</a></li>
-<li><a href="#org5805311">2.2. 配置</a>
+<li><a href="#org2c10da6">2.1. 标识符</a></li>
+<li><a href="#orgb93287a">2.2. 配置</a>
 <ul>
-<li><a href="#org4366b6b">2.2.1. 接口类型以及端口</a></li>
-<li><a href="#orgbad0d72">2.2.2. 混杂模式</a></li>
+<li><a href="#org54da08b">2.2.1. 接口类型以及端口</a></li>
+<li><a href="#orgca770ff">2.2.2. 混杂模式</a></li>
 </ul>
 </li>
-<li><a href="#org8f8b7d2">2.3. 统计</a></li>
-<li><a href="#orgf5e6c53">2.4. 设备状态</a></li>
-<li><a href="#org4828d62">2.5. 链路层多播</a></li>
-<li><a href="#orgd7273cb">2.6. 流量管理</a></li>
-<li><a href="#org12af3f1">2.7. 通用</a></li>
-<li><a href="#org9280fac">2.8. 函数指针</a></li>
+<li><a href="#org7868efe">2.3. 统计</a></li>
+<li><a href="#orgac150ea">2.4. 设备状态</a></li>
+<li><a href="#org8e72256">2.5. 链路层多播</a></li>
+<li><a href="#orgba308b7">2.6. 流量管理</a></li>
+<li><a href="#orgf3e2ef2">2.7. 通用</a></li>
+<li><a href="#org1ae8267">2.8. 函数指针</a></li>
 </ul>
 </li>
 </ul>
@@ -127,8 +127,8 @@ struct net_device
 <p>
 另外还有一个关键数据结构是struct sock，它用来存储套接字的网络信息，不过这不是本系列文章的重点。
 </p>
-<div id="outline-container-org3a904ea" class="outline-2">
-<h2 id="org3a904ea"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
+<div id="outline-container-org19f3071" class="outline-2">
+<h2 id="org19f3071"><span class="section-number-2">1</span> 套接字缓存：sk_buff结构体</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 这个结构体或许是Linux内核网络里最重要的数据结构了，表示了到达或要传输数据的的头部信息，定义在include/linux/skbuff.h文件里，这个结构体包含了大量的成员。
@@ -155,8 +155,8 @@ struct net_device
 </p>
 </div>
 
-<div id="outline-container-org531400e" class="outline-3">
-<h3 id="org531400e"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
+<div id="outline-container-orgcc34125" class="outline-3">
+<h3 id="orgcc34125"><span class="section-number-3">1.1</span> 网络选项与内核结构体</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 配置内核或查看TCP/IP的spec时, 网络代码都会提供许多有用的选项但并不是必须的, 比如防火墙, 多
@@ -192,8 +192,8 @@ queueing选项得到支持时才考虑加入到sk_buff结构体里来.
 </div>
 </div>
 
-<div id="outline-container-org280dc14" class="outline-3">
-<h3 id="org280dc14"><span class="section-number-3">1.2</span> 字段布局</h3>
+<div id="outline-container-orgbea9063" class="outline-3">
+<h3 id="orgbea9063"><span class="section-number-3">1.2</span> 字段布局</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 sk_buff里有几个成员, 只是为了帮助搜索和组织数据结构本身, 内核在双向链表里维护sk_buff结构体.
@@ -336,8 +336,8 @@ destructor通常不会被初始化. 当buffer属于某个套接字时, 这个成
 </div>
 </div>
 
-<div id="outline-container-orgd6f9fe6" class="outline-3">
-<h3 id="orgd6f9fe6"><span class="section-number-3">1.3</span> 通用字段</h3>
+<div id="outline-container-orgeb84096" class="outline-3">
+<h3 id="orgeb84096"><span class="section-number-3">1.3</span> 通用字段</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 下面介绍一些sk_buff主要的域，这些域不和内核特定的feature关联。
@@ -518,8 +518,8 @@ __be16 protocol;
 </div>
 </div>
 
-<div id="outline-container-org2818e69" class="outline-3">
-<h3 id="org2818e69"><span class="section-number-3">1.4</span> 功能相关的域</h3>
+<div id="outline-container-org0e3ab96" class="outline-3">
+<h3 id="org0e3ab96"><span class="section-number-3">1.4</span> 功能相关的域</h3>
 <div class="outline-text-3" id="text-1-4">
 <p>
 Linux是模块化的，可以允许什么被包括进内核，什么不被包括进内核。因此仅当内核被编译为支持某些功能的时候才会将sk_buff里某些成员包括进内核。比如对于Netfiler或QoS来说就是这样。
@@ -527,15 +527,15 @@ Linux是模块化的，可以允许什么被包括进内核，什么不被包括
 </div>
 </div>
 
-<div id="outline-container-orgeebce6a" class="outline-3">
-<h3 id="orgeebce6a"><span class="section-number-3">1.5</span> 管理函数</h3>
+<div id="outline-container-org8ad34b0" class="outline-3">
+<h3 id="org8ad34b0"><span class="section-number-3">1.5</span> 管理函数</h3>
 <div class="outline-text-3" id="text-1-5">
 <p>
 内核提供了很多简短的函数用来操纵sk_buff里的元素或者是操作sk_buff列表。在下图的帮助下，本节会介绍几个这样的函数：
 </p>
 
 
-<div id="orgda3c50c" class="figure">
+<div id="orgc13faf3" class="figure">
 <p><img src="./img/skb_ops.png" alt="skb_ops.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>skb操纵函数操作前后，(a): skb_put，(b): skb_push，（c）：skb_pull，(d): skb_reserve</p>
@@ -550,8 +550,8 @@ Linux是模块化的，可以允许什么被包括进内核，什么不被包括
 </p>
 </div>
 
-<div id="outline-container-org2db58df" class="outline-4">
-<h4 id="org2db58df"><span class="section-number-4">1.5.1</span> 分配内存：alloc_skb以及dev_alloc_skb</h4>
+<div id="outline-container-org5da6a9c" class="outline-4">
+<h4 id="org5da6a9c"><span class="section-number-4">1.5.1</span> 分配内存：alloc_skb以及dev_alloc_skb</h4>
 <div class="outline-text-4" id="text-1-5-1">
 <p>
 alloc_skb实现了分配buffer，定义在skbuff.c里。前述已表达数据buffer（data buffer）和头（header）是两个不同的实体，这意味着创造一个buffer涉及到内存的两次分配，一次是数据buffer一次是sk_buff结构体。
@@ -575,7 +575,7 @@ data = kmalloc_reserve(size, gfp_mask, node, &amp;pfmemalloc);
 在调用kmalloc_reserve之前，size参数使用SKB_DATA_ALIGN宏来进行对齐。在返回之前，alloc_skb会初始化sk_buff的成员，最后的效果如下图：
 </p>
 
-<div id="org6b59424" class="figure">
+<div id="org1f78c86" class="figure">
 <p><img src="./img/after_alloc_skb.png" alt="after_alloc_skb.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 4: </span>alloc_skb函数完成后</p>
@@ -592,8 +592,8 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 </div>
 
 
-<div id="outline-container-org102bd5d" class="outline-4">
-<h4 id="org102bd5d"><span class="section-number-4">1.5.2</span> 释放内存：kfree_skb和dev_kfree_skb</h4>
+<div id="outline-container-org2fff090" class="outline-4">
+<h4 id="org2fff090"><span class="section-number-4">1.5.2</span> 释放内存：kfree_skb和dev_kfree_skb</h4>
 <div class="outline-text-4" id="text-1-5-2">
 <p>
 这两个函数用于释放缓存，这会导致将sk_buff放回到buffer池（pool）。最后一个真正会释放sk_buff的调用是当skb-&gt;users为1时。不然该函数只是将users这个counter减1。比如如果一个buffer有三个使用者，仅当第三次调用这些释放函数时才会真正释放内存。
@@ -604,7 +604,7 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 </p>
 
 
-<div id="orgb0bae7c" class="figure">
+<div id="org5b6416d" class="figure">
 <p><img src="./img/kfree_skb.png" alt="kfree_skb.png" width="35%" height="35%">
 </p>
 <p><span class="figure-number">Figure 5: </span>kfree_skb函数</p>
@@ -621,11 +621,11 @@ dev_alloc_skb主要是被设备驱动使用，而且可以在中断模式下使�
 </div>
 </div>
 
-<div id="outline-container-orgcc9fe11" class="outline-4">
-<h4 id="orgcc9fe11"><span class="section-number-4">1.5.3</span> 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</h4>
+<div id="outline-container-org7b35041" class="outline-4">
+<h4 id="org7b35041"><span class="section-number-4">1.5.3</span> 数据预留和对齐：skb_reserve、skb_put、skb_push以及skb_pull</h4>
 <div class="outline-text-4" id="text-1-5-3">
 <p>
-skb_reserve用来在buffer的头部处预留某些空间，在插入头或对齐数据边界时经常用到。这个函数会移动data和tail指针，data和tail分别确定了payload的开始和结束位置。如图 <a href="#orgda3c50c">3</a> 所示展示了调用skb_reserve后的情况。这个函数通常是在分配buffer不久后调用，这时data和tail还是一样的，此时再预留一部分头部空间，注意在没有填充payload时，data和tail依旧是指向一样的位置。
+skb_reserve用来在buffer的头部处预留某些空间，在插入头或对齐数据边界时经常用到。这个函数会移动data和tail指针，data和tail分别确定了payload的开始和结束位置。如图 <a href="#orgc13faf3">3</a> 所示展示了调用skb_reserve后的情况。这个函数通常是在分配buffer不久后调用，这时data和tail还是一样的，此时再预留一部分头部空间，注意在没有填充payload时，data和tail依旧是指向一样的位置。
 </p>
 
 <p>
@@ -643,7 +643,7 @@ header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下�
 </p>
 
 
-<div id="orge3422e0" class="figure">
+<div id="org657dc0f" class="figure">
 <p><img src="./img/skb_reserve.png" alt="skb_reserve.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 6: </span>skb_reserve操作前后</p>
@@ -654,7 +654,7 @@ header紧邻ethernet frame之后从而对齐在16-byte字节边界处。如下�
 </p>
 
 
-<div id="org80ea8ae" class="figure">
+<div id="org19b1385" class="figure">
 <p><img src="./img/buffer_to_link.png" alt="buffer_to_link.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 7: </span>buffer从TCP层传到link层时是如何变化的</p>
@@ -693,7 +693,7 @@ skb_push在buffer之起始处放置数据，而skb_put在末尾添加数据。�
 
 <p>
 如图
-<a href="#org6b59424">4</a>
+<a href="#org1f78c86">4</a>
 所示，在data buffer的最后，有一个skb_shared_info结构体用来存储额外的信息。下面是这个结构体的定义：
 </p>
 
@@ -749,8 +749,8 @@ dataref代表了这个buffer block有多少个用户。在后面会讨论nr_frag
 </div>
 </div>
 
-<div id="outline-container-org688e790" class="outline-4">
-<h4 id="org688e790"><span class="section-number-4">1.5.4</span> 数据克隆与拷贝</h4>
+<div id="outline-container-org5cdfffb" class="outline-4">
+<h4 id="org5cdfffb"><span class="section-number-4">1.5.4</span> 数据克隆与拷贝</h4>
 <div class="outline-text-4" id="text-1-5-4">
 <p>
 当数据需要由不同的消费者独立的处理时，它们各自可能需要改变sk_buff描述符的内容，内核可以不必完全的拷贝整个sk_buff结构体和关联的data buffer。为效率考虑计，内核可以clone原来的数据结构，即只是增加引用计数（reference count）而避免过早的释放数据块。buffer克隆通过函数skb_clone来做。一个需要使用克隆的情况是进入的包需要被递送到多个接受者，比如协议句柄和更多的网络tap（后文介绍tap）。
@@ -761,7 +761,7 @@ dataref代表了这个buffer block有多少个用户。在后面会讨论nr_frag
 skb-&gt;cloned成员都被设置成1。下图展示了一个clone出来的buffer：
 </p>
 
-<div id="orgfc0240d" class="figure">
+<div id="orgffef319" class="figure">
 <p><img src="./img/skb_func.png" alt="skb_func.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 8: </span>skb_clone函数的效果</p>
@@ -775,7 +775,7 @@ skb-&gt;cloned成员都被设置成1。下图展示了一个clone出来的buffer
 当一个buffer被clone时，数据块的内容是不能更改的。这就是说代码可以访问数据而不需要锁机制。当函数不仅需要修改sk_buff而且需要修改buffer数据时，这就需要也clone数据块。当程序员知道仅需要修改skb-&gt;start和skb-&gt;end之间的内容时，可以使用pskb_copy函数。当他认为还可能修改分段的数据块时，就要用skb_copy函数了。这两个函数的操作结果如下图：
 </p>
 
-<div id="org9e700dc" class="figure">
+<div id="orgd8a8e66" class="figure">
 <p><img src="./img/pskb_copy_and_skb_copy.png" alt="pskb_copy_and_skb_copy.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 9: </span>(a)pskb_copy和skb_copy函数</p>
@@ -786,8 +786,8 @@ skb-&gt;cloned成员都被设置成1。下图展示了一个clone出来的buffer
 </p>
 </div>
 </div>
-<div id="outline-container-org0da7581" class="outline-4">
-<h4 id="org0da7581"><span class="section-number-4">1.5.5</span> list管理函数</h4>
+<div id="outline-container-org6a99d73" class="outline-4">
+<h4 id="org6a99d73"><span class="section-number-4">1.5.5</span> list管理函数</h4>
 <div class="outline-text-4" id="text-1-5-5">
 <p>
 下面介绍一些操作sk_buff列表的函数，列表也叫队列．完全的列表操作函数可以在&lt;include/linux/skbuff.h&gt;和&lt;net/core/sbbuff.c&gt;里看到．这里介绍一些常用的：
@@ -862,8 +862,8 @@ lock．否则的话这些函数可能会被异步入队或出队事件中断，�
 </div>
 </div>
 
-<div id="outline-container-org9673081" class="outline-2">
-<h2 id="org9673081"><span class="section-number-2">2</span> net_device结构体</h2>
+<div id="outline-container-org8869d02" class="outline-2">
+<h2 id="org8869d02"><span class="section-number-2">2</span> net_device结构体</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 net_device结构体存储了关于网卡设备的所有信息．对于每个设备就有一个这样的结构体，对于真实和虚拟的设备来说都是如此，所谓虚拟设备，比如bonding和vlan．bonding在Cisco的术语叫EtherChannel，在Sun的术语叫trunking，允许几个接口聚合起来成为一个接口，当在高速带宽上支持点对点连接时，这个特点就很重要了．这样bonding后，虚拟接口的吞吐量几乎就是单个接口的加和．而vlan通过一个额外的tag可以做到使用相同的L2层而隔绝流量．本节将交替使用接口和设备这两个词语．
@@ -888,8 +888,8 @@ net_device结构体可以划分为以下类别：
 </ul>
 </div>
 
-<div id="outline-container-org0ee2c02" class="outline-3">
-<h3 id="org0ee2c02"><span class="section-number-3">2.1</span> 标识符</h3>
+<div id="outline-container-org2c10da6" class="outline-3">
+<h3 id="org2c10da6"><span class="section-number-3">2.1</span> 标识符</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 net_device结构体包含几个标识符，不应该混淆它们：
@@ -914,8 +914,8 @@ unsigned short dev_id
 </div>
 </div>
 
-<div id="outline-container-org5805311" class="outline-3">
-<h3 id="org5805311"><span class="section-number-3">2.2</span> 配置</h3>
+<div id="outline-container-orgb93287a" class="outline-3">
+<h3 id="orgb93287a"><span class="section-number-3">2.2</span> 配置</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 依据网络设备的类型，某些配置值由内核给出默认值，而某些字段留给驱动来填充．当然驱动可以改变默认的值，甚至某些字段还可以在运行时修改，比如通过命令ifconfig和ip命令．实际上在针对设备的模块加载时，有几个参数比如base_addr，if_port，dma以及irq等可以通过用户设定．并且这些参数不由虚拟设备所使用．
@@ -976,7 +976,7 @@ unsigned short priv_flags
 flag域中的某些bit代表了网络设备具有的能力，比方说IFF_MULTICAST，而另一些代表了状态改变，比如IFF_UP或者IFF_RUNNING．设备驱动在初始化阶段设置能力标志位，而状态标志由内核管理以响应外部事件，这些标志可以通过ifconfig命令来查看：
 </p>
 
-<div id="org47ca7df" class="figure">
+<div id="org05e533a" class="figure">
 <p><img src="./img/ifconfig-lo.png" alt="ifconfig-lo.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 10: </span>ifconfig的标志</p>
@@ -1005,7 +1005,7 @@ unsigned int mtu
 MTU代表就是Maximum Transmission Unit，代表了设备能处理的最大frame大小．下面的表列出了常见网络技术的MTU：
 </p>
 
-<div id="orgef73e3e" class="figure">
+<div id="org0dad077" class="figure">
 <p><img src="./img/mtus.png" alt="mtus.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 11: </span>不同设备类型的MTU</p>
@@ -1058,15 +1058,15 @@ int promiscuity
 </ol>
 </div>
 
-<div id="outline-container-org4366b6b" class="outline-4">
-<h4 id="org4366b6b"><span class="section-number-4">2.2.1</span> 接口类型以及端口</h4>
+<div id="outline-container-org54da08b" class="outline-4">
+<h4 id="org54da08b"><span class="section-number-4">2.2.1</span> 接口类型以及端口</h4>
 <div class="outline-text-4" id="text-2-2-1">
 <p>
 某些设备不止一个连接端口，并且允许用户根据需要去选择某个端口．if_port参数就是用来设置端口类型的．下面的代码片段展示了如何根据配置来设置相应的端口：
 </p>
 
 
-<div id="org4902151" class="figure">
+<div id="org0f607dc" class="figure">
 <p><img src="./img/set_port.png" alt="set_port.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 12: </span>设置端口</p>
@@ -1074,8 +1074,8 @@ int promiscuity
 </div>
 </div>
 
-<div id="outline-container-orgbad0d72" class="outline-4">
-<h4 id="orgbad0d72"><span class="section-number-4">2.2.2</span> 混杂模式</h4>
+<div id="outline-container-orgca770ff" class="outline-4">
+<h4 id="orgca770ff"><span class="section-number-4">2.2.2</span> 混杂模式</h4>
 <div class="outline-text-4" id="text-2-2-2">
 <p>
 某些管理任务要求系统可以接受所有经过共享介质上的数据，而不仅是单播到自己的数据，一个能接收所有包的设备被叫做混杂模式．举个例子，需要检测应用的性能或者检查安全违规是否发生等．在桥接代码（后面会介绍）中也会用到．当然，恶意探测软件也可以利用这个特点，因为这个原因，在局域网内的数据如果不加密都是不安全的．
@@ -1094,7 +1094,7 @@ int promiscuity
 </p>
 
 
-<div id="orgc3606ee" class="figure">
+<div id="org8a6cd89" class="figure">
 <p><img src="./img/receive-mode.png" alt="receive-mode.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 13: </span>配置接收模式</p>
@@ -1106,16 +1106,16 @@ int promiscuity
 </div>
 </div>
 </div>
-<div id="outline-container-org8f8b7d2" class="outline-3">
-<h3 id="org8f8b7d2"><span class="section-number-3">2.3</span> 统计</h3>
+<div id="outline-container-org7868efe" class="outline-3">
+<h3 id="org7868efe"><span class="section-number-3">2.3</span> 统计</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 最新的内核代码已经没有priv成员了，不过ml_priv应该可以达到一样的记录统计，它是一个void类型的指针．
 </p>
 </div>
 </div>
-<div id="outline-container-orgf5e6c53" class="outline-3">
-<h3 id="orgf5e6c53"><span class="section-number-3">2.4</span> 设备状态</h3>
+<div id="outline-container-orgac150ea" class="outline-3">
+<h3 id="orgac150ea"><span class="section-number-3">2.4</span> 设备状态</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
 为了控制和NIC卡的交互，每个设备驱动都必须维护一些设备的信息，这些信息包括接口在什么时间要求了什么种类的行为以及对应的状态等．而对于SMP系统来说，内核还必须确保对于相同设备的并发访问可以被正确处理．下面介绍几个在net_device中出现的这样的成员：
@@ -1147,8 +1147,8 @@ void			*ax25_ptr;<br>
 </ol>
 </div>
 </div>
-<div id="outline-container-org4828d62" class="outline-3">
-<h3 id="org4828d62"><span class="section-number-3">2.5</span> 链路层多播</h3>
+<div id="outline-container-org8e72256" class="outline-3">
+<h3 id="org8e72256"><span class="section-number-3">2.5</span> 链路层多播</h3>
 <div class="outline-text-3" id="text-2-5">
 <p>
 多播是一种机制用来发送数据到多个接收者．多播可以在L3网络层以及L2链路层提供，本节关心后者．
@@ -1164,16 +1164,16 @@ flags变量里有一位用于表示是否应该在多播地址上监听数据，
 </div>
 </div>
 
-<div id="outline-container-orgd7273cb" class="outline-3">
-<h3 id="orgd7273cb"><span class="section-number-3">2.6</span> 流量管理</h3>
+<div id="outline-container-orgba308b7" class="outline-3">
+<h3 id="orgba308b7"><span class="section-number-3">2.6</span> 流量管理</h3>
 <div class="outline-text-3" id="text-2-6">
 <p>
 Linux的流量控制现在net_device结构体里是另一个结构体netdev_queue，在这里表示流量控制的一些信息．
 </p>
 </div>
 </div>
-<div id="outline-container-org12af3f1" class="outline-3">
-<h3 id="org12af3f1"><span class="section-number-3">2.7</span> 通用</h3>
+<div id="outline-container-orgf3e2ef2" class="outline-3">
+<h3 id="orgf3e2ef2"><span class="section-number-3">2.7</span> 通用</h3>
 <div class="outline-text-3" id="text-2-7">
 <p>
 本小节介绍一些公共的成员．
@@ -1189,14 +1189,30 @@ struct timer_list watchdog_timer<br>
 </ol>
 </div>
 </div>
-<div id="outline-container-org9280fac" class="outline-3">
-<h3 id="org9280fac"><span class="section-number-3">2.8</span> 函数指针</h3>
+<div id="outline-container-org1ae8267" class="outline-3">
+<h3 id="org1ae8267"><span class="section-number-3">2.8</span> 函数指针</h3>
+<div class="outline-text-3" id="text-2-8">
+<p>
+主要的函数指针包括以下类型：
+</p>
+<ul class="org-ul">
+<li>传送和接收帧．</li>
+<li>添加或者是解析链路层的头．</li>
+<li>改变配置．</li>
+<li>获取统计信息．</li>
+<li>设置特定的功能．</li>
+</ul>
+
+<p>
+ethtool_ops里面包括了主要的函数指针．
+</p>
+</div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-21 Wed 21:42</p>
+<p class="date">Created: 2021-07-28 Wed 21:10</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -606,3 +606,11 @@ Linux的流量控制现在net_device结构体里是另一个结构体netdev_queu
    struct timer_list watchdog_timer\\
    主要是实现watchdog定时器．
 ** 函数指针
+主要的函数指针包括以下类型：
++ 传送和接收帧．
++ 添加或者是解析链路层的头．
++ 改变配置．
++ 获取统计信息．
++ 设置特定的功能．
+  
+ethtool_ops里面包括了主要的函数指针．
