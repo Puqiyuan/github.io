@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-25 Sun 11:28 -->
+<!-- 2021-07-30 Fri 22:56 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程地址空间</title>
@@ -62,19 +62,19 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orge2ca0b6">1. 线性地址空间</a></li>
-<li><a href="#org89cd4e5">2. 管理地址空间</a></li>
-<li><a href="#orgb48f4fe">3. 进程地址空间描述符</a>
+<li><a href="#org01346b5">1. 线性地址空间</a></li>
+<li><a href="#orgcce5e27">2. 管理地址空间</a></li>
+<li><a href="#org605ceb6">3. 进程地址空间描述符</a>
 <ul>
-<li><a href="#org3f143c5">3.1. 分配mm_struct描述符</a></li>
-<li><a href="#org84ffc51">3.2. 初始化描述符</a></li>
-<li><a href="#orgfc0a652">3.3. 销毁mm_struct</a></li>
+<li><a href="#org36c5cd2">3.1. 分配mm_struct描述符</a></li>
+<li><a href="#org96b85db">3.2. 初始化描述符</a></li>
+<li><a href="#orga6ae3fc">3.3. 销毁mm_struct</a></li>
 </ul>
 </li>
-<li><a href="#orgcac6733">4. 内存区域（regions）</a></li>
-<li><a href="#orgf49a946">5. 异常处理</a></li>
-<li><a href="#org334a7e7">6. Page Fault</a></li>
-<li><a href="#org8be3456">7. 拷贝到/拷贝自用户空间</a></li>
+<li><a href="#org40208c9">4. 内存区域（regions）</a></li>
+<li><a href="#org704b18e">5. 异常处理</a></li>
+<li><a href="#orga158b26">6. Page Fault</a></li>
+<li><a href="#org1f15e6a">7. 拷贝到/拷贝自用户空间</a></li>
 </ul>
 </div>
 </div>
@@ -94,14 +94,14 @@ for the JavaScript code in this tag.
 本文首先介绍线性地址是如何划分以及各个部分的目的．随后会介绍描述每个进程的结构体，这些结构体是如何被分配，初始化以及怎么销毁的．随后会介绍进程的地址空间是如何创建的以及相关联的函数．这些会引入关于进程地址空间的异常处理，pagefault等其它机制．最后会介绍下如何安全的向用户空间拷贝数据或者从用户空间拷贝数据到内核空间．
 </p>
 
-<div id="outline-container-orge2ca0b6" class="outline-2">
-<h2 id="orge2ca0b6"><span class="section-number-2">1</span> 线性地址空间</h2>
+<div id="outline-container-org01346b5" class="outline-2">
+<h2 id="org01346b5"><span class="section-number-2">1</span> 线性地址空间</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 从用户的观点来说，线性地址空间是平坦的．但是从内核空间来说就很不一样了．地址空间被划分为两部分，用户空间部分，在上下文切换后可能会改变，而内核空间，保持不变．而划分出这个位置的就是PAGE_OFFSET，对于X86来说这个值是0xC0000000．这意味着3GB留给进程，而1GB留给内核空间，内核所看到的地址空间划分如下图：
 </p>
 
-<div id="orge1c3c5a" class="figure">
+<div id="org0d5a1b9" class="figure">
 <p><img src="./img/kas.png" alt="kas.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 1: </span>内核看到的地址空间</p>
@@ -109,8 +109,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org89cd4e5" class="outline-2">
-<h2 id="org89cd4e5"><span class="section-number-2">2</span> 管理地址空间</h2>
+<div id="outline-container-orgcce5e27" class="outline-2">
+<h2 id="orgcce5e27"><span class="section-number-2">2</span> 管理地址空间</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 进程用到的地址空间，由mm_struct结构体管理着，它类似于BSD里的vmspace．
@@ -126,7 +126,7 @@ vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内�
 </p>
 
 
-<div id="org81c9c1b" class="figure">
+<div id="org1cc840d" class="figure">
 <p><img src="./img/ds_as.png" alt="ds_as.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>地址空间相关的结构体</p>
@@ -212,8 +212,8 @@ exit
 </div>
 </div>
 
-<div id="outline-container-orgb48f4fe" class="outline-2">
-<h2 id="orgb48f4fe"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
+<div id="outline-container-org605ceb6" class="outline-2">
+<h2 id="org605ceb6"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 进程地址空间由mm_struct描述，就是说对于一个进程来说，仅有一个mm_struct，并且这个mm_struct由用户线程共享．实际上，线程的寻找方式就是，找出所有指向同一个mm_strcut的task_struct(s).
@@ -284,8 +284,8 @@ free_mm：将mm_struct返回到slab分配器．
 </p>
 </div>
 
-<div id="outline-container-org3f143c5" class="outline-3">
-<h3 id="org3f143c5"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
+<div id="outline-container-org36c5cd2" class="outline-3">
+<h3 id="org36c5cd2"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 有两个函数可以用于分配mm_struct，它们看起来容易混淆．一是allocate_mm，它是一个预定义的宏，单纯从slab allocator里分配mm_struct．而mm_alloc除了调用allocate_mm分配一个mm_struct，还得调用mm_init初始化．
@@ -293,8 +293,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 
-<div id="outline-container-org84ffc51" class="outline-3">
-<h3 id="org84ffc51"><span class="section-number-3">3.2</span> 初始化描述符</h3>
+<div id="outline-container-org96b85db" class="outline-3">
+<h3 id="org96b85db"><span class="section-number-3">3.2</span> 初始化描述符</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 系统里的第一个mm_struct叫做init_mm．后面的mm_struct都是父进程mm_struct的拷贝．init_mm在编译时静态的初始化好了．如下：
@@ -323,8 +323,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 
-<div id="outline-container-orgfc0a652" class="outline-3">
-<h3 id="orgfc0a652"><span class="section-number-3">3.3</span> 销毁mm_struct</h3>
+<div id="outline-container-orga6ae3fc" class="outline-3">
+<h3 id="orga6ae3fc"><span class="section-number-3">3.3</span> 销毁mm_struct</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 使用atomic_inc(&amp;mm-&gt;mm_users)可以增加用户计数，而mmput会递减这个数字．如果减到0，所有的映射就都会被exit_mmap取消．
@@ -332,8 +332,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 </div>
-<div id="outline-container-orgcac6733" class="outline-2">
-<h2 id="orgcac6733"><span class="section-number-2">4</span> 内存区域（regions）</h2>
+<div id="outline-container-org40208c9" class="outline-2">
+<h2 id="org40208c9"><span class="section-number-2">4</span> 内存区域（regions）</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 一个进程的完整地址空间是很少使用到的，仅有稀疏的几个区域会被用到，这样的每个区域被vm_area_struct结构体表示，这样的vm_area_struct不会重叠，并且一个vm_area_struct内具有相同的保护目的．举个例子，一个只读的共享库就会被加载到同一个地址空间（内存区域）．通过/proc/PID/maps可以查看一个进程映射的所有内存区域．
@@ -348,33 +348,210 @@ free_mm：将mm_struct返回到slab分配器．
 </p>
 
 <p>
-vm_area_struct定义如下：
+vm_area_struct定义如下，注意下面的成员都是摘取的一部分，其相对位置也不一定正确，只是说结构体里有这个成员：
 </p>
 
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">vm_area_struct</span> {
     <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">vm_start</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">vm_end</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mm_struct</span> *<span style="color: #DFAF8F;">vm_mm</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">vm_area_struct</span> *<span style="color: #DFAF8F;">vm_next</span>, *<span style="color: #DFAF8F;">vm_prev</span>;
+    <span style="color: #7CB8BB;">pgprot_t</span> <span style="color: #DFAF8F;">vm_page_prot</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">vm_flags</span>;
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">rb_node</span> <span style="color: #DFAF8F;">vm_rb</span>;
 }
 </pre>
 </div>
+<p>
+下面简单解释下这些成员的意义：
+</p>
+<ul class="org-ul">
+<li><p>
+vm_mm
+</p>
+
+<p>
+当前vma属于哪个mm_struct．
+</p></li>
+
+<li><p>
+vm_start
+</p>
+
+<p>
+该区域的开始地址.
+</p></li>
+
+<li><p>
+vm_end
+</p>
+
+<p>
+该区域的结束地址．
+</p></li>
+
+<li><p>
+vm_next，vm_prev
+</p>
+
+<p>
+属于该task的所有vma，依地址排序．
+</p></li>
+
+<li><p>
+vm_page_prot
+</p>
+
+<p>
+在VMA中设置PTE时，应当置上的标签．
+</p></li>
+
+<li><p>
+vm_flags
+</p>
+
+<p>
+描述VMA保护属性，这些属性见后面的表．
+</p>
+
+<p>
+关于vm_flags可以取的值
+<br>
+保护标志：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">标志名</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_READ</td>
+<td class="org-left">页面可读</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_WRITE</td>
+<td class="org-left">页面可写</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_EXEC</td>
+<td class="org-left">页面可执行</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_SHARED</td>
+<td class="org-left">页面是共享的</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_DONTCOPY</td>
+<td class="org-left">在fork时不拷贝</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_DONTEXPAND</td>
+<td class="org-left">不允许该区域重新调整大小</td>
+</tr>
+</tbody>
+</table>
+<p>
+<br>
+mmap相关的标志：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">VM_MAYREAD</td>
+<td class="org-left">允许设置VM_READ标志</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_MAYWRITE</td>
+<td class="org-left">允许设置VM_WRITE标志</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_MAYEXEC</td>
+<td class="org-left">允许设置VM_EXEC标志</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_MAYSHARE</td>
+<td class="org-left">允许设置VM_SHARE标志</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_GROWSDOWN</td>
+<td class="org-left">共享段（可能是栈）可以减小</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_GROWSUP</td>
+<td class="org-left">共享段（可能是堆）可以增长</td>
+</tr>
+</tbody>
+</table>
+<p>
+<br>
+锁相关的标志：
+</p>
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">VM_LOCKED</td>
+<td class="org-left">如果设置了，页面就不会被换出，可以由mlock设置</td>
+</tr>
+
+<tr>
+<td class="org-left">VM_IO</td>
+<td class="org-left">映射的区域用于I/O设备</td>
+</tr>
+</tbody>
+</table></li>
+
+<li></li>
+</ul>
 </div>
+</div>
+<div id="outline-container-org704b18e" class="outline-2">
+<h2 id="org704b18e"><span class="section-number-2">5</span> 异常处理</h2>
+</div>
+<div id="outline-container-orga158b26" class="outline-2">
+<h2 id="orga158b26"><span class="section-number-2">6</span> Page Fault</h2>
 </div>
 
-<div id="outline-container-orgf49a946" class="outline-2">
-<h2 id="orgf49a946"><span class="section-number-2">5</span> 异常处理</h2>
-</div>
-
-<div id="outline-container-org334a7e7" class="outline-2">
-<h2 id="org334a7e7"><span class="section-number-2">6</span> Page Fault</h2>
-</div>
-
-<div id="outline-container-org8be3456" class="outline-2">
-<h2 id="org8be3456"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
+<div id="outline-container-org1f15e6a" class="outline-2">
+<h2 id="org1f15e6a"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-25 Sun 11:28</p>
+<p class="date">Created: 2021-07-30 Fri 22:56</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

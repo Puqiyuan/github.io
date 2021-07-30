@@ -158,16 +158,69 @@ struct mm_struct init_mm = {
 
 如果一个内存区域映射到文件，file类型的vm_file成员可以代表这个文件．它有类型为struct inode指针的成员，而inode又有struct address_space，这里面包括了文件的私有信息，包括许多函数指针用来执行特定于文件系统相关的一些操作，比如读写一个页到磁盘．
 
-vm_area_struct定义如下：
+vm_area_struct定义如下，注意下面的成员都是摘取的一部分，其相对位置也不一定正确，只是说结构体里有这个成员：
 
 #+begin_src c
 struct vm_area_struct {
     unsigned long vm_start;
+    unsigned long vm_end;
+    struct mm_struct *vm_mm;
+    struct vm_area_struct *vm_next, *vm_prev;
+    pgprot_t vm_page_prot;
+    unsigned long vm_flags;
+    struct rb_node vm_rb;
 }
 #+end_src
+下面简单解释下这些成员的意义：
++ vm_mm
+  
+  当前vma属于哪个mm_struct．
 
++ vm_start
+
+  该区域的开始地址.
+
++ vm_end
+
+  该区域的结束地址．
+
++ vm_next，vm_prev
+
+  属于该task的所有vma，依地址排序．
+
++ vm_page_prot
+
+  在VMA中设置PTE时，应当置上的标签．
+
++ vm_flags
+
+  描述VMA保护属性，这些属性见后面的表．
+
+  关于vm_flags可以取的值
+  \\
+  保护标志：
+  | 标志名        | 描述                     |
+  | VM_READ       | 页面可读                 |
+  | VM_WRITE      | 页面可写                 |
+  | VM_EXEC       | 页面可执行               |
+  | VM_SHARED     | 页面是共享的             |
+  | VM_DONTCOPY   | 在fork时不拷贝           |
+  | VM_DONTEXPAND | 不允许该区域重新调整大小 |
+  \\
+  mmap相关的标志：
+  | VM_MAYREAD   | 允许设置VM_READ标志        |
+  | VM_MAYWRITE  | 允许设置VM_WRITE标志       |
+  | VM_MAYEXEC   | 允许设置VM_EXEC标志        |
+  | VM_MAYSHARE  | 允许设置VM_SHARE标志       |
+  | VM_GROWSDOWN | 共享段（可能是栈）可以减小 |
+  | VM_GROWSUP   | 共享段（可能是堆）可以增长 |
+  \\
+  锁相关的标志：
+  | VM_LOCKED | 如果设置了，页面就不会被换出，可以由mlock设置 |
+  | VM_IO     | 映射的区域用于I/O设备                         |
+
++ 
 * 异常处理
-
 * Page Fault
 
 * 拷贝到/拷贝自用户空间
