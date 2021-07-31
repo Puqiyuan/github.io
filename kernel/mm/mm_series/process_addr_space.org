@@ -169,6 +169,10 @@ struct vm_area_struct {
     pgprot_t vm_page_prot;
     unsigned long vm_flags;
     struct rb_node vm_rb;
+    const struct vm_operations_struct *vm_ops;
+    unsigned long vm_pgoff;
+    struct file * vm_file;
+    void * vm_private_data
 }
 #+end_src
 下面简单解释下这些成员的意义：
@@ -219,7 +223,41 @@ struct vm_area_struct {
   | VM_LOCKED | 如果设置了，页面就不会被换出，可以由mlock设置 |
   | VM_IO     | 映射的区域用于I/O设备                         |
 
-+ 
++ vm_rb
+
+  以链表的形式组织，为了可以快速查询，所有的VMA都存在于一个红黑树中．在处理page fault时，为了快速找到正确的VMA，这种组织方式是很重要的，尤其是有许多区域（region）时．
+
++ vm_ops
+
+  主要是一些函数指针用于处理该VMA，包括open，close，以及缺页时的入口fault函数．
+
++ long vm_pgoff
+
+  页面对齐的偏移．
+
++ vm_file
+
+  映射到哪个文件（可以为空）．
+
++ vm_private_data
+
+  由某些设备驱动使用存储一些私有信息，内存管理器不关心．
+
+所有的区域都可以通过vm_next和vm_prev链接起来，由于page-fault的频繁性，以红黑树组织起来，搜索时间就只有O(logN)了．地址较低的节点在左边，较高的在右边．
+
+** 内存区域操作
+** 映射文件/设备
+** 创建内存区域
+** 查找内存区域
+** 查询空闲区域
+** 插入内存区域
+** 合并连续区域
+** 重映射区域
+** 区域锁
+** 解锁区域
+** Fix up
+** 删除一个区域
+** 删除所有区域
 * 异常处理
 * Page Fault
 
