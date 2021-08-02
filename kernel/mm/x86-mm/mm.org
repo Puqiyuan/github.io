@@ -456,15 +456,19 @@ pte_bad宏是不存在的，因为页表条目是引用一个页面的，对于�
 
 下面的宏则是用于将页面地址和一组保护标志组合起来形成一个页表条目，或者是执行相逆的操作，从一个页表条目中提取页地址．
 
-| 函数名                | 描述                                                                                                                                             |
-| pgd_index(addr)       | 返回一个在PGD表中的索引，这个索引对应了线性地址addr                                                                                              |
-| pgd_offset(mm, addr)  | 接收内存描述符mm的地址以及线性地址addr作为参数，该宏会生成PGD里一个条目的线性地址，这个线性地址对应着addr，而PGD本身通过内存描述符里的指针找到． |
-| pgd_offset_k(addr)    | 与pgd_offset类似，不过产生的是内核空间的                                                                                                         |
-| pgd_page(pgd)         | 返回一个页框的页描述符地址，这个页框包含有PUD，它被pgd引用．                                                                                     |
-| pud_offset(pgd, addr) | 接收参数为一个指向PGD的指针pgd，以及一个线性地址．该宏会生成pud里一个条目的线性地址，这个条目对应着addr．                                        |
-| pud_page(pud)         | 返回PMD的线性地址，它被pud引用．                                                                                                                 |
-| pmd_index(addr)       | 返回一个在PMD中条目的索引，它可以映射到addr.                                                                                                     |
-| pmd_offset(pud, addr) |                                                                                                                                                  |
+| 函数名                       | 描述                                                                                                                                             |
+| pgd_index(addr)              | 返回一个在PGD表中的索引，这个索引对应了线性地址addr                                                                                              |
+| pgd_offset(mm, addr)         | 接收内存描述符mm的地址以及线性地址addr作为参数，该宏会生成PGD里一个条目的线性地址，这个线性地址对应着addr，而PGD本身通过内存描述符里的指针找到． |
+| pgd_offset_k(addr)           | 与pgd_offset类似，不过产生的是内核空间的                                                                                                         |
+| pgd_page(pgd)                | 返回一个页框的页描述符地址，这个页框包含有PUD，它被pgd引用．                                                                                     |
+| pud_offset(pgd, addr)        | 接收参数为一个指向PGD的指针pgd，以及一个线性地址．该宏会生成pud里一个条目的线性地址，这个条目对应着addr．                                        |
+| pud_page(pud)                | 返回PMD的线性地址，它被pud引用．                                                                                                                 |
+| pmd_index(addr)              | 返回一个在PMD中条目的索引，它可以映射到addr.                                                                                                     |
+| pmd_offset(pud, addr)        | 接收一个指针参数pud，它指向一个PUD条目，另一个参数是线性地址addr．该宏会产生一个指向PMD里一个条目的地址，这个条目对应着addr．                    |
+| pmd_page(pmd)                | 产生一个页表的页描述符地址，这个页表由pmd条目指向．                                                                                              |
+| mk_pte(p,prot)               | 接受一个页描述符p的地址，以及访问权限prot，并且构建对应的pte．                                                                                   |
+| pte_index(addr)              | 产生一个索引，它对应addr在页表中的索引．                                                                                                         |
+| pte_offset_kernel(dir, addr) |                                                                                                                                                  |
 *** 物理内存分布
 *** 进程页表
 *** 内核页表
