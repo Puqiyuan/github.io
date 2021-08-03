@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-07-27 Tue 22:30 -->
+<!-- 2021-08-03 Tue 22:41 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内核调试手段及工具</title>
@@ -305,12 +305,25 @@ printk_ratelimit的行为可以通过/proc/sys/kernel/printk_ratelimit来改变�
 </p>
 
 <p>
-在驱动里面有时候也想打印设备号，
+在驱动里面有时候也想打印设备号，为了一致性考虑，内核提供一些宏来打印：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">print_dev_t</span>(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">buffer</span>, <span style="color: #7CB8BB;">dev_t</span> <span style="color: #DFAF8F;">dev</span>);
+<span style="color: #7CB8BB;">char</span> *<span style="color: #93E0E3;">format_dev_t</span>(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">buffer</span>, <span style="color: #7CB8BB;">dev_t</span> <span style="color: #DFAF8F;">dev</span>);
+</pre>
+</div>
+
+<p>
+前面只是介绍了printk是怎样工作的，但是没有谈到它的缺点．
+</p>
+
+<p>
+printk可能会减慢系统，可以通过/proc的信息，在自己需要的时候主动查询其下的信息．/proc是一个特殊的由软件创建的文件系统，可以将信息导出．/proc下的文件都和一个内核函数绑定，在读文件的时候动态的生成文件内容．比如/proc/modules返回当前加载的模块．
 </p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-07-27 Tue 22:30</p>
+<p class="date">Created: 2021-08-03 Tue 22:41</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

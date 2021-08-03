@@ -128,4 +128,15 @@ printk_ratelimit的工作方式是，通过追踪有多少条信息打印到了�
 
 printk_ratelimit的行为可以通过/proc/sys/kernel/printk_ratelimit来改变，就是说重新打开输出信息时需要过多少秒．而/proc/sys/kernel/printk_ratelimit_burst控制了在第一个阀值前可以接收多少条信息．
 
-在驱动里面有时候也想打印设备号，
+在驱动里面有时候也想打印设备号，为了一致性考虑，内核提供一些宏来打印：
+#+begin_src c
+int print_dev_t(char *buffer, dev_t dev);
+char *format_dev_t(char *buffer, dev_t dev);
+#+end_src
+
+前面只是介绍了printk是怎样工作的，但是没有谈到它的缺点．
+
+printk可能会减慢系统，可以通过/proc的信息，在自己需要的时候主动查询其下的信息．/proc是一个特殊的由软件创建的文件系统，可以将信息导出．/proc下的文件都和一个内核函数绑定，在读文件的时候动态的生成文件内容．比如/proc/modules返回当前加载的模块．
+
+/proc在Linux系统上经常用到，许多现代Linux发行版上的工具比如ps，top以及uptime都是来自/proc的信息．某些设备驱动也会导出信息到/proc，/proc下的信息都是动态添加或删除的．
+
