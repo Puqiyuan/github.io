@@ -246,7 +246,57 @@ struct vm_area_struct {
 所有的区域都可以通过vm_next和vm_prev链接起来，由于page-fault的频繁性，以红黑树组织起来，搜索时间就只有O(logN)了．地址较低的节点在左边，较高的在右边．
 
 ** 内存区域操作
+一个VMA可以支持三个操作，比如open，close以及fault．VMA可以通过vm_operations_struct来实现这
+三个操作．这三个函数指针的定义如下：
+#+begin_src c
+struct vm_operations_struct {
+	void (*open)(struct vm_area_struct * area);
+	void (*close)(struct vm_area_struct * area);
+    vm_fault_t (*fault)(struct vm_fault *vmf);
+}
+#+end_src
+当一个区域创建时就会调用open，而删除时调用close．而fault函数是do_page_fault流程里会用到的函数．
+
+许多文件映射的都会使用一个vm_operations_struct类型的通用结构体generic_file_vm_ops．里面会注册fault函数：
+#+begin_src c
+.fault          = filemap_fault
+#+end_src
 ** 映射文件/设备
+当一个区域由文件映射时，其vm_file成员都会包含一个address_space类型的f_mapping成员．
+address_space通常包含以下几个成员：
+#+begin_src c
+struct address_space {
+	struct inode		*host;
+    unsigned long		nrpages;
+    const struct address_space_operations *a_ops;
+}
+#+end_src
+
+简单介绍下这几个成员：
++ host
+
+  文件对应的inode．
+
++ nrpages
+
+  由该地址空间使用的，在内存里的页面数量．
+
++ a_ops
+
+  函数指针的集合，用来操作文件系统．每个文件系统都会提供它自己的address_space_operations，当然有时也使用通用的函数
+
+内存管理器会周期性的刷新信息到磁盘．内存管理器不需要知道也不关心信息是怎样被写入到磁盘的，
+a_ops里的函数用来完成相关的事情：
+
+#+begin_src c
+struct address_space_operations {
+	int (*writepage)(struct page *page, struct writeback_control *wbc);
+    int (*readpage)(struct file *, struct page *);
+    sector_t (*bmap)(struct address_space *, sector_t);
+    ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
+}
+#+end_src
+
 ** 创建内存区域
 ** 查找内存区域
 ** 查询空闲区域
