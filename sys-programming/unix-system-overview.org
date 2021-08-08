@@ -265,6 +265,34 @@ prog1 < inputfile | prog2 | prog3 > outputfile
 对于资源相关的错误恢复操作就是延迟并且过小段时间再尝试．举个例子，如果有错误表明网络不可用，通常的操作就是延迟一段时间并且重建连接．某些应用还会使用指数回退算法，每次出错都会等待更长的时间．
 
 * 用户识别
+*用户ID*
+
+user ID是来自password文件的条目，它是一个数值值，向系统表明用户的身份．user ID通常每个用户都是唯一的．后面会看到内核会使用这些ID来决定某些操作是否被允许．
+
+user ID为0的叫做root或超级用户，root用户可以跳过大多数权限检查，某些函数限制在root用户才能做．
+
+/etc/passwd文件也指明了用户所属的group ID．组通常用来收集属于同一个项目或部门的用户信息．这允许在组员间分享文件等资源．后面会看到，可以将一个文件的权限设置为只有组内成员可以访问，而组外的成员不行．
+
+组文件/etc/group（group file）可以将组名转换为数字的group ID．
+
+*Example*
+
+下面的例子程序打印出user ID和group ID．
+#+begin_src c
+#include "apue.h"
+
+int main(int argc, char *argv[])
+{
+	printf("uid = %d, gid = %d\n", getuid(), getgid());
+	
+    return 0;
+}
+#+end_src
+上面的程序通过getuid和getgid来获取用户ID以及组ID．运行结果如下：
+#+begin_example
+~/.../bin(master)$ ./1.9 
+uid = 1000, gid = 1000
+#+end_example
 
 * 信号
 
