@@ -468,7 +468,15 @@ pte_bad宏是不存在的，因为页表条目是引用一个页面的，对于�
 | pmd_page(pmd)                | 产生一个页表的页描述符地址，这个页表由pmd条目指向．                                                                                              |
 | mk_pte(p,prot)               | 接受一个页描述符p的地址，以及访问权限prot，并且构建对应的pte．                                                                                   |
 | pte_index(addr)              | 产生一个索引，它对应addr在页表中的索引．                                                                                                         |
-| pte_offset_kernel(dir, addr) |                                                                                                                                                  |
+| pte_offset_kernel(dir, addr) | 产生一个页表的线性地址，它对应着线性地址addr，并且由PMD参数dir映射．                                                                             |
+| pte_offset_map(dir, addr)    | 接收两个参数，一个是指向PMD条目的指针，以及一个线性地址addr，然后产生一个在Page Table里的条目的线性地址，对应着线性地址addr．                    |
+| pte_page(x)                  | 返回一个page描述符的地址，这个page由Page Table条目x引用                                                                                          |
+
+最后要介绍的一组函数用来创建或删除页表条目．
+
+处理Page Table时可能会有些麻烦，因为对应的pte可能不存在，这样就需要创建pte．在这种情况下，需要分配新的页帧，填入0，并且添加条目．
+
+下面描述这样函数，它们都是针对80x86而言的．
 *** 物理内存分布
 *** 进程页表
 *** 内核页表
