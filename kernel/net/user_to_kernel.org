@@ -30,6 +30,56 @@ procfs和sysctl之间选择的一个依据是导出信息的多少．关联简�
 
 许多网络功能都会在/proc下注册一个或多个文件，这在初始化阶段完成，包括启动时，或者模块加载时．当内核读这些文件时，内核会运行一些函数，并且返回一些输出．由网络代码注册的文件在/proc/net下．
 
+/proc下的目录可以通过proc_mkdir来创建．而/proc下文件创建的公共接口是proc_register．
+
+举个arp创建proc文件的例子：
+#+begin_src c
+static int __net_init arp_net_init(struct net *net)
+{
+	if (!proc_create_net("arp", 0444, net->proc_net, &arp_seq_ops,
+			sizeof(struct neigh_seq_state)))
+		return -ENOMEM;
+	return 0;
+}
+
+#define proc_create_net(name, mode, parent, ops, state_size) \
+	proc_create_net_data(name, mode, parent, ops, state_size, NULL)
+
+struct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,
+		struct proc_dir_entry *parent, const struct seq_operations *ops,
+		unsigned int state_size, void *data)
+{
+	struct proc_dir_entry *p;
+
+	p = proc_create_reg(name, mode, &parent, data);
+	if (!p)
+		return NULL;
+	pde_force_lookup(p);
+	p->proc_ops = &proc_net_seq_ops;
+	p->seq_ops = ops;
+	p->state_size = state_size;
+	return proc_register(parent, p);
+}    
+#+end_src
+
+在/proc/sys下看到的文件其实是内核的一个变量，对于每个这样的变量，内核可以定义如下几点：
++ 将文件放置于何处．通常相同内核组件或特点的变量共用一个目录．比如在/proc/sys/net/ipv4下可以找到所有IPv4相关的文件．
++ 文件具有什么名字．通常这个文件的名字就是内核变量的名字，但也有不同的情况，为了做到用户友好的名字．
++ 权限．举个例子，一个文件可以被任何用户读取，但是修改的话就只有超级用户才能做到了．这个权限值在创建时可以传入．
+
+除了直接读取或写/proc/sys，通过sysctl也可以做到．
+
+一些目录或文件在启动时静态定义，另外的一些却是在动态运行时添加．举几个例子，它们会在运行时动态的在/proc/sys下创建目录或文件：
++ 当一个新的网络协议加载或卸载时．
++ 当一个网络设备注册或注销时．针对每个设备，都有一套参数在/proc/sys下．比如/proc/sys/net/ipv4/conf和/proc/sys/net/ipv4/neigh针对每个注册的网络设备都有一个目录．
+
+/proc/sys的目录或文件通过ctl_table数据结构来表达．其通过register_sysctl_table和unregister_sysctl_table来注册和注销．
+
+下面介绍下几个关键的成员：
+
++ const char *procname
+
+  出现在/proc/sys下的文件名．
 
 * ioctl
 * Netlink
