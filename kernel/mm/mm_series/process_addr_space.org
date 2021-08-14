@@ -285,20 +285,43 @@ struct address_space {
 
   函数指针的集合，用来操作文件系统．每个文件系统都会提供它自己的address_space_operations，当然有时也使用通用的函数
 
-内存管理器会周期性的刷新信息到磁盘．内存管理器不需要知道也不关心信息是怎样被写入到磁盘的，
-a_ops里的函数用来完成相关的事情：
+内存管理器会周期性的刷新信息到磁盘．内存管理器不需要知道也不关心信息是怎样被写入到磁盘的，a_ops里的函数用来完成相关的事情：
 
 #+begin_src c
 struct address_space_operations {
 	int (*writepage)(struct page *page, struct writeback_control *wbc);
     int (*readpage)(struct file *, struct page *);
     sector_t (*bmap)(struct address_space *, sector_t);
+    int (*releasepage) (struct page *, gfp_t);
     ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
 }
 #+end_src
 
+下面描述下这些函数的作用：
++ writepage
+  
+  将页面写入磁盘．
+
++ readpage
+  
+  从磁盘里读入页面．
+
++ bmap
+
+  映射到一个块，这样就可以执行生IO．
+    
 ** 创建内存区域
+系统调用mmap用来在进程地址空间里创建一个内存区域，mmap系统调用最后调到了do_mmap．这个函数很复杂，大体来说做了以下几点事情：
+
+1) 对参数作完整性检查．
+2) 寻找一个空闲的足够大的区域来映射．
+3) 检查VM的标志和文件的访问权限能不能对上．
+4) 如果原来已经存在一个映射，那么调整它以适合新的映射．
+5) 从slab分配器里分配一个vm_area_struct并且填充它．
+6) 链接上这个新的VMA．
+7) 更新一些统计信息并退出．
 ** 查找内存区域
+
 ** 查询空闲区域
 ** 插入内存区域
 ** 合并连续区域
