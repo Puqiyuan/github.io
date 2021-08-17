@@ -45,13 +45,14 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
   + [[./kernel/net/critical_data_struct.html][关键数据结构]]。
   + [[./kernel/net/user_to_kernel.html][用户空间到内核层的接口]]．
 ** 中断与异常
-  + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考[[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。
+  + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考
+    [[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。
 ** 杂项
   + [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
   + [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
   + [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
   + [[./kernel/debug/debug-tech.html][内核调试手段及工具]]。
-      
+  + [[./kernel/race_condition/concurrency_race_condition.html][并发与竟态．]]
   
 * 算法与数据结构
 - [[./algo/shiftand.html][Shift-And算法]]。
