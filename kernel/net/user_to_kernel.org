@@ -80,6 +80,16 @@ struct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,
 + const char *procname
 
   出现在/proc/sys下的文件名．
++ int maxlen
 
+  导出的内核变量的最大长度．
+
++ umode_t mode
+
+  相关文件的权限值．
+
++ proc_handler *proc_handler
+
+  当读写/proc/sys下的文件时，会调用的函数．尤其是针对常规文件时（叶子节点），而针对目录，内核会分配一个默认的proc_handler函数．
 * ioctl
 * Netlink
