@@ -91,5 +91,15 @@ struct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,
 + proc_handler *proc_handler
 
   当读写/proc/sys下的文件时，会调用的函数．尤其是针对常规文件时（叶子节点），而针对目录，内核会分配一个默认的proc_handler函数．
+
++ extra1\\
+  extra2
+
+  两个可选的参数，主要用来定义一个变量的最小和最大值．
+
+取决于什么类型的变量关联到文件，proc_handler初始化方式不同．举个例子，当内核变量由一个或多个整数值组成时，proc_handler就是proc_dointvec．下面的表说明了几个可以用来初始化proc_handler的函数，这些函数在kernel/sysctl.c都有明确的定义和良好的注释．
+
+| 函数          | 描述 |
+| proc_dostring |      |
 * ioctl
 * Netlink

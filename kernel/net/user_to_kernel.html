@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-08-18 Wed 23:26 -->
+<!-- 2021-08-19 Thu 22:36 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>用户空间到内核层的接口</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf2260b5">1. 概述</a></li>
-<li><a href="#orge348794">2. procfs与sysctl</a></li>
-<li><a href="#org662e539">3. ioctl</a></li>
-<li><a href="#org2ea43b1">4. Netlink</a></li>
+<li><a href="#orgdd67d3d">1. 概述</a></li>
+<li><a href="#org0ffd465">2. procfs与sysctl</a></li>
+<li><a href="#orgf034fc1">3. ioctl</a></li>
+<li><a href="#org46762a5">4. Netlink</a></li>
 </ul>
 </div>
 </div>
@@ -73,8 +73,8 @@ for the JavaScript code in this tag.
 本文主要介绍用户空间的应用通过什么机制来和内核沟通或读取内核导出的信息．但是不会关注这些实现的细节，不过会指出这些实现的代码在哪里，感兴趣的话可以详细研究．比如在哪里可以添加一个目录到/proc下．为了响应ioctl命令，有哪些内核的函数参与处理，以及netlink，一种当前普遍使用的应用与内核通信的机制．
 </p>
 
-<div id="outline-container-orgf2260b5" class="outline-2">
-<h2 id="orgf2260b5"><span class="section-number-2">1</span> 概述</h2>
+<div id="outline-container-orgdd67d3d" class="outline-2">
+<h2 id="orgdd67d3d"><span class="section-number-2">1</span> 概述</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内核可以通过不同的接口将它内部的信息导出到用户空间．除了可以使用系统调用，还有其它的三种方式．
@@ -112,8 +112,8 @@ sysfs(/sys)
 </p>
 </div>
 </div>
-<div id="outline-container-orge348794" class="outline-2">
-<h2 id="orge348794"><span class="section-number-2">2</span> procfs与sysctl</h2>
+<div id="outline-container-org0ffd465" class="outline-2">
+<h2 id="org0ffd465"><span class="section-number-2">2</span> procfs与sysctl</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 procfs和sysctl都可以导出内核内部信息，但是procfs主要导出只读信息，而sysctl主要用于导出可写的信息（但是只能通过超级用户）．
@@ -224,19 +224,53 @@ proc_handler *proc_handler
 <p>
 当读写/proc/sys下的文件时，会调用的函数．尤其是针对常规文件时（叶子节点），而针对目录，内核会分配一个默认的proc_handler函数．
 </p></li>
+
+<li><p>
+extra1<br>
+extra2
+</p>
+
+<p>
+两个可选的参数，主要用来定义一个变量的最小和最大值．
+</p></li>
 </ul>
+
+<p>
+取决于什么类型的变量关联到文件，proc_handler初始化方式不同．举个例子，当内核变量由一个或多个整数值组成时，proc_handler就是proc_dointvec．下面的表说明了几个可以用来初始化proc_handler的函数，这些函数在kernel/sysctl.c都有明确的定义和良好的注释．
+</p>
+
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">函数</td>
+<td class="org-left">描述</td>
+</tr>
+
+<tr>
+<td class="org-left">proc_dostring</td>
+<td class="org-left">&#xa0;</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
-<div id="outline-container-org662e539" class="outline-2">
-<h2 id="org662e539"><span class="section-number-2">3</span> ioctl</h2>
+<div id="outline-container-orgf034fc1" class="outline-2">
+<h2 id="orgf034fc1"><span class="section-number-2">3</span> ioctl</h2>
 </div>
-<div id="outline-container-org2ea43b1" class="outline-2">
-<h2 id="org2ea43b1"><span class="section-number-2">4</span> Netlink</h2>
+<div id="outline-container-org46762a5" class="outline-2">
+<h2 id="org46762a5"><span class="section-number-2">4</span> Netlink</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-08-18 Wed 23:26</p>
+<p class="date">Created: 2021-08-19 Thu 22:36</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
