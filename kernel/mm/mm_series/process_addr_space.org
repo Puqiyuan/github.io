@@ -321,7 +321,25 @@ struct address_space_operations {
 6) 链接上这个新的VMA．
 7) 更新一些统计信息并退出．
 ** 查找内存区域
+一种常见的操作是找寻一个特定的地址属于哪个VMA，比如page-fault里的操作．下面列出一些函数，其中包括find_vma，这些函数都会影响内存区域．
 
++ struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
+  
+  找到一个VMA，可以包含特定的地址addr．如果这样的区不存在，就返回最接近请求地址的VMA．
+
++ struct vm_area_struct *find_vma_prev(struct mm_struct *mm, unsigned long addr,struct vm_area_struct **pprev)
+
+  与find_vma类似，但也会在pprev里返回前一个vma．
+
++ struct vm_area_struct *find_vma_intersection(struct mm_struct *mm,unsigned long start_addr,unsigned long end_addr)
+
+  返回一个VMA，它和给定的地址范围相交．在检查一个地址范围是否被某个VMA使用时比较有用．
+
++ struct vm_area_struct *vma_merge(struct mm_struct *mm,struct vm_area_struct *prev,\\
+  unsigned long addr,unsigned long end,unsigned long vm_flags,struct anon_vma *anon_vma,\\
+  struct file *file,pgoff_t pgoff, struct mempolicy *policy,struct vm_userfaultfd_ctx vm_userfaultfd_ctx)
+
+  
 ** 查询空闲区域
 ** 插入内存区域
 ** 合并连续区域
