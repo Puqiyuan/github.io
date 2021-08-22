@@ -295,7 +295,64 @@ uid = 1000, gid = 1000
 #+end_example
 
 * 信号
+信号是一种用来通知进程某些条件已经发生的技术．比如，如果进程除以0的话，名为SIGFPE的信号会发送给进程．一个进程对于一个信号通常有三种选择：
+1) 忽略信号．对于硬件异常来说，这个选项是不推荐的．比如除0异常，引用内存超出了进程的地址空间，因为这个结果是未定义的．
+2) 采取默认行为．对于除0异常，默认行为就是终止进程．
+3) 提供一个信号发生时可供调用的函数．通过这样一个自己提供的函数，就可以知道信号何时发生，并按我们希望的方式去处理．
 
+许多情况都会生成信号，比如Ctrl-C键等．除了摁键，kill函数也可以发送信号．
+
+*Example*
+
+之前写过一个简单的shell例子程序，如果调用这个程序，并且按下中断键，进程就会终止．进程没有告诉内核做点其它的事情，所以默认的行为就是进程终止．
+
+为了捕获这个信号，需要调用signal函数，指明当SIGINT信号发生时需要调用的函数名字，在下面的例子里这个函数是sig_int．当它被调用时，就会打印一行信息和新的提示符．
+
+#+begin_src c
+#include "apue.h"
+#include <sys/wait.h>
+
+static void sig_int(int);
+
+int main(int argc, char *argv[])
+{
+	char buf[MAXLINE];
+	pid_t pid;
+	int status;
+
+	if (signal(SIGINT, sig_int) == SIG_ERR)
+		err_sys("signal error");
+
+	printf("%% ");
+	while (fgets(buf, MAXLINE, stdin) != NULL) {
+		if (buf[strlen(buf) - 1] == '\n')
+			buf[strlen(buf) - 1] = 0;
+
+		if ((pid = fork()) < 0) {
+			err_sys("fork error");
+		} else if (pid == 0) {
+			execlp(buf, buf, (char*)0);
+			err_ret("couldn't execute: %s", buf);
+			exit(127);
+		}
+
+		if ((pid = waitpid(pid, &status, 0)) < 0)
+			err_sys("waitpid error");
+		printf("%% ");
+	}
+		   
+	
+    return 0;
+}
+
+void sig_int(int signo)
+{
+	printf("interrupt\n%% ");
+}
+#+end_src
+
+
+后面还会介绍更多的关于signal．
 * 时间值
 
 * 系统调用与库函数
