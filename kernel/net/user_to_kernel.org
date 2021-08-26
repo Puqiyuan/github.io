@@ -99,7 +99,142 @@ struct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,
 
 取决于什么类型的变量关联到文件，proc_handler初始化方式不同．举个例子，当内核变量由一个或多个整数值组成时，proc_handler就是proc_dointvec．下面的表说明了几个可以用来初始化proc_handler的函数，这些函数在kernel/sysctl.c都有明确的定义和良好的注释．
 
-| 函数          | 描述 |
-| proc_dostring |      |
+| 函数          | 描述          |
+| proc_dostring | 读/写一个串   |
+| proc_dointvec | 读/写一组整数 |
+
+下面举个来自sysctl.c里的vm_table变量的一部分：
+#+begin_src c
+static struct ctl_table vm_table[] = {
+	{
+		.procname	= "overcommit_memory",
+		.data		= &sysctl_overcommit_memory,
+		.maxlen		= sizeof(sysctl_overcommit_memory),
+		.mode		= 0644,
+		.proc_handler	= overcommit_policy_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &two,
+	},
+#+end_src
+
+这样在/proc/sys可以用find命令里找到这个文件．
+
+下面再看一个来自同文件的ctl_table变量：
+#+begin_src c
+static struct ctl_table sysctl_base_table[] = {
+	{
+		.procname	= "kernel",
+		.mode		= 0555,
+		.child		= kern_table,
+	},
+	{
+		.procname	= "vm",
+		.mode		= 0555,
+		.child		= vm_table,
+	},
+	{
+		.procname	= "fs",
+		.mode		= 0555,
+		.child		= fs_table,
+	},
+	{
+		.procname	= "debug",
+		.mode		= 0555,
+		.child		= debug_table,
+	},
+	{
+		.procname	= "dev",
+		.mode		= 0555,
+		.child		= dev_table,
+	},
+	{ }
+};
+#+end_src
+
+这样在/proc/sys下可以看到这些目录．
+
+前述已提到，可以通过register_sysctl_table和unregister_sysctl_table在/proc/sys下注册和注销文件．注意传给这些函数的ctl_table参数都没有前缀/proc/sys．如果想在一个子目录下创建文件，就得通过ctl_table的child成员，看个例子：
+#+begin_src c
+static struct ctl_table scsi_table[] = {
+	{ .procname	= "logging_level",
+	  .data		= &scsi_logging_level,
+	  .maxlen	= sizeof(scsi_logging_level),
+	  .mode		= 0644,
+	  .proc_handler	= proc_dointvec },
+	{ }
+};
+
+static struct ctl_table scsi_dir_table[] = {
+	{ .procname	= "scsi",
+	  .mode		= 0555,
+	  .child	= scsi_table },
+	{ }
+};
+
+static struct ctl_table scsi_root_table[] = {
+	{ .procname	= "dev",
+	  .mode		= 0555,
+	  .child	= scsi_dir_table },
+	{ }
+};
+
+static struct ctl_table_header *scsi_table_header;
+
+int __init scsi_init_sysctl(void)
+{
+	scsi_table_header = register_sysctl_table(scsi_root_table);
+	if (!scsi_table_header)
+		return -ENOMEM;
+	return 0;
+}
+#+end_src
+
+传给register_sysctl_table函数的就是ctl_table的根．最后的结果如下图：
+
+#+CAPTION: /proc/sys/dev/scsi/logging_level文件的注册结果
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/logging_level.png]]
+
+假设想添加一个文件abc到相同的目录，也是很简单的了，就再定义一个abc的ctl_table实例，就是最后一级的添加个文件．比如下面的例子：
+#+begin_src c
+/* file(s) in /proc/sys/dev/mac_hid */
+static struct ctl_table mac_hid_files[] = {
+	{
+		.procname	= "mouse_button_emulation",
+		.data		= &mouse_emulate_buttons,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= mac_hid_toggle_emumouse,
+	},
+	{
+		.procname	= "mouse_button2_keycode",
+		.data		= &mouse_button2_keycode,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "mouse_button3_keycode",
+		.data		= &mouse_button3_keycode,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{ }
+};
+
+/* dir in /proc/sys/dev */
+static struct ctl_table mac_hid_dir[] = {
+	{
+		.procname	= "mac_hid",
+		.maxlen		= 0,
+		.mode		= 0555,
+		.child		= mac_hid_files,
+	},
+	{ }
+};
+#+end_src
+
 * ioctl
 * Netlink
