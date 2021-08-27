@@ -339,9 +339,45 @@ struct address_space_operations {
   unsigned long addr,unsigned long end,unsigned long vm_flags,struct anon_vma *anon_vma,\\
   struct file *file,pgoff_t pgoff, struct mempolicy *policy,struct vm_userfaultfd_ctx vm_userfaultfd_ctx)
 
-  
+  尝试扩展提供的vma从而可以覆盖新的地址地址范围．如果vma不能向前扩展，那么就检查下一个vma能否向后扩展．如果区域没有设备/文件映射并且权限允许的话就合并．
+
++ unsigned long get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
+		unsigned long pgoff, unsigned long flags)
+
+  返回一个空闲区域的内存地址，这个区域是足够大的来容纳请求空间大小的内存．主要是在创建新的vma时会用到．
+
++ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
+
+  将一个新的vma插入到一个线性地址空间．
+
+对于find_vma函数，首先会检查是否有cache的vma，缓存着上一次调用find_vma的结果．这在大多数情况下是成立的．如果addr不属于缓存的vma，那么存在mm_rb成员的红黑树就会被遍历．如果这个查询的地址没有包含在任何的vma里，该函数就会返回一个最接近addr的vma，所以对于调用者来说，再次确认这个返回的vma是包含有addr是有必要的．  
+
+对于find_vma_prev，其功能与find_vma类似．只不过它还会额外的返回一个指针，指向想要vma的前一个vma．
 ** 查询空闲区域
+当新的区域需要被映射到内存时，空闲的vma就必须被分配，并且要足够大来容纳新的映射．负责找寻空闲区域的函数是get_unmapped_area．
+
+参数file代表文件或设备，而pgoff代表文件的偏移，从哪里开始映射．当然还有其它参数．
+
+如果准备映射设备，就会使用f_op->get_unmapped_area．这是因为对于设备或文件来说可能会有通用代码无法感知的额外要求，比如对于某个特定的虚拟地址必须对齐．
+
+如果没有啥特殊要求，架构提供的回调函数mm->get_unmapped_area就会被调用．当然并不是所有的架构都会提供这样的一个函数．
+
+get_unmapped_area的调用图如下：
+#+CAPTION: get_unmapped_area调用图
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 15% :height 15%
+[[./img/get_unmapped_area_call_graph.png]]
+
 ** 插入内存区域
+插入内存区域的主要函数是insert_vm_struct．其调用图见下：
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/insert_vm_struct_call_graph.png]]
+
+该函数首先会通过find_vma_links做一些准备工作．会找到在红黑树上正确的节点位置，然后调用vma_link来完成vma的链接．
+
+
 ** 合并连续区域
 ** 重映射区域
 ** 区域锁

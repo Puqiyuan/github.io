@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-08-20 Fri 22:24 -->
+<!-- 2021-08-27 Fri 21:57 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程地址空间</title>
@@ -62,35 +62,35 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf06668c">1. 线性地址空间</a></li>
-<li><a href="#org0ad72cf">2. 管理地址空间</a></li>
-<li><a href="#org3819844">3. 进程地址空间描述符</a>
+<li><a href="#orgdf38f12">1. 线性地址空间</a></li>
+<li><a href="#orgcd639c5">2. 管理地址空间</a></li>
+<li><a href="#orgd256e4a">3. 进程地址空间描述符</a>
 <ul>
-<li><a href="#orgccb4845">3.1. 分配mm_struct描述符</a></li>
-<li><a href="#org23da3c6">3.2. 初始化描述符</a></li>
-<li><a href="#org87487a2">3.3. 销毁mm_struct</a></li>
+<li><a href="#org1b8663e">3.1. 分配mm_struct描述符</a></li>
+<li><a href="#org26936a2">3.2. 初始化描述符</a></li>
+<li><a href="#orgf0b72de">3.3. 销毁mm_struct</a></li>
 </ul>
 </li>
-<li><a href="#orgdab7067">4. 内存区域（regions）</a>
+<li><a href="#org3bb6b41">4. 内存区域（regions）</a>
 <ul>
-<li><a href="#org550e8bd">4.1. 内存区域操作</a></li>
-<li><a href="#orga48bb71">4.2. 映射文件/设备</a></li>
-<li><a href="#orga004276">4.3. 创建内存区域</a></li>
-<li><a href="#orge58e185">4.4. 查找内存区域</a></li>
-<li><a href="#orge9acad0">4.5. 查询空闲区域</a></li>
-<li><a href="#org07bd510">4.6. 插入内存区域</a></li>
-<li><a href="#orged9b63b">4.7. 合并连续区域</a></li>
-<li><a href="#orged455c3">4.8. 重映射区域</a></li>
-<li><a href="#org98b5cf1">4.9. 区域锁</a></li>
-<li><a href="#orgf6b98e5">4.10. 解锁区域</a></li>
-<li><a href="#org4dc0fd4">4.11. Fix up</a></li>
-<li><a href="#orga6685d5">4.12. 删除一个区域</a></li>
-<li><a href="#org77a727c">4.13. 删除所有区域</a></li>
+<li><a href="#org52424e3">4.1. 内存区域操作</a></li>
+<li><a href="#org6ac7f35">4.2. 映射文件/设备</a></li>
+<li><a href="#org4af96ed">4.3. 创建内存区域</a></li>
+<li><a href="#orgc87ff99">4.4. 查找内存区域</a></li>
+<li><a href="#org4ecf893">4.5. 查询空闲区域</a></li>
+<li><a href="#orgf89c022">4.6. 插入内存区域</a></li>
+<li><a href="#orgba3b37a">4.7. 合并连续区域</a></li>
+<li><a href="#org0249435">4.8. 重映射区域</a></li>
+<li><a href="#org8ccf09e">4.9. 区域锁</a></li>
+<li><a href="#orgf94e500">4.10. 解锁区域</a></li>
+<li><a href="#org2802c0c">4.11. Fix up</a></li>
+<li><a href="#org74823cd">4.12. 删除一个区域</a></li>
+<li><a href="#org49b814c">4.13. 删除所有区域</a></li>
 </ul>
 </li>
-<li><a href="#orgdff401c">5. 异常处理</a></li>
-<li><a href="#org0a97c61">6. Page Fault</a></li>
-<li><a href="#orgfef3878">7. 拷贝到/拷贝自用户空间</a></li>
+<li><a href="#org907c19a">5. 异常处理</a></li>
+<li><a href="#orgc765bc8">6. Page Fault</a></li>
+<li><a href="#org048b09b">7. 拷贝到/拷贝自用户空间</a></li>
 </ul>
 </div>
 </div>
@@ -110,14 +110,14 @@ for the JavaScript code in this tag.
 本文首先介绍线性地址是如何划分以及各个部分的目的．随后会介绍描述每个进程的结构体，这些结构体是如何被分配，初始化以及怎么销毁的．随后会介绍进程的地址空间是如何创建的以及相关联的函数．这些会引入关于进程地址空间的异常处理，pagefault等其它机制．最后会介绍下如何安全的向用户空间拷贝数据或者从用户空间拷贝数据到内核空间．
 </p>
 
-<div id="outline-container-orgf06668c" class="outline-2">
-<h2 id="orgf06668c"><span class="section-number-2">1</span> 线性地址空间</h2>
+<div id="outline-container-orgdf38f12" class="outline-2">
+<h2 id="orgdf38f12"><span class="section-number-2">1</span> 线性地址空间</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 从用户的观点来说，线性地址空间是平坦的．但是从内核空间来说就很不一样了．地址空间被划分为两部分，用户空间部分，在上下文切换后可能会改变，而内核空间，保持不变．而划分出这个位置的就是PAGE_OFFSET，对于X86来说这个值是0xC0000000．这意味着3GB留给进程，而1GB留给内核空间，内核所看到的地址空间划分如下图：
 </p>
 
-<div id="org28104ac" class="figure">
+<div id="org4ee335d" class="figure">
 <p><img src="./img/kas.png" alt="kas.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 1: </span>内核看到的地址空间</p>
@@ -125,8 +125,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org0ad72cf" class="outline-2">
-<h2 id="org0ad72cf"><span class="section-number-2">2</span> 管理地址空间</h2>
+<div id="outline-container-orgcd639c5" class="outline-2">
+<h2 id="orgcd639c5"><span class="section-number-2">2</span> 管理地址空间</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 进程用到的地址空间，由mm_struct结构体管理着，它类似于BSD里的vmspace．
@@ -142,7 +142,7 @@ vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内�
 </p>
 
 
-<div id="orgb788616" class="figure">
+<div id="org88d5aa6" class="figure">
 <p><img src="./img/ds_as.png" alt="ds_as.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>地址空间相关的结构体</p>
@@ -228,8 +228,8 @@ exit
 </div>
 </div>
 
-<div id="outline-container-org3819844" class="outline-2">
-<h2 id="org3819844"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
+<div id="outline-container-orgd256e4a" class="outline-2">
+<h2 id="orgd256e4a"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 进程地址空间由mm_struct描述，就是说对于一个进程来说，仅有一个mm_struct，并且这个mm_struct由用户线程共享．实际上，线程的寻找方式就是，找出所有指向同一个mm_strcut的task_struct(s).
@@ -300,8 +300,8 @@ free_mm：将mm_struct返回到slab分配器．
 </p>
 </div>
 
-<div id="outline-container-orgccb4845" class="outline-3">
-<h3 id="orgccb4845"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
+<div id="outline-container-org1b8663e" class="outline-3">
+<h3 id="org1b8663e"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 有两个函数可以用于分配mm_struct，它们看起来容易混淆．一是allocate_mm，它是一个预定义的宏，单纯从slab allocator里分配mm_struct．而mm_alloc除了调用allocate_mm分配一个mm_struct，还得调用mm_init初始化．
@@ -309,8 +309,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 
-<div id="outline-container-org23da3c6" class="outline-3">
-<h3 id="org23da3c6"><span class="section-number-3">3.2</span> 初始化描述符</h3>
+<div id="outline-container-org26936a2" class="outline-3">
+<h3 id="org26936a2"><span class="section-number-3">3.2</span> 初始化描述符</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 系统里的第一个mm_struct叫做init_mm．后面的mm_struct都是父进程mm_struct的拷贝．init_mm在编译时静态的初始化好了．如下：
@@ -339,8 +339,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 
-<div id="outline-container-org87487a2" class="outline-3">
-<h3 id="org87487a2"><span class="section-number-3">3.3</span> 销毁mm_struct</h3>
+<div id="outline-container-orgf0b72de" class="outline-3">
+<h3 id="orgf0b72de"><span class="section-number-3">3.3</span> 销毁mm_struct</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 使用atomic_inc(&amp;mm-&gt;mm_users)可以增加用户计数，而mmput会递减这个数字．如果减到0，所有的映射就都会被exit_mmap取消．
@@ -348,8 +348,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 </div>
-<div id="outline-container-orgdab7067" class="outline-2">
-<h2 id="orgdab7067"><span class="section-number-2">4</span> 内存区域（regions）</h2>
+<div id="outline-container-org3bb6b41" class="outline-2">
+<h2 id="org3bb6b41"><span class="section-number-2">4</span> 内存区域（regions）</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 一个进程的完整地址空间是很少使用到的，仅有稀疏的几个区域会被用到，这样的每个区域被vm_area_struct结构体表示，这样的vm_area_struct不会重叠，并且一个vm_area_struct内具有相同的保护目的．举个例子，一个只读的共享库就会被加载到同一个地址空间（内存区域）．通过/proc/PID/maps可以查看一个进程映射的所有内存区域．
@@ -600,8 +600,8 @@ vm_private_data
 </p>
 </div>
 
-<div id="outline-container-org550e8bd" class="outline-3">
-<h3 id="org550e8bd"><span class="section-number-3">4.1</span> 内存区域操作</h3>
+<div id="outline-container-org52424e3" class="outline-3">
+<h3 id="org52424e3"><span class="section-number-3">4.1</span> 内存区域操作</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 一个VMA可以支持三个操作，比如open，close以及fault．VMA可以通过vm_operations_struct来实现这
@@ -628,8 +628,8 @@ vm_private_data
 </div>
 </div>
 </div>
-<div id="outline-container-orga48bb71" class="outline-3">
-<h3 id="orga48bb71"><span class="section-number-3">4.2</span> 映射文件/设备</h3>
+<div id="outline-container-org6ac7f35" class="outline-3">
+<h3 id="org6ac7f35"><span class="section-number-3">4.2</span> 映射文件/设备</h3>
 <div class="outline-text-3" id="text-4-2">
 <p>
 当一个区域由文件映射时，其vm_file成员都会包含一个address_space类型的f_mapping成员．
@@ -719,8 +719,8 @@ bmap
 </div>
 </div>
 
-<div id="outline-container-orga004276" class="outline-3">
-<h3 id="orga004276"><span class="section-number-3">4.3</span> 创建内存区域</h3>
+<div id="outline-container-org4af96ed" class="outline-3">
+<h3 id="org4af96ed"><span class="section-number-3">4.3</span> 创建内存区域</h3>
 <div class="outline-text-3" id="text-4-3">
 <p>
 系统调用mmap用来在进程地址空间里创建一个内存区域，mmap系统调用最后调到了do_mmap．这个函数很复杂，大体来说做了以下几点事情：
@@ -737,8 +737,8 @@ bmap
 </ol>
 </div>
 </div>
-<div id="outline-container-orge58e185" class="outline-3">
-<h3 id="orge58e185"><span class="section-number-3">4.4</span> 查找内存区域</h3>
+<div id="outline-container-orgc87ff99" class="outline-3">
+<h3 id="orgc87ff99"><span class="section-number-3">4.4</span> 查找内存区域</h3>
 <div class="outline-text-3" id="text-4-4">
 <p>
 一种常见的操作是找寻一个特定的地址属于哪个VMA，比如page-fault里的操作．下面列出一些函数，其中包括find_vma，这些函数都会影响内存区域．
@@ -769,56 +769,129 @@ struct vm_area_struct *find_vma_intersection(struct mm_struct *mm,unsigned long 
 返回一个VMA，它和给定的地址范围相交．在检查一个地址范围是否被某个VMA使用时比较有用．
 </p></li>
 
-<li>struct vm_area_struct *vma_merge(struct mm_struct *mm,struct vm_area_struct *prev,<br>
+<li><p>
+struct vm_area_struct *vma_merge(struct mm_struct *mm,struct vm_area_struct *prev,<br>
 unsigned long addr,unsigned long end,unsigned long vm_flags,struct anon_vma *anon_vma,<br>
-struct file *file,pgoff_t pgoff, struct mempolicy *policy,struct vm_userfaultfd_ctx vm_userfaultfd_ctx)</li>
+struct file *file,pgoff_t pgoff, struct mempolicy *policy,struct vm_userfaultfd_ctx vm_userfaultfd_ctx)
+</p>
+
+<p>
+尝试扩展提供的vma从而可以覆盖新的地址地址范围．如果vma不能向前扩展，那么就检查下一个vma能否向后扩展．如果区域没有设备/文件映射并且权限允许的话就合并．
+</p></li>
+
+<li><p>
+unsigned long get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
+unsigned long pgoff, unsigned long flags)
+</p>
+
+<p>
+返回一个空闲区域的内存地址，这个区域是足够大的来容纳请求空间大小的内存．主要是在创建新的vma时会用到．
+</p></li>
+
+<li><p>
+int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
+</p>
+
+<p>
+将一个新的vma插入到一个线性地址空间．
+</p></li>
 </ul>
+
+<p>
+对于find_vma函数，首先会检查是否有cache的vma，缓存着上一次调用find_vma的结果．这在大多数情况下是成立的．如果addr不属于缓存的vma，那么存在mm_rb成员的红黑树就会被遍历．如果这个查询的地址没有包含在任何的vma里，该函数就会返回一个最接近addr的vma，所以对于调用者来说，再次确认这个返回的vma是包含有addr是有必要的．  
+</p>
+
+<p>
+对于find_vma_prev，其功能与find_vma类似．只不过它还会额外的返回一个指针，指向想要vma的前一个vma．
+</p>
+</div>
+</div>
+<div id="outline-container-org4ecf893" class="outline-3">
+<h3 id="org4ecf893"><span class="section-number-3">4.5</span> 查询空闲区域</h3>
+<div class="outline-text-3" id="text-4-5">
+<p>
+当新的区域需要被映射到内存时，空闲的vma就必须被分配，并且要足够大来容纳新的映射．负责找寻空闲区域的函数是get_unmapped_area．
+</p>
+
+<p>
+参数file代表文件或设备，而pgoff代表文件的偏移，从哪里开始映射．当然还有其它参数．
+</p>
+
+<p>
+如果准备映射设备，就会使用f_op-&gt;get_unmapped_area．这是因为对于设备或文件来说可能会有通用代码无法感知的额外要求，比如对于某个特定的虚拟地址必须对齐．
+</p>
+
+<p>
+如果没有啥特殊要求，架构提供的回调函数mm-&gt;get_unmapped_area就会被调用．当然并不是所有的架构都会提供这样的一个函数．
+</p>
+
+<p>
+get_unmapped_area的调用图如下：
+</p>
+
+<div id="org50081ff" class="figure">
+<p><img src="./img/get_unmapped_area_call_graph.png" alt="get_unmapped_area_call_graph.png" width="15%" height="15%">
+</p>
+<p><span class="figure-number">Figure 3: </span>get_unmapped_area调用图</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf89c022" class="outline-3">
+<h3 id="orgf89c022"><span class="section-number-3">4.6</span> 插入内存区域</h3>
+<div class="outline-text-3" id="text-4-6">
+<p>
+插入内存区域的主要函数是insert_vm_struct．其调用图见下：
+</p>
+
+<div id="org1e09d27" class="figure">
+<p><img src="./img/insert_vm_struct_call_graph.png" alt="insert_vm_struct_call_graph.png" width="30%" height="30%">
+</p>
+</div>
+
+<p>
+该函数首先会通过find_vma_links做一些准备工作．会找到在红黑树上正确的节点位置，然后调用vma_link来完成vma的链接．
+</p>
 </div>
 </div>
 
 
-<div id="outline-container-orge9acad0" class="outline-3">
-<h3 id="orge9acad0"><span class="section-number-3">4.5</span> 查询空闲区域</h3>
+<div id="outline-container-orgba3b37a" class="outline-3">
+<h3 id="orgba3b37a"><span class="section-number-3">4.7</span> 合并连续区域</h3>
 </div>
-<div id="outline-container-org07bd510" class="outline-3">
-<h3 id="org07bd510"><span class="section-number-3">4.6</span> 插入内存区域</h3>
+<div id="outline-container-org0249435" class="outline-3">
+<h3 id="org0249435"><span class="section-number-3">4.8</span> 重映射区域</h3>
 </div>
-<div id="outline-container-orged9b63b" class="outline-3">
-<h3 id="orged9b63b"><span class="section-number-3">4.7</span> 合并连续区域</h3>
+<div id="outline-container-org8ccf09e" class="outline-3">
+<h3 id="org8ccf09e"><span class="section-number-3">4.9</span> 区域锁</h3>
 </div>
-<div id="outline-container-orged455c3" class="outline-3">
-<h3 id="orged455c3"><span class="section-number-3">4.8</span> 重映射区域</h3>
+<div id="outline-container-orgf94e500" class="outline-3">
+<h3 id="orgf94e500"><span class="section-number-3">4.10</span> 解锁区域</h3>
 </div>
-<div id="outline-container-org98b5cf1" class="outline-3">
-<h3 id="org98b5cf1"><span class="section-number-3">4.9</span> 区域锁</h3>
+<div id="outline-container-org2802c0c" class="outline-3">
+<h3 id="org2802c0c"><span class="section-number-3">4.11</span> Fix up</h3>
 </div>
-<div id="outline-container-orgf6b98e5" class="outline-3">
-<h3 id="orgf6b98e5"><span class="section-number-3">4.10</span> 解锁区域</h3>
+<div id="outline-container-org74823cd" class="outline-3">
+<h3 id="org74823cd"><span class="section-number-3">4.12</span> 删除一个区域</h3>
 </div>
-<div id="outline-container-org4dc0fd4" class="outline-3">
-<h3 id="org4dc0fd4"><span class="section-number-3">4.11</span> Fix up</h3>
-</div>
-<div id="outline-container-orga6685d5" class="outline-3">
-<h3 id="orga6685d5"><span class="section-number-3">4.12</span> 删除一个区域</h3>
-</div>
-<div id="outline-container-org77a727c" class="outline-3">
-<h3 id="org77a727c"><span class="section-number-3">4.13</span> 删除所有区域</h3>
+<div id="outline-container-org49b814c" class="outline-3">
+<h3 id="org49b814c"><span class="section-number-3">4.13</span> 删除所有区域</h3>
 </div>
 </div>
-<div id="outline-container-orgdff401c" class="outline-2">
-<h2 id="orgdff401c"><span class="section-number-2">5</span> 异常处理</h2>
+<div id="outline-container-org907c19a" class="outline-2">
+<h2 id="org907c19a"><span class="section-number-2">5</span> 异常处理</h2>
 </div>
-<div id="outline-container-org0a97c61" class="outline-2">
-<h2 id="org0a97c61"><span class="section-number-2">6</span> Page Fault</h2>
+<div id="outline-container-orgc765bc8" class="outline-2">
+<h2 id="orgc765bc8"><span class="section-number-2">6</span> Page Fault</h2>
 </div>
 
-<div id="outline-container-orgfef3878" class="outline-2">
-<h2 id="orgfef3878"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
+<div id="outline-container-org048b09b" class="outline-2">
+<h2 id="org048b09b"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-08-20 Fri 22:24</p>
+<p class="date">Created: 2021-08-27 Fri 21:57</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
