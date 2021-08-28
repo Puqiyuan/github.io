@@ -355,6 +355,41 @@ void sig_int(int signo)
 后面还会介绍更多的关于signal．
 * 时间值
 
-* 系统调用与库函数
+UNIX系统有两个不同的时间值：
+1) 日历时间．该值计数了从Epoch（1970，1月1日00:00:00）开始到现在的秒数．举个例子，这个值可以用于记录文件最后修改的时间．
+2) 进程时间．也被叫做CPU时间，主要用于测量进程使用了多少CPU资源．使用clock_t来存储这样类型的时间值．
 
+后面还会看到对于一个进程，UNIX主要维护三个值：
++ clock时间
++ 用户cpu时间(user cpu time)
++ 系统cpu时间(system cpu time)
+
+clock时间，有时也叫墙钟时间，是进程占用的时间．它的值取决于运行在系统中的其它进程．
+
+而用户cpu时间，是cpu花在用户指令上的时间．system cpu时间则是内核代表进程执行的时间．
+
+通过命令time可以很容易获得clock time，用户时间以及系统时间．如下面的例子：
+#+begin_example
+~/.../sys-programming(master)$ time ls
+img/  thread.html  thread.org  unix-system-overview.html  unix-system-overview.org
+
+real    0m0.002s
+user    0m0.002s
+sys     0m0.000s
+#+end_example
+* 系统调用与库函数
+所有的操作系统都提供由内核提供服务的功能．所有UNIX系统的实现都提供一个良好定义数量有限的进入内核的系统调用．
+
+UNIX系统上，每个系统调用都有一个相同名字的C函数．用户进程也可以调用这个函数．
+
+从实现者的角度来看，这两者的不同是至关重要的．但从用户的观点来说是一样的．
+
+以malloc为例，关于内存分配和垃圾回收有许多方式可以做．没有一种单一的技术适合所有的程序．处理内存分配的系统调用sbrk，却不是通用目的内存管理器，它会按指定字节数增减进程的地址空间，而如何管理这个空间留给进程决定．而内存管理函数malloc实现了特别类型的分配．如果这个malloc不适合，可以实现我们自己的malloc，就可以使用sbrk系统调用．下面的图展示了应用，malloc函数以及sbrk系统调用的关系：
+
+#+CAPTION: malloc和sbrk的不同
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 15% :height 15%
+[[./img/malloc_sbrk.png]]
+
+从此图就会清晰的看到二者的不同．内核里的系统调用代表进程分配了空间．而malloc函数在用户空间管理这片空间．
 * 小结
