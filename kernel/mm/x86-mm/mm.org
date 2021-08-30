@@ -478,13 +478,18 @@ pte_bad宏是不存在的，因为页表条目是引用一个页面的，对于�
 
 下面描述这样的页面分配函数，它们都是针对80x86而言的．
 
-| 函数名                   | 描述                                                              |
-| pgd_alloc(mm)            | 分配一个新的PGD，参数mm在80x86上忽略了．                          |
-| pgd_free(pgd)            | 释放pgd                                                           |
-| pud_alloc(mm, pgd, addr) | 在二或三级的分页系统里，该函数啥也不做，仅是返回PGD条目的线性地址 |
-| pud_free(x)              | 在二或三级页表的系统里，该宏是空操作                              |
-| pmd_alloc(mm, pud, addr) |                                                                   |
+| 函数名                          | 描述                                                                                      |
+| pgd_alloc(mm)                   | 分配一个新的PGD，参数mm在80x86上忽略了．                                                  |
+| pgd_free(pgd)                   | 释放pgd                                                                                   |
+| pud_alloc(mm, pgd, addr)        | 在二或三级的分页系统里，该函数啥也不做，仅是返回PGD条目的线性地址                         |
+| pud_free(x)                     | 在二或三级页表的系统里，该宏是空操作                                                      |
+| pmd_alloc(mm, pud, addr)        | 对于三级页表系统，可以通过这个函数对线性地址addr分配一个新的PMD                           |
+| pte_alloc_map(mm, pmd, addr)    | 接收PMD条目地址作为参数以及一个线性地址addr，返回一个Page Table条目的地址，它对应于addr． |
+| pte_alloc_kernel(mm, pmd, addr) | 主要用于内核页表．                                                                        |
+| pte_free(pte)                   | 释放pte关联的页表                                                                         |
+| pte_free_kernel(pte)            | 等价于pte_free，但是用于内核页表．                                                        |
 *** 物理内存分布
+在内核初始化阶段，必须建立物理地址映射，它会指明对于物理内存的一些范围，哪些是可由内核使用的，哪些出于一些原因，内核不能使用，这些原因包括，该物理地址范围映射到了硬件设备或者是因为对应的物理页帧上包括有BIOS的数据．
 *** 进程页表
 *** 内核页表
 *** 固定映射线性地址
