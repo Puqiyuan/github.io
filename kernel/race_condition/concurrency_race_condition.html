@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-08-17 Tue 23:19 -->
+<!-- 2021-08-31 Tue 23:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>并发与竟态</title>
@@ -65,10 +65,34 @@ for the JavaScript code in this tag.
 <p>
 在早期的内核里，比较少有并发的情况产生．那时SMP系统还不被内核支持，唯一可能引起并发情况的就是中断服务．这种情况尽管简单，却没有利用起多处理器的性能．对于现代硬件以及应用的情况，Linux已经进化成可以做到许多事情同时进行．这种改变可以带来更大的性能提升以及灵活性．当然，这也加剧了内核编程的复杂性．设备驱动程序员必须一开始就考虑到并发的因素，并且对内核提供的并发管理功能也要能理解到位．
 </p>
+
+<p>
+来看下面这段代码，是有问题的：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>dptr-&gt;data[s_pos]) {
+    dptr-&gt;data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>dptr-&gt;data[s_pos])
+        <span style="color: #F0DFAF; font-weight: bold;">goto</span> <span style="color: #BFEBBF;">out</span>;
+}
+</pre>
+</div>
+
+<p>
+假设在某个时刻，有两个进程同时独立的尝试写scull设备里相同的偏移处，那么这两个进程会同时到达if的条件测试，如果这个指针是空，每个进程都会分配内存，那么每个进程都会在dptr-&gt;data[s_pos]里分配指针．因为两个都在相同的位置，当然只有一个是有效的．
+</p>
+
+<p>
+可以想见，第二个赋值的指针会是有效的．如果A先赋值．那么它赋的值就会被B覆盖．
+</p>
+
+<p>
+这种情况展示了一个竞态．竞态意味着对于共享数据不受控制的访问．竞态问题会引起意想不到的后果．在这里讨论的竞态问题，会引起内存泄漏．但是竞态还可能会引起系统crash，污染数据或者是其它安全问题．
+</p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-08-17 Tue 23:19</p>
+<p class="date">Created: 2021-08-31 Tue 23:00</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
