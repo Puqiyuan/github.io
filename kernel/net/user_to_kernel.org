@@ -237,4 +237,12 @@ static struct ctl_table mac_hid_dir[] = {
 #+end_src
 
 * ioctl
+
+下面的图，展示了ioctl是如何调用的，以ifconfig为例：
+#+CAPTION: 派遣ioctl命令
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/dispatch-ioctl.png]]
+
+
 * Netlink
