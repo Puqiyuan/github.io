@@ -377,10 +377,16 @@ get_unmapped_area的调用图如下：
 
 该函数首先会通过find_vma_links做一些准备工作．会找到在红黑树上正确的节点位置，然后调用vma_link来完成vma的链接．
 
+做链接的函数有两个版本，一是vma_link，再者__vma_link．vma_link主要是用于没有持有锁的情况，它会获取锁，如果VMA是一个文件映射的话，当然就包括文件锁了．
+
+vma_link函数主要分三个阶段来完成工作，以三个函数调用为标志．__vma_link里包括两个阶段，而__vma_link_file是第三阶段．__vma_link主要调用两个函数，一是__vma_link_list，二是__vma_link_rb．__vma_link_list将vma插入线性的链表中，如果这是第一个映射到进程地址空间的vma（就是prev是NULL），那么这个vma就是红黑树的根，就是mm->mmap = vma．第二阶段就是通过函数__vma_link_rb链接到红黑树上．最后就是__vma_link_file．
 
 ** 合并连续区域
+通过vma_merger可以将满足条件的vma合并在一起．
 ** 重映射区域
+mremap是一个系统调用，可以用来增长或收缩一个内存映射．其内里实现是do_mremap函数，其调用move_vma可以将一个vma移动到新的位置．
 ** 区域锁
+Linux可以将页面锁在内存里．
 ** 解锁区域
 ** Fix up
 ** 删除一个区域
