@@ -392,4 +392,12 @@ UNIX系统上，每个系统调用都有一个相同名字的C函数．用户进
 [[./img/malloc_sbrk.png]]
 
 从此图就会清晰的看到二者的不同．内核里的系统调用代表进程分配了空间．而malloc函数在用户空间管理这片空间．
-* 小结
+
+一个应用既可以调用系统调用，也可以调用库函数，而库函数也是可以调用系统调用的，如下图：
+
+#+CAPTION: 库函数和syscall的不同
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/c-lib-syscall.png]]
+
+进程控制相关的系统调用（比如fork，exec以及waitpid）由用户进程直接调用．但是某些库函数存在是可以简化常见情况下的编码的：比如system和popen库函数．后面会有一个例子，通过调用基本的进程控制系统调用来实现一个system的库函数功能．

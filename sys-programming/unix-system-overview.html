@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-08-28 Sat 21:44 -->
+<!-- 2021-09-03 Fri 22:06 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unix系统概要</title>
@@ -62,14 +62,13 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org29a6c5f">1. 输入和输出</a></li>
-<li><a href="#org1afb041">2. 程序与进程</a></li>
-<li><a href="#org897c642">3. 错误处理</a></li>
-<li><a href="#org62f6187">4. 用户识别</a></li>
-<li><a href="#org9bec63f">5. 信号</a></li>
-<li><a href="#orgcb61df4">6. 时间值</a></li>
-<li><a href="#orgf49c279">7. 系统调用与库函数</a></li>
-<li><a href="#org142ea38">8. 小结</a></li>
+<li><a href="#org5545421">1. 输入和输出</a></li>
+<li><a href="#org02fd445">2. 程序与进程</a></li>
+<li><a href="#org23571c6">3. 错误处理</a></li>
+<li><a href="#org6be454a">4. 用户识别</a></li>
+<li><a href="#org36cb2c5">5. 信号</a></li>
+<li><a href="#org620a2dc">6. 时间值</a></li>
+<li><a href="#org072690a">7. 系统调用与库函数</a></li>
 </ul>
 </div>
 </div>
@@ -77,8 +76,8 @@ for the JavaScript code in this tag.
 本文介绍Unix系统编程环境．
 </p>
 
-<div id="outline-container-org29a6c5f" class="outline-2">
-<h2 id="org29a6c5f"><span class="section-number-2">1</span> 输入和输出</h2>
+<div id="outline-container-org5545421" class="outline-2">
+<h2 id="org5545421"><span class="section-number-2">1</span> 输入和输出</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>文件描述符</b>
@@ -229,8 +228,8 @@ getc一次读取一个字符，而这个字符又被putc写入到标准输出．
 </div>
 </div>
 
-<div id="outline-container-org1afb041" class="outline-2">
-<h2 id="org1afb041"><span class="section-number-2">2</span> 程序与进程</h2>
+<div id="outline-container-org02fd445" class="outline-2">
+<h2 id="org02fd445"><span class="section-number-2">2</span> 程序与进程</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>程序</b>
@@ -356,7 +355,7 @@ helllo world from process ID 14066
 运行这个函数有下图的结果：
 </p>
 
-<div id="org91e67f6" class="figure">
+<div id="org1bcd97d" class="figure">
 <p><img src="./img/simple-shell.png" alt="simple-shell.png" width="30%" height="30%">
 </p>
 </div>
@@ -383,8 +382,8 @@ helllo world from process ID 14066
 </div>
 </div>
 
-<div id="outline-container-org897c642" class="outline-2">
-<h2 id="org897c642"><span class="section-number-2">3</span> 错误处理</h2>
+<div id="outline-container-org23571c6" class="outline-2">
+<h2 id="org23571c6"><span class="section-number-2">3</span> 错误处理</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 当调用一个UNIX系统时出现了错误，通常这个系统调用返回一个负值，并且设置整数变量errno，通过这个值可以知道失败的原因．比如，如果一切顺利的话，open系统返回一个非负的文件描述符，如果错误发生的话，就返回-1．open有15个可能的errno值，比如文件不存在，权限问题等．而另外一些返回指针的函数，以返回NULL来表征错误．
@@ -402,7 +401,7 @@ helllo world from process ID 14066
 有两个函数可以用来打印错误信息．
 </p>
 
-<div id="orged0d774" class="figure">
+<div id="orgaecc55f" class="figure">
 <p><img src="./img/strerror.png" alt="strerror.png" width="30%" height="30%">
 </p>
 </div>
@@ -415,7 +414,7 @@ helllo world from process ID 14066
 而perror函数可以可以将错误信息打印到标准错误上．
 </p>
 
-<div id="org6794858" class="figure">
+<div id="orgb75b5a0" class="figure">
 <p><img src="./img/perror.png" alt="perror.png" width="30%" height="30%">
 </p>
 </div>
@@ -485,8 +484,8 @@ prog1 &lt; inputfile | prog2 | prog3 &gt; outputfile
 </div>
 </div>
 
-<div id="outline-container-org62f6187" class="outline-2">
-<h2 id="org62f6187"><span class="section-number-2">4</span> 用户识别</h2>
+<div id="outline-container-org6be454a" class="outline-2">
+<h2 id="org6be454a"><span class="section-number-2">4</span> 用户识别</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 <b>用户ID</b>
@@ -536,8 +535,8 @@ uid = 1000, gid = 1000
 </div>
 </div>
 
-<div id="outline-container-org9bec63f" class="outline-2">
-<h2 id="org9bec63f"><span class="section-number-2">5</span> 信号</h2>
+<div id="outline-container-org36cb2c5" class="outline-2">
+<h2 id="org36cb2c5"><span class="section-number-2">5</span> 信号</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 信号是一种用来通知进程某些条件已经发生的技术．比如，如果进程除以0的话，名为SIGFPE的信号会发送给进程．一个进程对于一个信号通常有三种选择：
@@ -614,8 +613,8 @@ uid = 1000, gid = 1000
 </p>
 </div>
 </div>
-<div id="outline-container-orgcb61df4" class="outline-2">
-<h2 id="orgcb61df4"><span class="section-number-2">6</span> 时间值</h2>
+<div id="outline-container-org620a2dc" class="outline-2">
+<h2 id="org620a2dc"><span class="section-number-2">6</span> 时间值</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 UNIX系统有两个不同的时间值：
@@ -655,8 +654,8 @@ sys     0m0.000s
 </pre>
 </div>
 </div>
-<div id="outline-container-orgf49c279" class="outline-2">
-<h2 id="orgf49c279"><span class="section-number-2">7</span> 系统调用与库函数</h2>
+<div id="outline-container-org072690a" class="outline-2">
+<h2 id="org072690a"><span class="section-number-2">7</span> 系统调用与库函数</h2>
 <div class="outline-text-2" id="text-7">
 <p>
 所有的操作系统都提供由内核提供服务的功能．所有UNIX系统的实现都提供一个良好定义数量有限的进入内核的系统调用．
@@ -675,7 +674,7 @@ UNIX系统上，每个系统调用都有一个相同名字的C函数．用户进
 </p>
 
 
-<div id="org9347239" class="figure">
+<div id="org00f2ae8" class="figure">
 <p><img src="./img/malloc_sbrk.png" alt="malloc_sbrk.png" width="15%" height="15%">
 </p>
 <p><span class="figure-number">Figure 4: </span>malloc和sbrk的不同</p>
@@ -684,15 +683,27 @@ UNIX系统上，每个系统调用都有一个相同名字的C函数．用户进
 <p>
 从此图就会清晰的看到二者的不同．内核里的系统调用代表进程分配了空间．而malloc函数在用户空间管理这片空间．
 </p>
+
+<p>
+一个应用既可以调用系统调用，也可以调用库函数，而库函数也是可以调用系统调用的，如下图：
+</p>
+
+
+<div id="orgbf29b15" class="figure">
+<p><img src="./img/c-lib-syscall.png" alt="c-lib-syscall.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 5: </span>库函数和syscall的不同</p>
 </div>
+
+<p>
+进程控制相关的系统调用（比如fork，exec以及waitpid）由用户进程直接调用．但是某些库函数存在是可以简化常见情况下的编码的：比如system和popen库函数．后面会有一个例子，通过调用基本的进程控制系统调用来实现一个system的库函数功能．
+</p>
 </div>
-<div id="outline-container-org142ea38" class="outline-2">
-<h2 id="org142ea38"><span class="section-number-2">8</span> 小结</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-08-28 Sat 21:44</p>
+<p class="date">Created: 2021-09-03 Fri 22:06</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
