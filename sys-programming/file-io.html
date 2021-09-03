@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-09-03 Fri 22:35 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件I/O</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">文件I/O</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orga1c71d1">1. 介绍</a></li>
+<li><a href="#orge6d7663">2. 文件描述符</a></li>
+<li><a href="#orga9a6e96">3. open和openat</a></li>
+<li><a href="#org9bbcfee">4. creat函数</a></li>
+<li><a href="#org7c60297">5. close函数</a></li>
+<li><a href="#org4c6251e">6. lseek函数</a></li>
+<li><a href="#org658fe59">7. read函数</a></li>
+<li><a href="#orge417ce5">8. write函数</a></li>
+<li><a href="#org7bce1c3">9. I/O效率</a></li>
+<li><a href="#org067c89d">10. 文件共享</a></li>
+<li><a href="#org5d5c733">11. 原子操作</a></li>
+<li><a href="#org6759e5a">12. dup和dup2</a></li>
+<li><a href="#org4e5eb5a">13. sync/fsync/fdatasync函数</a></li>
+<li><a href="#org5475a5b">14. fcntl函数</a></li>
+<li><a href="#orgc68432c">15. ioctl函数</a></li>
+<li><a href="#org39407b4">16. /dev/fd</a></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orga1c71d1" class="outline-2">
+<h2 id="orga1c71d1"><span class="section-number-2">1</span> 介绍</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+本文主要讨论UNIX系统的文件I/O函数，大多数文件操作仅需通过五个函数就可以完成：open，read，write，lseek以及close．后面会看到各种各样的buffer大小会对read以及write函数产生影响．
+</p>
+
+<p>
+本文所描述的函数都是unbuffered I/O，与之相对的是标准I/O函数，后面会介绍．词语unbuffered（无缓存）对应每个read和write都会调用内核里的系统调用．
+</p>
+
+<p>
+当涉及到在多个进程间共享资源时，原子操作的概念就变得重要起来．在open函数的参数里会关心文件相关的原子性，就会引出文件是如何在多个进程间共享以及牵涉到的内核数据结构．后面还会介绍下其它函数．
+</p>
+</div>
+</div>
+<div id="outline-container-orge6d7663" class="outline-2">
+<h2 id="orge6d7663"><span class="section-number-2">2</span> 文件描述符</h2>
+</div>
+
+<div id="outline-container-orga9a6e96" class="outline-2">
+<h2 id="orga9a6e96"><span class="section-number-2">3</span> open和openat</h2>
+</div>
+<div id="outline-container-org9bbcfee" class="outline-2">
+<h2 id="org9bbcfee"><span class="section-number-2">4</span> creat函数</h2>
+</div>
+<div id="outline-container-org7c60297" class="outline-2">
+<h2 id="org7c60297"><span class="section-number-2">5</span> close函数</h2>
+</div>
+<div id="outline-container-org4c6251e" class="outline-2">
+<h2 id="org4c6251e"><span class="section-number-2">6</span> lseek函数</h2>
+</div>
+<div id="outline-container-org658fe59" class="outline-2">
+<h2 id="org658fe59"><span class="section-number-2">7</span> read函数</h2>
+</div>
+<div id="outline-container-orge417ce5" class="outline-2">
+<h2 id="orge417ce5"><span class="section-number-2">8</span> write函数</h2>
+</div>
+<div id="outline-container-org7bce1c3" class="outline-2">
+<h2 id="org7bce1c3"><span class="section-number-2">9</span> I/O效率</h2>
+</div>
+<div id="outline-container-org067c89d" class="outline-2">
+<h2 id="org067c89d"><span class="section-number-2">10</span> 文件共享</h2>
+</div>
+<div id="outline-container-org5d5c733" class="outline-2">
+<h2 id="org5d5c733"><span class="section-number-2">11</span> 原子操作</h2>
+</div>
+<div id="outline-container-org6759e5a" class="outline-2">
+<h2 id="org6759e5a"><span class="section-number-2">12</span> dup和dup2</h2>
+</div>
+<div id="outline-container-org4e5eb5a" class="outline-2">
+<h2 id="org4e5eb5a"><span class="section-number-2">13</span> sync/fsync/fdatasync函数</h2>
+</div>
+<div id="outline-container-org5475a5b" class="outline-2">
+<h2 id="org5475a5b"><span class="section-number-2">14</span> fcntl函数</h2>
+</div>
+<div id="outline-container-orgc68432c" class="outline-2">
+<h2 id="orgc68432c"><span class="section-number-2">15</span> ioctl函数</h2>
+</div>
+<div id="outline-container-org39407b4" class="outline-2">
+<h2 id="org39407b4"><span class="section-number-2">16</span> /dev/fd</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-09-03 Fri 22:35</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

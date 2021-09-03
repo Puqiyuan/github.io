@@ -1,0 +1,27 @@
+#+TITLE: 文件I/O
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+* 介绍
+本文主要讨论UNIX系统的文件I/O函数，大多数文件操作仅需通过五个函数就可以完成：open，read，write，lseek以及close．后面会看到各种各样的buffer大小会对read以及write函数产生影响．
+
+本文所描述的函数都是unbuffered I/O，与之相对的是标准I/O函数，后面会介绍．词语unbuffered（无缓存）对应每个read和write都会调用内核里的系统调用．
+
+当涉及到在多个进程间共享资源时，原子操作的概念就变得重要起来．在open函数的参数里会关心文件相关的原子性，就会引出文件是如何在多个进程间共享以及牵涉到的内核数据结构．后面还会介绍下其它函数．
+* 文件描述符
+
+* open和openat
+* creat函数
+* close函数
+* lseek函数
+* read函数
+* write函数
+* I/O效率
+* 文件共享
+* 原子操作
+* dup和dup2
+* sync/fsync/fdatasync函数
+* fcntl函数
+* ioctl函数
+* /dev/fd
