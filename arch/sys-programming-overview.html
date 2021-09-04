@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-08-29 Sun 15:35 -->
+<!-- 2021-09-04 Sat 23:17 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>系统编程概要</title>
@@ -62,38 +62,36 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgcfdc3fa">1. 内存模型</a>
+<li><a href="#orgfa2f0a4">1. 内存模型</a>
 <ul>
-<li><a href="#org0c6949b">1.1. 内存寻址</a></li>
-<li><a href="#org86ef1b2">1.2. 内存组织</a></li>
+<li><a href="#orgd0dd8ef">1.1. 内存寻址</a></li>
+<li><a href="#orgea1ab75">1.2. 内存组织</a></li>
 </ul>
 </li>
-<li><a href="#orgced409b">2. 内存管理</a>
+<li><a href="#orgde8708e">2. 内存管理</a>
 <ul>
-<li><a href="#org9f4bf87">2.1. 分段</a></li>
-<li><a href="#org027219d">2.2. 分页</a></li>
-<li><a href="#org90943d8">2.3. 分页与分段混合</a></li>
-<li><a href="#org8110e89">2.4. 实模式</a></li>
+<li><a href="#orgd13f36e">2.1. 分段</a></li>
+<li><a href="#org27a6f44">2.2. 分页</a></li>
+<li><a href="#org0db3164">2.3. 分页与分段混合</a></li>
+<li><a href="#orgc58d73c">2.4. 实模式</a></li>
 </ul>
 </li>
-<li><a href="#orgd42b4fa">3. 操作模式</a>
+<li><a href="#org375d3c3">3. 操作模式</a>
 <ul>
-<li><a href="#org38563ef">3.1. Long模式</a></li>
-<li><a href="#org8661a3d">3.2. 64-bit模式</a></li>
-<li><a href="#orgdade0f9">3.3. 兼容模式</a></li>
-<li><a href="#org77e15c4">3.4. 传统模式</a></li>
-<li><a href="#org463e03f">3.5. 系统管理模式</a></li>
+<li><a href="#orgc0fef19">3.1. Long模式</a></li>
+<li><a href="#org60995cb">3.2. 64-bit模式</a></li>
+<li><a href="#org35cba87">3.3. 兼容模式</a></li>
+<li><a href="#org9afbfa2">3.4. 传统模式</a></li>
+<li><a href="#orgd44ec6b">3.5. 系统管理模式</a></li>
 </ul>
 </li>
-<li><a href="#org38090e4">4. 系统寄存器</a></li>
-<li><a href="#org039fcd7">5. 系统数据结构</a></li>
-<li><a href="#org5c81175">6. 中断</a></li>
-<li><a href="#orgf35d540">7. 其它系统编程功能</a>
+<li><a href="#org12e556e">4. 系统寄存器</a></li>
+<li><a href="#org3701052">5. 系统数据结构</a></li>
+<li><a href="#orgf81e2b4">6. 中断</a></li>
+<li><a href="#org14df295">7. 其它系统编程功能</a>
 <ul>
-<li><a href="#org627490e">7.1. 硬件多任务</a></li>
-<li><a href="#org05027ef">7.2. 机器检查</a></li>
-<li><a href="#orged2f5a0">7.3. 软件调试</a></li>
-<li><a href="#org998ddd2">7.4. 性能检测</a></li>
+<li><a href="#org55c9ee0">7.1. 硬件多任务</a></li>
+<li><a href="#orgf663366">7.2. 机器检查</a></li>
 </ul>
 </li>
 </ul>
@@ -119,8 +117,8 @@ for the JavaScript code in this tag.
 为了支持64-bit的操作系统和应用，许多遗留下来的功能或特点都有被加强，但同时也向后兼容已经存在的软件。
 </p>
 
-<div id="outline-container-orgcfdc3fa" class="outline-2">
-<h2 id="orgcfdc3fa"><span class="section-number-2">1</span> 内存模型</h2>
+<div id="outline-container-orgfa2f0a4" class="outline-2">
+<h2 id="orgfa2f0a4"><span class="section-number-2">1</span> 内存模型</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 ADM64架构的内存模型被设计成系统软件可以以安全的方式去管理应用软件以及相关的数据，它可以和旧版的内存模型兼容。对于虚拟地址和物理地址之间的转换由硬件机制完成。硬件的翻译机制允许系统软件以透明的方式重定位应用和数据，可以定位到物理内存空间或者是硬盘空间，这些空间都是由系统软件管理的。
@@ -131,8 +129,8 @@ ADM64架构的内存模型被设计成系统软件可以以安全的方式去管
 </p>
 </div>
 
-<div id="outline-container-org0c6949b" class="outline-3">
-<h3 id="org0c6949b"><span class="section-number-3">1.1</span> 内存寻址</h3>
+<div id="outline-container-orgd0dd8ef" class="outline-3">
+<h3 id="orgd0dd8ef"><span class="section-number-3">1.1</span> 内存寻址</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 AMD64架构支持地址重定位，为了做到这点，几种类型的地址被定义用来完整的描述内存组织，共计四种：
@@ -209,8 +207,8 @@ mode下，线性地址必须是规范地址形式。
 </div>
 </div>
 
-<div id="outline-container-org86ef1b2" class="outline-3">
-<h3 id="org86ef1b2"><span class="section-number-3">1.2</span> 内存组织</h3>
+<div id="outline-container-orgea1ab75" class="outline-3">
+<h3 id="orgea1ab75"><span class="section-number-3">1.2</span> 内存组织</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理内存通常具有不同的大小，通常来说虚拟内存比物理内存大。系统软件负责将应用或数据在物理内存和系统硬盘间重定位，这使得看起来系统里有超过物理内存大小可用的内存。
@@ -222,16 +220,16 @@ AMD64架构将内存组织为虚拟内存和物理内存。虚拟内存和物理
 </div>
 </div>
 </div>
-<div id="outline-container-orgced409b" class="outline-2">
-<h2 id="orgced409b"><span class="section-number-2">2</span> 内存管理</h2>
+<div id="outline-container-orgde8708e" class="outline-2">
+<h2 id="orgde8708e"><span class="section-number-2">2</span> 内存管理</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 内存管理使用一些方法，总的来说，就是软件生成虚拟地址，然后经由分段或者分页将地址翻译成物理地址。内存管理对应用软件是不可见的，它是由系统软件和处理器硬件完成．
 </p>
 </div>
 
-<div id="outline-container-org9f4bf87" class="outline-3">
-<h3 id="org9f4bf87"><span class="section-number-3">2.1</span> 分段</h3>
+<div id="outline-container-orgd13f36e" class="outline-3">
+<h3 id="orgd13f36e"><span class="section-number-3">2.1</span> 分段</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 分段最开始是用来隔离进程以及这些进程使用的数据，这会增加系统同时运行多个进程的可靠性．
@@ -254,7 +252,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="orga2bd0b0" class="figure">
+<div id="org04ad4f1" class="figure">
 <p><img src="./img/seg-mem-mod.png" alt="seg-mem-mod.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 1: </span>分段内存模型</p>
@@ -265,7 +263,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="orgaa75ed5" class="figure">
+<div id="orgc84777d" class="figure">
 <p><img src="./img/flat-mem-mod.png" alt="flat-mem-mod.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>平坦内存模型</p>
@@ -277,8 +275,8 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </div>
 </div>
 
-<div id="outline-container-org027219d" class="outline-3">
-<h3 id="org027219d"><span class="section-number-3">2.2</span> 分页</h3>
+<div id="outline-container-org27a6f44" class="outline-3">
+<h3 id="org27a6f44"><span class="section-number-3">2.2</span> 分页</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 分页使得软件和数据可以在物理地址空间中以固定大小的块（物理页面）来进行重定位．传统的X86架构支持三种页面大小，包括4Kb，2Mb，4Mb．使用段翻译权限较低的软件可以限制访问物理页面．
@@ -297,7 +295,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="org89eb7bb" class="figure">
+<div id="org3741b50" class="figure">
 <p><img src="./img/page-mem-mod.png" alt="page-mem-mod.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>分页内存模型</p>
@@ -308,8 +306,8 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 </div>
 </div>
-<div id="outline-container-org90943d8" class="outline-3">
-<h3 id="org90943d8"><span class="section-number-3">2.3</span> 分页与分段混合</h3>
+<div id="outline-container-org0db3164" class="outline-3">
+<h3 id="org0db3164"><span class="section-number-3">2.3</span> 分页与分段混合</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 进行内存管理的软件，可以组合起来使用分段内存和分页内存．因为分段不能禁止，并且分页内存管理也需要初始化一点分段资源．而分页则是可以完全禁止的，所以分段内存管理不需要分页资源的初始化．
@@ -328,7 +326,7 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </p>
 
 
-<div id="org8178527" class="figure">
+<div id="orgec1c6bb" class="figure">
 <p><img src="./img/64bit-flat.png" alt="64bit-flat.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 4: </span>64bit平坦分页内存模型</p>
@@ -336,8 +334,8 @@ AMD64架构支持各种传统分段（legacy segmentation）功能．然而在�
 </div>
 </div>
 
-<div id="outline-container-org8110e89" class="outline-3">
-<h3 id="org8110e89"><span class="section-number-3">2.4</span> 实模式</h3>
+<div id="outline-container-orgc58d73c" class="outline-3">
+<h3 id="orgc58d73c"><span class="section-number-3">2.4</span> 实模式</h3>
 <div class="outline-text-3" id="text-2-4">
 <p>
 实模式地址是一种传统模式地址翻译方式，主要用在实模式下．主要是为了兼容8086处理器，在这种模式下，16-bit的有效地址映射到20-bit的物理地址，提供1MB的物理地址空间．
@@ -352,7 +350,7 @@ A20地址线仅在实模式下使用，其它模式下使用会导致地址翻�
 </p>
 
 
-<div id="org51c0ed0" class="figure">
+<div id="org160875d" class="figure">
 <p><img src="./img/real_mode.png" alt="real_mode.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 5: </span>实模式内存模型</p>
@@ -361,8 +359,8 @@ A20地址线仅在实模式下使用，其它模式下使用会导致地址翻�
 </div>
 </div>
 
-<div id="outline-container-orgd42b4fa" class="outline-2">
-<h2 id="orgd42b4fa"><span class="section-number-2">3</span> 操作模式</h2>
+<div id="outline-container-org375d3c3" class="outline-2">
+<h2 id="org375d3c3"><span class="section-number-2">3</span> 操作模式</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 传统x86架构支持四种操作模式，可以支持各种内存管理，比如各种虚拟内存和物理内存大小，以及不同的保护功能：
@@ -379,7 +377,7 @@ A20地址线仅在实模式下使用，其它模式下使用会导致地址翻�
 AMD64架构支持所有这些传统模式，并且它加入了一个新的操作模式叫做long mode．下面的表展示了这些模式间的不同：
 </p>
 
-<div id="orga10e1a5" class="figure">
+<div id="orgeb06908" class="figure">
 <p><img src="./img/operating-mode.png" alt="operating-mode.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 6: </span>操作模式</p>
@@ -389,15 +387,15 @@ AMD64架构支持所有这些传统模式，并且它加入了一个新的操作
 而软件可以通过下图在各种模式间移动：
 </p>
 
-<div id="orgd51b336" class="figure">
+<div id="orgd9eb6a2" class="figure">
 <p><img src="./img/operating-mode-convert.png" alt="operating-mode-convert.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 7: </span>AMD64架构的操作模式</p>
 </div>
 </div>
 
-<div id="outline-container-org38563ef" class="outline-3">
-<h3 id="org38563ef"><span class="section-number-3">3.1</span> Long模式</h3>
+<div id="outline-container-orgc0fef19" class="outline-3">
+<h3 id="orgc0fef19"><span class="section-number-3">3.1</span> Long模式</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．64-bit支持几个新的特点，包括寻址64-bit虚拟地址空间．兼容模式可以提供与16-bit以及32-bit的二进制兼容．
@@ -409,8 +407,8 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </div>
 </div>
 
-<div id="outline-container-org8661a3d" class="outline-3">
-<h3 id="org8661a3d"><span class="section-number-3">3.2</span> 64-bit模式</h3>
+<div id="outline-container-org60995cb" class="outline-3">
+<h3 id="org60995cb"><span class="section-number-3">3.2</span> 64-bit模式</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 64bit-mode作为long mode的一种子模式．主要支持以下特点：
@@ -430,24 +428,24 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </div>
 </div>
 
-<div id="outline-container-orgdade0f9" class="outline-3">
-<h3 id="orgdade0f9"><span class="section-number-3">3.3</span> 兼容模式</h3>
+<div id="outline-container-org35cba87" class="outline-3">
+<h3 id="org35cba87"><span class="section-number-3">3.3</span> 兼容模式</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 兼容模式是long模式的一种子模式．
 </p>
 </div>
 </div>
-<div id="outline-container-org77e15c4" class="outline-3">
-<h3 id="org77e15c4"><span class="section-number-3">3.4</span> 传统模式</h3>
+<div id="outline-container-org9afbfa2" class="outline-3">
+<h3 id="org9afbfa2"><span class="section-number-3">3.4</span> 传统模式</h3>
 <div class="outline-text-3" id="text-3-4">
 <p>
 传统模式包括三种子模式：实模式，保护模式以及虚拟模式．
 </p>
 </div>
 </div>
-<div id="outline-container-org463e03f" class="outline-3">
-<h3 id="org463e03f"><span class="section-number-3">3.5</span> 系统管理模式</h3>
+<div id="outline-container-orgd44ec6b" class="outline-3">
+<h3 id="orgd44ec6b"><span class="section-number-3">3.5</span> 系统管理模式</h3>
 <div class="outline-text-3" id="text-3-5">
 <p>
 系统管理模式（SMM）主要是用于系统控制活动，这个对传统系统软件是透明的．
@@ -455,14 +453,14 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </div>
 </div>
 </div>
-<div id="outline-container-org38090e4" class="outline-2">
-<h2 id="org38090e4"><span class="section-number-2">4</span> 系统寄存器</h2>
+<div id="outline-container-org12e556e" class="outline-2">
+<h2 id="org12e556e"><span class="section-number-2">4</span> 系统寄存器</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 下面的图展示了AMD64架构下的系统寄存器．
 </p>
 
-<div id="org31d014f" class="figure">
+<div id="org79d2e5a" class="figure">
 <p><img src="./img/sys-regs.png" alt="sys-regs.png" width="30%" height="30%">
 </p>
 </div>
@@ -482,14 +480,14 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </ul>
 </div>
 </div>
-<div id="outline-container-org039fcd7" class="outline-2">
-<h2 id="org039fcd7"><span class="section-number-2">5</span> 系统数据结构</h2>
+<div id="outline-container-org3701052" class="outline-2">
+<h2 id="org3701052"><span class="section-number-2">5</span> 系统数据结构</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 下面的图展示了对于AMD64架构的一些系统数据结构：
 </p>
 
-<div id="org8475bba" class="figure">
+<div id="org795677d" class="figure">
 <p><img src="./img/sys-data-struct.png" alt="sys-data-struct.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 9: </span>系统数据结构</p>
@@ -510,8 +508,8 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </ul>
 </div>
 </div>
-<div id="outline-container-org5c81175" class="outline-2">
-<h2 id="org5c81175"><span class="section-number-2">6</span> 中断</h2>
+<div id="outline-container-orgf81e2b4" class="outline-2">
+<h2 id="orgf81e2b4"><span class="section-number-2">6</span> 中断</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 当中断或异常发生时，AMD64架构提供一种机制，可以自动的暂停软件的执行并且将控制权交给中断句柄．一个中断句柄具有较高的权限级，可以识别并且响应中断或异常，完成后将控制权返回给被中断的软件．
@@ -534,7 +532,7 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </p>
 
 
-<div id="org2b181a9" class="figure">
+<div id="org16a7226" class="figure">
 <p><img src="./img/interrupt.png" alt="interrupt.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 10: </span>中断与异常</p>
@@ -543,34 +541,35 @@ Long模式由两个子模式组成，一是64-bit模式，二是兼容模式．6
 </div>
 
 
-<div id="outline-container-orgf35d540" class="outline-2">
-<h2 id="orgf35d540"><span class="section-number-2">7</span> 其它系统编程功能</h2>
+<div id="outline-container-org14df295" class="outline-2">
+<h2 id="org14df295"><span class="section-number-2">7</span> 其它系统编程功能</h2>
 <div class="outline-text-2" id="text-7">
 </div>
-<div id="outline-container-org627490e" class="outline-3">
-<h3 id="org627490e"><span class="section-number-3">7.1</span> 硬件多任务</h3>
+<div id="outline-container-org55c9ee0" class="outline-3">
+<h3 id="org55c9ee0"><span class="section-number-3">7.1</span> 硬件多任务</h3>
 <div class="outline-text-3" id="text-7-1">
 <p>
 一个任务就是一个程序，处理器可以执行，暂停并且在随后恢复到暂停时的点继续执行．在任务暂停期间，其它任务又可以执行．每个任务都有它自己的执行环境，由代码段，数据段以及栈段组成．任务也有它们自己的虚拟内存环境，其由分页机制管理．定义执行环境的状态信息存放在任务状态段(TSS)里，每个任务都有．
 </p>
-</div>
-</div>
 
-
-<div id="outline-container-org05027ef" class="outline-3">
-<h3 id="org05027ef"><span class="section-number-3">7.2</span> 机器检查</h3>
+<p>
+硬件多任务提供一种自动机制，可以自动的切换任务，保存暂停任务的执行状态以及恢复要执行任务的状态．不过现代的操作系统都不使用这个特点，任务相关的管理完全由软件完成．所以long mode不再支持硬件多任务．
+</p>
 </div>
-<div id="outline-container-orged2f5a0" class="outline-3">
-<h3 id="orged2f5a0"><span class="section-number-3">7.3</span> 软件调试</h3>
 </div>
-<div id="outline-container-org998ddd2" class="outline-3">
-<h3 id="org998ddd2"><span class="section-number-3">7.4</span> 性能检测</h3>
+<div id="outline-container-orgf663366" class="outline-3">
+<h3 id="orgf663366"><span class="section-number-3">7.2</span> 机器检查</h3>
+<div class="outline-text-3" id="text-7-2">
+<p>
+AMD64架构支持机器检查异常，这种异常对可靠性，可提供性和服务性都有严格要求的场景是必要的．该异常允许系统软件利用这种异常去报告一些通常是严重而又不可恢复的错误．提供这种能力可以使得复杂系统快速的指出错误所在．
+</p>
+</div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-08-29 Sun 15:35</p>
+<p class="date">Created: 2021-09-04 Sat 23:17</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
