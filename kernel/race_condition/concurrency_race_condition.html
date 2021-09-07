@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-09-03 Fri 20:30 -->
+<!-- 2021-09-07 Tue 23:36 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>并发与竟态</title>
@@ -97,10 +97,22 @@ for the JavaScript code in this tag.
 <p>
 竞态主要来自共享资源．当多个线程有必要和共同的数据交互时，就会有竞态问题．所以第一个经验是，尽量避免可能的资源共享．最明显的例子就是应当尽量避免使用全局变量．
 </p>
+
+<p>
+然而，共享却是十分有必要的．硬件资源本身就是共享的，而软件资源通常也是提供给多个线程．全局变量也不是变量共享的唯一形式，只要代码以指针形式传递到函数，就有可能形成一个共享的情形．
+</p>
+
+<p>
+硬件或软件被超过一个线程共享时，就有可能，一个线程在观察这个资源时遇到不一致的情况，所以必须有意识的管理起来．
+</p>
+
+<p>
+另外一个重要的规则是，当内核代码创建了一个共享的对象时，这个对象应当持续存在并且保证功能正确直到没有外部依赖存在．这其实对共享对象提出了两点要求，一是直到共享对象完全准备好能正确工作时才能提供给内核使用，二是对共享对象的引用计数必须追踪起来．
+</p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-09-03 Fri 20:30</p>
+<p class="date">Created: 2021-09-07 Tue 23:36</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
