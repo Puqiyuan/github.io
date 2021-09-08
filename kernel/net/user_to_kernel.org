@@ -244,5 +244,9 @@ static struct ctl_table mac_hid_dir[] = {
 #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/dispatch-ioctl.png]]
 
+ifconfig使用ioctl来和内核进行交互．当管理员敲下ifconfig eth0 mtu 1250这样的命令时，会初始化一些数据，然后传给ioctl，像SIOCSIFMTU这样的就是命令标识符．
 
+ioctl命令在内核里有不同的处理方式．如上图展示的ioctl命令如何被网络代码所使用并且被sock_ioctl派发，注意最新的代码流程可能有些变化，但大部分函数名和这种向下的派发流程是一样的．向下进行派发的命令名，其实是经过特殊命名的，举个例子，SIOCADDRT，在图中被显示为SIOC ADD RT，强调两个事情，一是ADD，二是RT．就是添加一个路由，大多数命令都遵循这种命名范式．同时字母S和G分别代表Set和Get操作．比如前面看到过的SIOCSIFMTU，就是设置(S)接口(interface)的最大传输单元MTU（maximium transport unit）．
+
+设备驱动也可以定义新的命令，比如SIOCDEVPRIVATE就指定这样一个起始的私有命令号．当然协议也是可以定义自己的私有命令的，从SIOCPROTOPRIVATE起始．
 * Netlink

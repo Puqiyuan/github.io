@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-09-02 Thu 22:54 -->
+<!-- 2021-09-08 Wed 23:19 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>用户空间到内核层的接口</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgfe9b626">1. 概述</a></li>
-<li><a href="#org5781108">2. procfs与sysctl</a></li>
-<li><a href="#org2d0d441">3. ioctl</a></li>
-<li><a href="#orgc42ff9a">4. Netlink</a></li>
+<li><a href="#orgdaf06f3">1. 概述</a></li>
+<li><a href="#orge76d3f6">2. procfs与sysctl</a></li>
+<li><a href="#orge8d7855">3. ioctl</a></li>
+<li><a href="#org64ccea9">4. Netlink</a></li>
 </ul>
 </div>
 </div>
@@ -73,8 +73,8 @@ for the JavaScript code in this tag.
 本文主要介绍用户空间的应用通过什么机制来和内核沟通或读取内核导出的信息．但是不会关注这些实现的细节，不过会指出这些实现的代码在哪里，感兴趣的话可以详细研究．比如在哪里可以添加一个目录到/proc下．为了响应ioctl命令，有哪些内核的函数参与处理，以及netlink，一种当前普遍使用的应用与内核通信的机制．
 </p>
 
-<div id="outline-container-orgfe9b626" class="outline-2">
-<h2 id="orgfe9b626"><span class="section-number-2">1</span> 概述</h2>
+<div id="outline-container-orgdaf06f3" class="outline-2">
+<h2 id="orgdaf06f3"><span class="section-number-2">1</span> 概述</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内核可以通过不同的接口将它内部的信息导出到用户空间．除了可以使用系统调用，还有其它的三种方式．
@@ -112,8 +112,8 @@ sysfs(/sys)
 </p>
 </div>
 </div>
-<div id="outline-container-org5781108" class="outline-2">
-<h2 id="org5781108"><span class="section-number-2">2</span> procfs与sysctl</h2>
+<div id="outline-container-orge76d3f6" class="outline-2">
+<h2 id="orge76d3f6"><span class="section-number-2">2</span> procfs与sysctl</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 procfs和sysctl都可以导出内核内部信息，但是procfs主要导出只读信息，而sysctl主要用于导出可写的信息（但是只能通过超级用户）．
@@ -369,7 +369,7 @@ extra2
 </p>
 
 
-<div id="orgc3956ba" class="figure">
+<div id="orgd7fd621" class="figure">
 <p><img src="./img/logging_level.png" alt="logging_level.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 1: </span>/proc/sys/dev/scsi/logging_level文件的注册结果</p>
@@ -420,29 +420,39 @@ extra2
 </div>
 </div>
 
-<div id="outline-container-org2d0d441" class="outline-2">
-<h2 id="org2d0d441"><span class="section-number-2">3</span> ioctl</h2>
+<div id="outline-container-orge8d7855" class="outline-2">
+<h2 id="orge8d7855"><span class="section-number-2">3</span> ioctl</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 下面的图，展示了ioctl是如何调用的，以ifconfig为例：
 </p>
 
-<div id="org6213099" class="figure">
+<div id="org25183ef" class="figure">
 <p><img src="./img/dispatch-ioctl.png" alt="dispatch-ioctl.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>派遣ioctl命令</p>
 </div>
+
+<p>
+ifconfig使用ioctl来和内核进行交互．当管理员敲下ifconfig eth0 mtu 1250这样的命令时，会初始化一些数据，然后传给ioctl，像SIOCSIFMTU这样的就是命令标识符．
+</p>
+
+<p>
+ioctl命令在内核里有不同的处理方式．如上图展示的ioctl命令如何被网络代码所使用并且被sock_ioctl派发，注意最新的代码流程可能有些变化，但大部分函数名和这种向下的派发流程是一样的．向下进行派发的命令名，其实是经过特殊命名的，举个例子，SIOCADDRT，在图中被显示为SIOC ADD RT，强调两个事情，一是ADD，二是RT．就是添加一个路由，大多数命令都遵循这种命名范式．同时字母S和G分别代表Set和Get操作．比如前面看到过的SIOCSIFMTU，就是设置(S)接口(interface)的最大传输单元MTU（maximium transport unit）．
+</p>
+
+<p>
+设备驱动也可以定义新的命令，比如SIOCDEVPRIVATE就指定这样一个起始的私有命令号．当然协议也是可以定义自己的私有命令的，从SIOCPROTOPRIVATE起始．
+</p>
 </div>
 </div>
-
-
-<div id="outline-container-orgc42ff9a" class="outline-2">
-<h2 id="orgc42ff9a"><span class="section-number-2">4</span> Netlink</h2>
+<div id="outline-container-org64ccea9" class="outline-2">
+<h2 id="org64ccea9"><span class="section-number-2">4</span> Netlink</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-09-02 Thu 22:54</p>
+<p class="date">Created: 2021-09-08 Wed 23:19</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
