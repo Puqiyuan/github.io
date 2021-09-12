@@ -27,7 +27,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 - [[./sys-programming/thread.html][Linux线程之一]]。
 - [[././sys-programming/file-io.html][文件I/O]].
 * Linux内核
-# - LWN内核文档学习[[./kernel/lwn/lwn.html][记录]]。
+[[./kernel/kernel_func.html][内核函数及结构体解释]]．
 ** 内存管理
   + [[./kernel/mm/x86-mm/mm.html][80x86内存管理]]。    
 

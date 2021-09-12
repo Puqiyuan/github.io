@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-09-12 Sun 16:27 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>内核函数及结构体解释</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">内核函数及结构体解释</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgcdd8392">1. A</a></li>
+<li><a href="#org0b48342">2. B</a></li>
+<li><a href="#org739f72d">3. C</a></li>
+<li><a href="#orgf0608d7">4. D</a></li>
+<li><a href="#org63ac15b">5. E</a></li>
+<li><a href="#orgf3102ac">6. F</a></li>
+<li><a href="#org8089da2">7. G</a></li>
+<li><a href="#orgc0b13a5">8. H</a></li>
+<li><a href="#orgd911cec">9. I</a></li>
+<li><a href="#org453013a">10. G</a></li>
+<li><a href="#org88fbfac">11. K</a></li>
+<li><a href="#org92abb46">12. L</a></li>
+<li><a href="#orgb54c77f">13. M</a></li>
+<li><a href="#org0c40b39">14. N</a></li>
+<li><a href="#orgaceeb20">15. O</a></li>
+<li><a href="#org554689e">16. P</a></li>
+<li><a href="#orgd2818c8">17. Q</a></li>
+<li><a href="#org9556f60">18. R</a></li>
+<li><a href="#org00ab6f4">19. S</a></li>
+<li><a href="#org6362405">20. T</a></li>
+<li><a href="#orgdb9a83e">21. U</a></li>
+<li><a href="#org0c3a7d5">22. V</a></li>
+<li><a href="#org4ddb257">23. W</a></li>
+<li><a href="#org59bcb91">24. X</a></li>
+<li><a href="#org4b957df">25. Y</a></li>
+<li><a href="#org8ae33c8">26. Z</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文主要记录一下平时研究过的内核里函数的作用，以及一些结构体的意义．这些函数与结构体之间当然是有联系的，不过本文只是单独以点的形式记录了它们的意义，供未来查阅加速阅读代码．至于连点成面的事情，见于工作里特定场景中罢，若有事件再另开文章记录．
+</p>
+
+<div id="outline-container-orgcdd8392" class="outline-2">
+<h2 id="orgcdd8392"><span class="section-number-2">1</span> A</h2>
+</div>
+<div id="outline-container-org0b48342" class="outline-2">
+<h2 id="org0b48342"><span class="section-number-2">2</span> B</h2>
+</div>
+<div id="outline-container-org739f72d" class="outline-2">
+<h2 id="org739f72d"><span class="section-number-2">3</span> C</h2>
+</div>
+<div id="outline-container-orgf0608d7" class="outline-2">
+<h2 id="orgf0608d7"><span class="section-number-2">4</span> D</h2>
+</div>
+<div id="outline-container-org63ac15b" class="outline-2">
+<h2 id="org63ac15b"><span class="section-number-2">5</span> E</h2>
+</div>
+<div id="outline-container-orgf3102ac" class="outline-2">
+<h2 id="orgf3102ac"><span class="section-number-2">6</span> F</h2>
+</div>
+<div id="outline-container-org8089da2" class="outline-2">
+<h2 id="org8089da2"><span class="section-number-2">7</span> G</h2>
+</div>
+<div id="outline-container-orgc0b13a5" class="outline-2">
+<h2 id="orgc0b13a5"><span class="section-number-2">8</span> H</h2>
+</div>
+<div id="outline-container-orgd911cec" class="outline-2">
+<h2 id="orgd911cec"><span class="section-number-2">9</span> I</h2>
+</div>
+<div id="outline-container-org453013a" class="outline-2">
+<h2 id="org453013a"><span class="section-number-2">10</span> G</h2>
+</div>
+<div id="outline-container-org88fbfac" class="outline-2">
+<h2 id="org88fbfac"><span class="section-number-2">11</span> K</h2>
+</div>
+<div id="outline-container-org92abb46" class="outline-2">
+<h2 id="org92abb46"><span class="section-number-2">12</span> L</h2>
+</div>
+<div id="outline-container-orgb54c77f" class="outline-2">
+<h2 id="orgb54c77f"><span class="section-number-2">13</span> M</h2>
+<div class="outline-text-2" id="text-13">
+<ol class="org-ol">
+<li><p>
+int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
+</p>
+
+<p>
+作用：该函数主要被do_mlock调用，是mlock系统调用的核心函数，将start开始的len长空间锁在内存里不被换出．
+</p>
+
+<p>
+实现：主要的工作是通过find_vma来找寻当前进程mm的vma，这些vma和start开始len长的空间相交．
+</p></li>
+</ol>
+</div>
+</div>
+<div id="outline-container-org0c40b39" class="outline-2">
+<h2 id="org0c40b39"><span class="section-number-2">14</span> N</h2>
+</div>
+<div id="outline-container-orgaceeb20" class="outline-2">
+<h2 id="orgaceeb20"><span class="section-number-2">15</span> O</h2>
+</div>
+<div id="outline-container-org554689e" class="outline-2">
+<h2 id="org554689e"><span class="section-number-2">16</span> P</h2>
+</div>
+<div id="outline-container-orgd2818c8" class="outline-2">
+<h2 id="orgd2818c8"><span class="section-number-2">17</span> Q</h2>
+</div>
+<div id="outline-container-org9556f60" class="outline-2">
+<h2 id="org9556f60"><span class="section-number-2">18</span> R</h2>
+</div>
+<div id="outline-container-org00ab6f4" class="outline-2">
+<h2 id="org00ab6f4"><span class="section-number-2">19</span> S</h2>
+</div>
+<div id="outline-container-org6362405" class="outline-2">
+<h2 id="org6362405"><span class="section-number-2">20</span> T</h2>
+</div>
+<div id="outline-container-orgdb9a83e" class="outline-2">
+<h2 id="orgdb9a83e"><span class="section-number-2">21</span> U</h2>
+</div>
+<div id="outline-container-org0c3a7d5" class="outline-2">
+<h2 id="org0c3a7d5"><span class="section-number-2">22</span> V</h2>
+</div>
+<div id="outline-container-org4ddb257" class="outline-2">
+<h2 id="org4ddb257"><span class="section-number-2">23</span> W</h2>
+</div>
+<div id="outline-container-org59bcb91" class="outline-2">
+<h2 id="org59bcb91"><span class="section-number-2">24</span> X</h2>
+</div>
+<div id="outline-container-org4b957df" class="outline-2">
+<h2 id="org4b957df"><span class="section-number-2">25</span> Y</h2>
+</div>
+<div id="outline-container-org8ae33c8" class="outline-2">
+<h2 id="org8ae33c8"><span class="section-number-2">26</span> Z</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-09-12 Sun 16:27</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

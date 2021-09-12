@@ -1,0 +1,39 @@
+#+TITLE: 内核函数及结构体解释
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+
+本文主要记录一下平时研究过的内核里函数的作用，以及一些结构体的意义．这些函数与结构体之间当然是有联系的，不过本文只是单独以点的形式记录了它们的意义，供未来查阅加速阅读代码．至于连点成面的事情，见于工作里特定场景中罢，若有事件再另开文章记录．
+
+* A
+* B
+* C
+* D
+* E
+* F
+* G
+* H
+* I
+* G
+* K
+* L
+* M
+1) int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
+   
+   作用：该函数主要被do_mlock调用，是mlock系统调用的核心函数，将start开始的len长空间锁在内存里不被换出．
+
+   实现：主要的工作是通过find_vma来找寻当前进程mm的vma，这些vma和start开始len长的空间相交．
+* N
+* O
+* P
+* Q
+* R
+* S
+* T
+* U
+* V
+* W
+* X
+* Y
+* Z
