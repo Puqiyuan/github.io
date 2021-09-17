@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-09-08 Wed 23:19 -->
+<!-- 2021-09-17 Fri 21:41 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>用户空间到内核层的接口</title>
@@ -62,10 +62,10 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgdaf06f3">1. 概述</a></li>
-<li><a href="#orge76d3f6">2. procfs与sysctl</a></li>
-<li><a href="#orge8d7855">3. ioctl</a></li>
-<li><a href="#org64ccea9">4. Netlink</a></li>
+<li><a href="#org1993ca3">1. 概述</a></li>
+<li><a href="#orgc4c31e0">2. procfs与sysctl</a></li>
+<li><a href="#org2cc26ff">3. ioctl</a></li>
+<li><a href="#org0ed6a26">4. Netlink</a></li>
 </ul>
 </div>
 </div>
@@ -73,8 +73,8 @@ for the JavaScript code in this tag.
 本文主要介绍用户空间的应用通过什么机制来和内核沟通或读取内核导出的信息．但是不会关注这些实现的细节，不过会指出这些实现的代码在哪里，感兴趣的话可以详细研究．比如在哪里可以添加一个目录到/proc下．为了响应ioctl命令，有哪些内核的函数参与处理，以及netlink，一种当前普遍使用的应用与内核通信的机制．
 </p>
 
-<div id="outline-container-orgdaf06f3" class="outline-2">
-<h2 id="orgdaf06f3"><span class="section-number-2">1</span> 概述</h2>
+<div id="outline-container-org1993ca3" class="outline-2">
+<h2 id="org1993ca3"><span class="section-number-2">1</span> 概述</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 内核可以通过不同的接口将它内部的信息导出到用户空间．除了可以使用系统调用，还有其它的三种方式．
@@ -112,8 +112,8 @@ sysfs(/sys)
 </p>
 </div>
 </div>
-<div id="outline-container-orge76d3f6" class="outline-2">
-<h2 id="orge76d3f6"><span class="section-number-2">2</span> procfs与sysctl</h2>
+<div id="outline-container-orgc4c31e0" class="outline-2">
+<h2 id="orgc4c31e0"><span class="section-number-2">2</span> procfs与sysctl</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 procfs和sysctl都可以导出内核内部信息，但是procfs主要导出只读信息，而sysctl主要用于导出可写的信息（但是只能通过超级用户）．
@@ -369,7 +369,7 @@ extra2
 </p>
 
 
-<div id="orgd7fd621" class="figure">
+<div id="org399b1e4" class="figure">
 <p><img src="./img/logging_level.png" alt="logging_level.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 1: </span>/proc/sys/dev/scsi/logging_level文件的注册结果</p>
@@ -420,14 +420,14 @@ extra2
 </div>
 </div>
 
-<div id="outline-container-orge8d7855" class="outline-2">
-<h2 id="orge8d7855"><span class="section-number-2">3</span> ioctl</h2>
+<div id="outline-container-org2cc26ff" class="outline-2">
+<h2 id="org2cc26ff"><span class="section-number-2">3</span> ioctl</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 下面的图，展示了ioctl是如何调用的，以ifconfig为例：
 </p>
 
-<div id="org25183ef" class="figure">
+<div id="org09aec0e" class="figure">
 <p><img src="./img/dispatch-ioctl.png" alt="dispatch-ioctl.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>派遣ioctl命令</p>
@@ -446,13 +446,42 @@ ioctl命令在内核里有不同的处理方式．如上图展示的ioctl命令�
 </p>
 </div>
 </div>
-<div id="outline-container-org64ccea9" class="outline-2">
-<h2 id="org64ccea9"><span class="section-number-2">4</span> Netlink</h2>
+<div id="outline-container-org0ed6a26" class="outline-2">
+<h2 id="org0ed6a26"><span class="section-number-2">4</span> Netlink</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+rfc3549描述了netlink套接字，这是一种在内核和用户空间偏爱的通信方式．netlink也可以作为用户进程之间的通信方式．
+</p>
+
+<p>
+通过netlink套接字，可以使用标准套接字API来打开，关闭以及传输数据．socket套接字的原型如下：
+</p>
+
+<p>
+int socket(int domain, int type, int protocol)
+</p>
+
+<p>
+对于这三个参数的细节意义，可以man socket．
+</p>
+
+<p>
+与其它套接字一样，当你打开一个netlink套接字时，需要提供domain，type以及protocol参数．netlink使用新的PF_NETLINK协议，仅支持SOCK_DGRAM类型，并且定义了几个其它不同的协议．每个协议都使用一个（或一组）网络协议栈．大多数网络feature都会使用NETLINK_ROUTE协议，比如路由以及邻居协议．而防火墙使用NETLINK_FIREWALL协议．
+</p>
+
+<p>
+使用netlink套接字，通信端由打开套接字的进程PID来标识，特别的值0表示是内核．netlink有一个特点就是可以发送单播或多播信息：目的通信端可以是一个PID，或者一组PID，或者皆有之．内核会定义netlink多播组就可以在特别类型的事件发生时发送通知，而感兴趣的用户程序可以注册到这个组内．比如RTMGRP_NEIGH和RTMGRP_IPV4_ROUTE分别用来通知路由表以及L3-L2地址映射的变化．
+</p>
+
+<p>
+比起其它用户-内核接口方式，netlink的一个优点就是它可以主动发起一个连接而不是传统的仅返回一些信息给用户空间请求．
+</p>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-09-08 Wed 23:19</p>
+<p class="date">Created: 2021-09-17 Fri 21:41</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

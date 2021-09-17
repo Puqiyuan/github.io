@@ -250,3 +250,16 @@ ioctl命令在内核里有不同的处理方式．如上图展示的ioctl命令�
 
 设备驱动也可以定义新的命令，比如SIOCDEVPRIVATE就指定这样一个起始的私有命令号．当然协议也是可以定义自己的私有命令的，从SIOCPROTOPRIVATE起始．
 * Netlink
+rfc3549描述了netlink套接字，这是一种在内核和用户空间偏爱的通信方式．netlink也可以作为用户进程之间的通信方式．
+
+通过netlink套接字，可以使用标准套接字API来打开，关闭以及传输数据．socket套接字的原型如下：
+
+int socket(int domain, int type, int protocol)
+
+对于这三个参数的细节意义，可以man socket．
+
+与其它套接字一样，当你打开一个netlink套接字时，需要提供domain，type以及protocol参数．netlink使用新的PF_NETLINK协议，仅支持SOCK_DGRAM类型，并且定义了几个其它不同的协议．每个协议都使用一个（或一组）网络协议栈．大多数网络feature都会使用NETLINK_ROUTE协议，比如路由以及邻居协议．而防火墙使用NETLINK_FIREWALL协议．
+
+使用netlink套接字，通信端由打开套接字的进程PID来标识，特别的值0表示是内核．netlink有一个特点就是可以发送单播或多播信息：目的通信端可以是一个PID，或者一组PID，或者皆有之．内核会定义netlink多播组就可以在特别类型的事件发生时发送通知，而感兴趣的用户程序可以注册到这个组内．比如RTMGRP_NEIGH和RTMGRP_IPV4_ROUTE分别用来通知路由表以及L3-L2地址映射的变化．
+
+比起其它用户-内核接口方式，netlink的一个优点就是它可以主动发起一个连接而不是传统的仅返回一些信息给用户空间请求．
