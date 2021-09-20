@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-09-03 Fri 22:35 -->
+<!-- 2021-09-19 Sun 16:29 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文件I/O</title>
@@ -62,27 +62,27 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orga1c71d1">1. 介绍</a></li>
-<li><a href="#orge6d7663">2. 文件描述符</a></li>
-<li><a href="#orga9a6e96">3. open和openat</a></li>
-<li><a href="#org9bbcfee">4. creat函数</a></li>
-<li><a href="#org7c60297">5. close函数</a></li>
-<li><a href="#org4c6251e">6. lseek函数</a></li>
-<li><a href="#org658fe59">7. read函数</a></li>
-<li><a href="#orge417ce5">8. write函数</a></li>
-<li><a href="#org7bce1c3">9. I/O效率</a></li>
-<li><a href="#org067c89d">10. 文件共享</a></li>
-<li><a href="#org5d5c733">11. 原子操作</a></li>
-<li><a href="#org6759e5a">12. dup和dup2</a></li>
-<li><a href="#org4e5eb5a">13. sync/fsync/fdatasync函数</a></li>
-<li><a href="#org5475a5b">14. fcntl函数</a></li>
-<li><a href="#orgc68432c">15. ioctl函数</a></li>
-<li><a href="#org39407b4">16. /dev/fd</a></li>
+<li><a href="#orgcd5cc41">1. 介绍</a></li>
+<li><a href="#org398d4c6">2. 文件描述符</a></li>
+<li><a href="#orgf373a32">3. open和openat</a></li>
+<li><a href="#orga875a6f">4. creat函数</a></li>
+<li><a href="#org3c2b8b3">5. close函数</a></li>
+<li><a href="#org0019ede">6. lseek函数</a></li>
+<li><a href="#org52f958e">7. read函数</a></li>
+<li><a href="#org1e6b9b2">8. write函数</a></li>
+<li><a href="#org5b3d455">9. I/O效率</a></li>
+<li><a href="#orgbbf5c34">10. 文件共享</a></li>
+<li><a href="#orgbb40116">11. 原子操作</a></li>
+<li><a href="#org7130c2f">12. dup和dup2</a></li>
+<li><a href="#org7f82cb4">13. sync/fsync/fdatasync函数</a></li>
+<li><a href="#orgde49404">14. fcntl函数</a></li>
+<li><a href="#org1768579">15. ioctl函数</a></li>
+<li><a href="#orgcf51e81">16. /dev/fd</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orga1c71d1" class="outline-2">
-<h2 id="orga1c71d1"><span class="section-number-2">1</span> 介绍</h2>
+<div id="outline-container-orgcd5cc41" class="outline-2">
+<h2 id="orgcd5cc41"><span class="section-number-2">1</span> 介绍</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 本文主要讨论UNIX系统的文件I/O函数，大多数文件操作仅需通过五个函数就可以完成：open，read，write，lseek以及close．后面会看到各种各样的buffer大小会对read以及write函数产生影响．
@@ -97,56 +97,69 @@ for the JavaScript code in this tag.
 </p>
 </div>
 </div>
-<div id="outline-container-orge6d7663" class="outline-2">
-<h2 id="orge6d7663"><span class="section-number-2">2</span> 文件描述符</h2>
+<div id="outline-container-org398d4c6" class="outline-2">
+<h2 id="org398d4c6"><span class="section-number-2">2</span> 文件描述符</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+对于内核来说，所有打开的文件都可以通过文件描述符来引用到，一个文件描述符是一个非负的整数．当打开或新建一个文件时，内核都会返回一个文件描述符给进程．当在读写文件时，传给read或write的参数是由open或creat函数返回的文件描述符．
+</p>
+
+<p>
+传统上，UNIX系统的shell将进程的标准输入关联到文件描述符0，1关联为标准输出，2关联标准错误．这种惯例被很多shell以及应用呈现使用，但这不是UNIX内核的特点．
+</p>
+
+<p>
+使用定义在&lt;unistd.h&gt;里的STDIN_FILENO，STDOUT_FILENO以及STDOUT_FILENO来代表0，1和2程序的可读性会更好．
+</p>
+</div>
+</div>
+<div id="outline-container-orgf373a32" class="outline-2">
+<h2 id="orgf373a32"><span class="section-number-2">3</span> open和openat</h2>
 </div>
 
-<div id="outline-container-orga9a6e96" class="outline-2">
-<h2 id="orga9a6e96"><span class="section-number-2">3</span> open和openat</h2>
+<div id="outline-container-orga875a6f" class="outline-2">
+<h2 id="orga875a6f"><span class="section-number-2">4</span> creat函数</h2>
 </div>
-<div id="outline-container-org9bbcfee" class="outline-2">
-<h2 id="org9bbcfee"><span class="section-number-2">4</span> creat函数</h2>
+<div id="outline-container-org3c2b8b3" class="outline-2">
+<h2 id="org3c2b8b3"><span class="section-number-2">5</span> close函数</h2>
 </div>
-<div id="outline-container-org7c60297" class="outline-2">
-<h2 id="org7c60297"><span class="section-number-2">5</span> close函数</h2>
+<div id="outline-container-org0019ede" class="outline-2">
+<h2 id="org0019ede"><span class="section-number-2">6</span> lseek函数</h2>
 </div>
-<div id="outline-container-org4c6251e" class="outline-2">
-<h2 id="org4c6251e"><span class="section-number-2">6</span> lseek函数</h2>
+<div id="outline-container-org52f958e" class="outline-2">
+<h2 id="org52f958e"><span class="section-number-2">7</span> read函数</h2>
 </div>
-<div id="outline-container-org658fe59" class="outline-2">
-<h2 id="org658fe59"><span class="section-number-2">7</span> read函数</h2>
+<div id="outline-container-org1e6b9b2" class="outline-2">
+<h2 id="org1e6b9b2"><span class="section-number-2">8</span> write函数</h2>
 </div>
-<div id="outline-container-orge417ce5" class="outline-2">
-<h2 id="orge417ce5"><span class="section-number-2">8</span> write函数</h2>
+<div id="outline-container-org5b3d455" class="outline-2">
+<h2 id="org5b3d455"><span class="section-number-2">9</span> I/O效率</h2>
 </div>
-<div id="outline-container-org7bce1c3" class="outline-2">
-<h2 id="org7bce1c3"><span class="section-number-2">9</span> I/O效率</h2>
+<div id="outline-container-orgbbf5c34" class="outline-2">
+<h2 id="orgbbf5c34"><span class="section-number-2">10</span> 文件共享</h2>
 </div>
-<div id="outline-container-org067c89d" class="outline-2">
-<h2 id="org067c89d"><span class="section-number-2">10</span> 文件共享</h2>
+<div id="outline-container-orgbb40116" class="outline-2">
+<h2 id="orgbb40116"><span class="section-number-2">11</span> 原子操作</h2>
 </div>
-<div id="outline-container-org5d5c733" class="outline-2">
-<h2 id="org5d5c733"><span class="section-number-2">11</span> 原子操作</h2>
+<div id="outline-container-org7130c2f" class="outline-2">
+<h2 id="org7130c2f"><span class="section-number-2">12</span> dup和dup2</h2>
 </div>
-<div id="outline-container-org6759e5a" class="outline-2">
-<h2 id="org6759e5a"><span class="section-number-2">12</span> dup和dup2</h2>
+<div id="outline-container-org7f82cb4" class="outline-2">
+<h2 id="org7f82cb4"><span class="section-number-2">13</span> sync/fsync/fdatasync函数</h2>
 </div>
-<div id="outline-container-org4e5eb5a" class="outline-2">
-<h2 id="org4e5eb5a"><span class="section-number-2">13</span> sync/fsync/fdatasync函数</h2>
+<div id="outline-container-orgde49404" class="outline-2">
+<h2 id="orgde49404"><span class="section-number-2">14</span> fcntl函数</h2>
 </div>
-<div id="outline-container-org5475a5b" class="outline-2">
-<h2 id="org5475a5b"><span class="section-number-2">14</span> fcntl函数</h2>
+<div id="outline-container-org1768579" class="outline-2">
+<h2 id="org1768579"><span class="section-number-2">15</span> ioctl函数</h2>
 </div>
-<div id="outline-container-orgc68432c" class="outline-2">
-<h2 id="orgc68432c"><span class="section-number-2">15</span> ioctl函数</h2>
-</div>
-<div id="outline-container-org39407b4" class="outline-2">
-<h2 id="org39407b4"><span class="section-number-2">16</span> /dev/fd</h2>
+<div id="outline-container-orgcf51e81" class="outline-2">
+<h2 id="orgcf51e81"><span class="section-number-2">16</span> /dev/fd</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-09-03 Fri 22:35</p>
+<p class="date">Created: 2021-09-19 Sun 16:29</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
