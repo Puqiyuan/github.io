@@ -45,6 +45,8 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
   + [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
   + [[./kernel/net/critical_data_struct.html][关键数据结构]]。
   + [[./kernel/net/user_to_kernel.html][用户空间到内核层的接口]]．
+  + [[./kernel/net/notify_chain.html][通知链]]．
+      
 ** 中断与异常
   + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考
     [[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。

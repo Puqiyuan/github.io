@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-09-22 Wed 22:23 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>通知链</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">通知链</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org937bd31">1. 为什么要有通知链</a></li>
+<li><a href="#orgc57134c">2. 概要</a></li>
+<li><a href="#org637848a">3. 定义通知链</a></li>
+<li><a href="#orge341dd3">4. 注册通知链</a></li>
+<li><a href="#org9dc0559">5. 发送事件到通知链</a></li>
+<li><a href="#orgf71ebd2">6. 网络子系统的通知链</a></li>
+<li><a href="#org3e5c23b">7. 通过/proc文件系统微调</a></li>
+</ul>
+</div>
+</div>
+<p>
+内核的许多子系统都是相互独立的，所以发生在其中一个子系统的事情也许是其它子系统关心的．为了完成这种通知，Linux使用一种叫做通知链的机制．
+</p>
+
+<p>
+在本文中，将会介绍以下内容：
+</p>
+<ul class="org-ul">
+<li>通知链如何声明以及网络代码定义了哪些通知链．</li>
+<li>某个内核子系统怎样注册到一个通知链．</li>
+<li>某个内核子系统怎样发送通知到通知链．</li>
+</ul>
+
+<p>
+要注意的是通知链仅用于内核子系统间，至于内核和用户空间的机制，参考本系列的其它文章．
+</p>
+
+<div id="outline-container-org937bd31" class="outline-2">
+<h2 id="org937bd31"><span class="section-number-2">1</span> 为什么要有通知链</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+如下图，假设有一个Linux路由器具有4个接口，这个图展示了这个路由器和五个网络的关系，以及一个简化版的路由表．
+</p>
+
+
+<div id="org6f118ee" class="figure">
+<p><img src="./img/linux-router.png" alt="linux-router.png" width="40%" height="40%">
+</p>
+<p><span class="figure-number">Figure 1: </span>一个Linux路由器的例子</p>
+</div>
+
+<p>
+在这个图中，通过接口eth0网络A直接连接到RT路由器，而网络F并未直接连接到RT．但是RT的eth3接口直接连接到另一个路由器，而这个路由器有一个接口具有地址IP1，这个路由器知道怎么到达网络F，其它情况是类似的．简而言之，某些网络可以直接连接而另外一些网络则需要额外的一个或多个路由器才能到达．
+</p>
+
+<p>
+现在假设接口eth3断掉了，因为硬件错误或者管理员的手动配置命令．这样网络D，E以及F就不通过RT达到了，那么这个信息就需要从路由表中移除，谁来负责告知路由子系统关于这个接口的故障呢？就是通知链．
+</p>
+
+<p>
+而下面的图显示了一个更加复杂的情况，在这里路由子系统要和动态路由协议交互．
+</p>
+
+<div id="org021415b" class="figure">
+<p><img src="./img/linux-router-dynamic.png" alt="linux-router-dynamic.png" width="40%" height="40%">
+</p>
+</div>
+
+<p>
+在上图中，从RT出发，网络F可以经由网络A或E到达，在最初的时候，选择了通过网络E，假设现在网络E不可达了，那么路由表必须更新，到达网络F现在经由网络A．这样的信息也需要通知到管理路由表的路由子系统，也就是通知链的必要性．
+</p>
+</div>
+</div>
+<div id="outline-container-orgc57134c" class="outline-2">
+<h2 id="orgc57134c"><span class="section-number-2">2</span> 概要</h2>
+</div>
+
+<div id="outline-container-org637848a" class="outline-2">
+<h2 id="org637848a"><span class="section-number-2">3</span> 定义通知链</h2>
+</div>
+<div id="outline-container-orge341dd3" class="outline-2">
+<h2 id="orge341dd3"><span class="section-number-2">4</span> 注册通知链</h2>
+</div>
+<div id="outline-container-org9dc0559" class="outline-2">
+<h2 id="org9dc0559"><span class="section-number-2">5</span> 发送事件到通知链</h2>
+</div>
+<div id="outline-container-orgf71ebd2" class="outline-2">
+<h2 id="orgf71ebd2"><span class="section-number-2">6</span> 网络子系统的通知链</h2>
+</div>
+<div id="outline-container-org3e5c23b" class="outline-2">
+<h2 id="org3e5c23b"><span class="section-number-2">7</span> 通过/proc文件系统微调</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-09-22 Wed 22:23</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
