@@ -394,6 +394,13 @@ mremap是一个系统调用，可以用来增长或收缩一个内存映射．�
 ** 删除区域
 do_munmap可以用于删除内存区域．而在进程退出时调用exit_mmap来unmap所有映射．
 * 异常处理
-* Page Fault
+VM一个重要的部分就是内核要能捕获地址空间的异常，注意这不是bug．这一节不会描述除0这样的异常，而仅是关注page fault的异常．有两种情形会引起不恰当的引用，一是进程通过syscall向内核发送了无效的指针，内核必须要能捕获并且地址要确保在PAGE_OFFSET下．其二就是使用copy_from_user或者copy_to_user来从用户空间读或写．
 
+在编译时链接器会在内核代码的__ex_table段里创建异常表，这个表开始于__start___ex_table而结束于__stop___ex_table．每个条目都是exception_table_entry类型的．
+* Page Fault
+在进程线性地址空间的页面没有必要长驻在内存里．进程对于内存的分配要求并不会立即得到满足，一次分配其实很可能只是在vm_area_struct里预留了空间．而对于交换出去的只读页面也是非持久驻留的．
+
+和其它很多进程一样，Linux也有按需调页策略．这就是说，只有当硬件发出分页异常时，才会从下级存储介质中调页．而预调一些页可以减少异常的发生，通过函数swapin_readahead可以预先多调一些页．
+
+page fault主要有两种类型，一是major的，再者是minor的．major fault就是说数据必须从磁盘上读，这是十分昂贵的操作．而minor fault是页面在内存里但可能不属于当前进程．Linux将这个两个信息维护在task_struct->maj_flt和task_struct->min_flt成员里．
 * 拷贝到/拷贝自用户空间
