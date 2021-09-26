@@ -402,5 +402,44 @@ VM一个重要的部分就是内核要能捕获地址空间的异常，注意这
 
 和其它很多进程一样，Linux也有按需调页策略．这就是说，只有当硬件发出分页异常时，才会从下级存储介质中调页．而预调一些页可以减少异常的发生，通过函数swapin_readahead可以预先多调一些页．
 
-page fault主要有两种类型，一是major的，再者是minor的．major fault就是说数据必须从磁盘上读，这是十分昂贵的操作．而minor fault是页面在内存里但可能不属于当前进程．Linux将这个两个信息维护在task_struct->maj_flt和task_struct->min_flt成员里．
+page fault主要有两种类型，一是major的，再者是minor的．major fault就是说数据必须从磁盘上读，这是十分昂贵的操作．而minor fault是页面在内存里但可能不属于当前进程．Linux将这两个信息维护在task_struct->maj_flt和task_struct->min_flt成员里．
+
+Linux的page fault句柄可以识别并处理下表中一些不同类型的页错误．
+
+| 异常                                     | 类型  | 行为                                                                                                               |
+| 内存区域有效但是页面未分配               | minor | 物理页面分配器分配一个页帧                                                                                         |
+| 内存区域无效但是紧邻像栈这样的可扩展区域 | minor | 扩展区域并分配页面                                                                                                 |
+| 页面交换出去了，但是存在于交换缓存中     | minor | 在进程页表空间重新建立一下映射，并且对于交换缓存减去一个引用                                                       |
+| 页面交换到了像磁盘这样的下级存储中       | major | 使用存储在pte中的信息来找到页面在哪里并从磁盘里读取                                                                |
+| 写了只读的页面                           | minor | 如果是个COW页面，则复制一份这个页面，把复制的这个页面标识为可写并分配给进程，如果写本身就是非法的，发送SIGSEGV信号 |
+| 内存区域无效或者进程没有权限访问         | error | 给进程发送SIGSEGV信号                                                                                              |
+| 在内核地址空间发生了分页异常             | minor | 如果异常发生在vmalloc区域，当前进程的页表被更新为init_mm．vmalloc区域是内核唯一能合法发生page fault的空间．        |
+| 地址是用户空间但却处于内核模式           | error | 这意味着内核没有正确的从用户空间拷贝从而造成分页错误，这是严重的内核bug                                            |
+
+\\
+各架构会定义自己架构相关的函数来处理分页错误．尽管这个名字可以是任意的，但通行的选择就是叫do_page_fault．这个函数提供了丰富的信息，比如发生错误的地址，是不是仅是没有找到页面，抑或是一个权限保护错误，是读还是写的错误，以及错误是来自user还是kernel空间．该函数会负责确定错误的类型以及该由何种架构无关的代码去处理．下面的图展示了该函数的许多信息．
+
+#+CAPTION: do_page_fault的流程
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/do_page_fault_flow.png]]
+
+handle_mm_fault是一个架构无关的函数，会执行COW（Copy-On-Write）机制等．
+** 处理分页异常
+一旦异常句柄确认引起异常是来自一个有效内存区域的有效页面，就会调用架构无关的
+handle_mm_fault函数．它的调用图如下：
+
+#+CAPTION: handle_mm_fault的调用图
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/handle_mm_fault_flow.png]]
+
+注意最新的代码可能不是这样的流程了，不过变化也仅是个别函数名变了，总体流程是没有变的，比如handle_mm_fault其实是__handle_mm_fault函数了．对于这些函数在内核里如果找不到名字，那么在git log里是很容易看到它们是怎样变化的．大体来说，研究流程和原理时，这些具体的函数名字究竟是什么，并不重要．
+
+如果相应的条目不存在，就会调用相应的函数来分配，并且调用handle_pte_fault．依据pte属性的不同，上图中的某个处理函数会被调用．第一阶段的决定是确认pte是否存在，或者是否分配了页面．如果pte没有分配，也就是pte_none返回了true，那么do_no_page就会被调用，这叫做按需分配．而如果页面被swap out到磁盘，就会调用do_swap_page．
+
+
+** 按需分配
+** 按需分页
+** COW页面
 * 拷贝到/拷贝自用户空间

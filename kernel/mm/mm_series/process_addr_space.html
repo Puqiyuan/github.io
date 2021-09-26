@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-09-25 Sat 23:16 -->
+<!-- 2021-09-26 Sun 22:44 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程地址空间</title>
@@ -62,33 +62,40 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgae8a0fc">1. 线性地址空间</a></li>
-<li><a href="#orgbb8729c">2. 管理地址空间</a></li>
-<li><a href="#orga715991">3. 进程地址空间描述符</a>
+<li><a href="#orgfedbab0">1. 线性地址空间</a></li>
+<li><a href="#org239af1b">2. 管理地址空间</a></li>
+<li><a href="#orge6550b9">3. 进程地址空间描述符</a>
 <ul>
-<li><a href="#org180ea40">3.1. 分配mm_struct描述符</a></li>
-<li><a href="#org8291826">3.2. 初始化描述符</a></li>
-<li><a href="#org745e198">3.3. 销毁mm_struct</a></li>
+<li><a href="#org70f01d3">3.1. 分配mm_struct描述符</a></li>
+<li><a href="#orgafeb06a">3.2. 初始化描述符</a></li>
+<li><a href="#org7219fd2">3.3. 销毁mm_struct</a></li>
 </ul>
 </li>
-<li><a href="#org00ae3cd">4. 内存区域（regions）</a>
+<li><a href="#orgd4793f2">4. 内存区域（regions）</a>
 <ul>
-<li><a href="#orgb51776b">4.1. 内存区域操作</a></li>
-<li><a href="#org6d8192d">4.2. 映射文件/设备</a></li>
-<li><a href="#org1893dcd">4.3. 创建内存区域</a></li>
-<li><a href="#org514140b">4.4. 查找内存区域</a></li>
-<li><a href="#org35558c7">4.5. 查询空闲区域</a></li>
-<li><a href="#orgdd42933">4.6. 插入内存区域</a></li>
-<li><a href="#orgf3908a1">4.7. 合并连续区域</a></li>
-<li><a href="#org46ae45e">4.8. 重映射区域</a></li>
-<li><a href="#orgaa92275">4.9. 区域锁</a></li>
-<li><a href="#org54cd227">4.10. 解锁区域</a></li>
-<li><a href="#org9f60ca8">4.11. 删除区域</a></li>
+<li><a href="#org53e88df">4.1. 内存区域操作</a></li>
+<li><a href="#org37ea988">4.2. 映射文件/设备</a></li>
+<li><a href="#orgcc0f89e">4.3. 创建内存区域</a></li>
+<li><a href="#org3ae37a1">4.4. 查找内存区域</a></li>
+<li><a href="#orgad10829">4.5. 查询空闲区域</a></li>
+<li><a href="#org9f0ec03">4.6. 插入内存区域</a></li>
+<li><a href="#orgcf9631b">4.7. 合并连续区域</a></li>
+<li><a href="#orgeaa3d44">4.8. 重映射区域</a></li>
+<li><a href="#orgca103e2">4.9. 区域锁</a></li>
+<li><a href="#orge0eb61a">4.10. 解锁区域</a></li>
+<li><a href="#orgacc185a">4.11. 删除区域</a></li>
 </ul>
 </li>
-<li><a href="#org0d9d7b0">5. 异常处理</a></li>
-<li><a href="#orge612fbe">6. Page Fault</a></li>
-<li><a href="#org43d1fa6">7. 拷贝到/拷贝自用户空间</a></li>
+<li><a href="#orge0bdb32">5. 异常处理</a></li>
+<li><a href="#orgc954724">6. Page Fault</a>
+<ul>
+<li><a href="#org04ad11c">6.1. 处理分页异常</a></li>
+<li><a href="#org2b2365b">6.2. 按需分配</a></li>
+<li><a href="#org45a8214">6.3. 按需分页</a></li>
+<li><a href="#orgacdec34">6.4. COW页面</a></li>
+</ul>
+</li>
+<li><a href="#orgc35cf9d">7. 拷贝到/拷贝自用户空间</a></li>
 </ul>
 </div>
 </div>
@@ -108,14 +115,14 @@ for the JavaScript code in this tag.
 本文首先介绍线性地址是如何划分以及各个部分的目的．随后会介绍描述每个进程的结构体，这些结构体是如何被分配，初始化以及怎么销毁的．随后会介绍进程的地址空间是如何创建的以及相关联的函数．这些会引入关于进程地址空间的异常处理，pagefault等其它机制．最后会介绍下如何安全的向用户空间拷贝数据或者从用户空间拷贝数据到内核空间．
 </p>
 
-<div id="outline-container-orgae8a0fc" class="outline-2">
-<h2 id="orgae8a0fc"><span class="section-number-2">1</span> 线性地址空间</h2>
+<div id="outline-container-orgfedbab0" class="outline-2">
+<h2 id="orgfedbab0"><span class="section-number-2">1</span> 线性地址空间</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 从用户的观点来说，线性地址空间是平坦的．但是从内核空间来说就很不一样了．地址空间被划分为两部分，用户空间部分，在上下文切换后可能会改变，而内核空间，保持不变．而划分出这个位置的就是PAGE_OFFSET，对于X86来说这个值是0xC0000000．这意味着3GB留给进程，而1GB留给内核空间，内核所看到的地址空间划分如下图：
 </p>
 
-<div id="org45cc8dd" class="figure">
+<div id="org7d19067" class="figure">
 <p><img src="./img/kas.png" alt="kas.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 1: </span>内核看到的地址空间</p>
@@ -123,8 +130,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-orgbb8729c" class="outline-2">
-<h2 id="orgbb8729c"><span class="section-number-2">2</span> 管理地址空间</h2>
+<div id="outline-container-org239af1b" class="outline-2">
+<h2 id="org239af1b"><span class="section-number-2">2</span> 管理地址空间</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 进程用到的地址空间，由mm_struct结构体管理着，它类似于BSD里的vmspace．
@@ -140,7 +147,7 @@ vm_area_struct)可能代表由malloc分配出来的堆，针对共享库的内�
 </p>
 
 
-<div id="orga40813b" class="figure">
+<div id="orgbe81407" class="figure">
 <p><img src="./img/ds_as.png" alt="ds_as.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>地址空间相关的结构体</p>
@@ -226,8 +233,8 @@ exit
 </div>
 </div>
 
-<div id="outline-container-orga715991" class="outline-2">
-<h2 id="orga715991"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
+<div id="outline-container-orge6550b9" class="outline-2">
+<h2 id="orge6550b9"><span class="section-number-2">3</span> 进程地址空间描述符</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 进程地址空间由mm_struct描述，就是说对于一个进程来说，仅有一个mm_struct，并且这个mm_struct由用户线程共享．实际上，线程的寻找方式就是，找出所有指向同一个mm_strcut的task_struct(s).
@@ -298,8 +305,8 @@ free_mm：将mm_struct返回到slab分配器．
 </p>
 </div>
 
-<div id="outline-container-org180ea40" class="outline-3">
-<h3 id="org180ea40"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
+<div id="outline-container-org70f01d3" class="outline-3">
+<h3 id="org70f01d3"><span class="section-number-3">3.1</span> 分配mm_struct描述符</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 有两个函数可以用于分配mm_struct，它们看起来容易混淆．一是allocate_mm，它是一个预定义的宏，单纯从slab allocator里分配mm_struct．而mm_alloc除了调用allocate_mm分配一个mm_struct，还得调用mm_init初始化．
@@ -307,8 +314,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 
-<div id="outline-container-org8291826" class="outline-3">
-<h3 id="org8291826"><span class="section-number-3">3.2</span> 初始化描述符</h3>
+<div id="outline-container-orgafeb06a" class="outline-3">
+<h3 id="orgafeb06a"><span class="section-number-3">3.2</span> 初始化描述符</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 系统里的第一个mm_struct叫做init_mm．后面的mm_struct都是父进程mm_struct的拷贝．init_mm在编译时静态的初始化好了．如下：
@@ -337,8 +344,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 
-<div id="outline-container-org745e198" class="outline-3">
-<h3 id="org745e198"><span class="section-number-3">3.3</span> 销毁mm_struct</h3>
+<div id="outline-container-org7219fd2" class="outline-3">
+<h3 id="org7219fd2"><span class="section-number-3">3.3</span> 销毁mm_struct</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 使用atomic_inc(&amp;mm-&gt;mm_users)可以增加用户计数，而mmput会递减这个数字．如果减到0，所有的映射就都会被exit_mmap取消．
@@ -346,8 +353,8 @@ free_mm：将mm_struct返回到slab分配器．
 </div>
 </div>
 </div>
-<div id="outline-container-org00ae3cd" class="outline-2">
-<h2 id="org00ae3cd"><span class="section-number-2">4</span> 内存区域（regions）</h2>
+<div id="outline-container-orgd4793f2" class="outline-2">
+<h2 id="orgd4793f2"><span class="section-number-2">4</span> 内存区域（regions）</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 一个进程的完整地址空间是很少使用到的，仅有稀疏的几个区域会被用到，这样的每个区域被vm_area_struct结构体表示，这样的vm_area_struct不会重叠，并且一个vm_area_struct内具有相同的保护目的．举个例子，一个只读的共享库就会被加载到同一个地址空间（内存区域）．通过/proc/PID/maps可以查看一个进程映射的所有内存区域．
@@ -598,8 +605,8 @@ vm_private_data
 </p>
 </div>
 
-<div id="outline-container-orgb51776b" class="outline-3">
-<h3 id="orgb51776b"><span class="section-number-3">4.1</span> 内存区域操作</h3>
+<div id="outline-container-org53e88df" class="outline-3">
+<h3 id="org53e88df"><span class="section-number-3">4.1</span> 内存区域操作</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 一个VMA可以支持三个操作，比如open，close以及fault．VMA可以通过vm_operations_struct来实现这
@@ -626,8 +633,8 @@ vm_private_data
 </div>
 </div>
 </div>
-<div id="outline-container-org6d8192d" class="outline-3">
-<h3 id="org6d8192d"><span class="section-number-3">4.2</span> 映射文件/设备</h3>
+<div id="outline-container-org37ea988" class="outline-3">
+<h3 id="org37ea988"><span class="section-number-3">4.2</span> 映射文件/设备</h3>
 <div class="outline-text-3" id="text-4-2">
 <p>
 当一个区域由文件映射时，其vm_file成员都会包含一个address_space类型的f_mapping成员．
@@ -717,8 +724,8 @@ bmap
 </div>
 </div>
 
-<div id="outline-container-org1893dcd" class="outline-3">
-<h3 id="org1893dcd"><span class="section-number-3">4.3</span> 创建内存区域</h3>
+<div id="outline-container-orgcc0f89e" class="outline-3">
+<h3 id="orgcc0f89e"><span class="section-number-3">4.3</span> 创建内存区域</h3>
 <div class="outline-text-3" id="text-4-3">
 <p>
 系统调用mmap用来在进程地址空间里创建一个内存区域，mmap系统调用最后调到了do_mmap．这个函数很复杂，大体来说做了以下几点事情：
@@ -735,8 +742,8 @@ bmap
 </ol>
 </div>
 </div>
-<div id="outline-container-org514140b" class="outline-3">
-<h3 id="org514140b"><span class="section-number-3">4.4</span> 查找内存区域</h3>
+<div id="outline-container-org3ae37a1" class="outline-3">
+<h3 id="org3ae37a1"><span class="section-number-3">4.4</span> 查找内存区域</h3>
 <div class="outline-text-3" id="text-4-4">
 <p>
 一种常见的操作是找寻一个特定的地址属于哪个VMA，比如page-fault里的操作．下面列出一些函数，其中包括find_vma，这些函数都会影响内存区域．
@@ -804,8 +811,8 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 </p>
 </div>
 </div>
-<div id="outline-container-org35558c7" class="outline-3">
-<h3 id="org35558c7"><span class="section-number-3">4.5</span> 查询空闲区域</h3>
+<div id="outline-container-orgad10829" class="outline-3">
+<h3 id="orgad10829"><span class="section-number-3">4.5</span> 查询空闲区域</h3>
 <div class="outline-text-3" id="text-4-5">
 <p>
 当新的区域需要被映射到内存时，空闲的vma就必须被分配，并且要足够大来容纳新的映射．负责找寻空闲区域的函数是get_unmapped_area．
@@ -827,7 +834,7 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 get_unmapped_area的调用图如下：
 </p>
 
-<div id="org90556f0" class="figure">
+<div id="org09b3920" class="figure">
 <p><img src="./img/get_unmapped_area_call_graph.png" alt="get_unmapped_area_call_graph.png" width="15%" height="15%">
 </p>
 <p><span class="figure-number">Figure 3: </span>get_unmapped_area调用图</p>
@@ -835,14 +842,14 @@ get_unmapped_area的调用图如下：
 </div>
 </div>
 
-<div id="outline-container-orgdd42933" class="outline-3">
-<h3 id="orgdd42933"><span class="section-number-3">4.6</span> 插入内存区域</h3>
+<div id="outline-container-org9f0ec03" class="outline-3">
+<h3 id="org9f0ec03"><span class="section-number-3">4.6</span> 插入内存区域</h3>
 <div class="outline-text-3" id="text-4-6">
 <p>
 插入内存区域的主要函数是insert_vm_struct．其调用图见下：
 </p>
 
-<div id="orgcb8d806" class="figure">
+<div id="org510362f" class="figure">
 <p><img src="./img/insert_vm_struct_call_graph.png" alt="insert_vm_struct_call_graph.png" width="30%" height="30%">
 </p>
 </div>
@@ -861,24 +868,24 @@ vma_link函数主要分三个阶段来完成工作，以三个函数调用为标
 </div>
 </div>
 
-<div id="outline-container-orgf3908a1" class="outline-3">
-<h3 id="orgf3908a1"><span class="section-number-3">4.7</span> 合并连续区域</h3>
+<div id="outline-container-orgcf9631b" class="outline-3">
+<h3 id="orgcf9631b"><span class="section-number-3">4.7</span> 合并连续区域</h3>
 <div class="outline-text-3" id="text-4-7">
 <p>
 通过vma_merger可以将满足条件的vma合并在一起．
 </p>
 </div>
 </div>
-<div id="outline-container-org46ae45e" class="outline-3">
-<h3 id="org46ae45e"><span class="section-number-3">4.8</span> 重映射区域</h3>
+<div id="outline-container-orgeaa3d44" class="outline-3">
+<h3 id="orgeaa3d44"><span class="section-number-3">4.8</span> 重映射区域</h3>
 <div class="outline-text-3" id="text-4-8">
 <p>
 mremap是一个系统调用，可以用来增长或收缩一个内存映射．其内里实现是do_mremap函数，其调用move_vma可以将一个vma移动到新的位置．
 </p>
 </div>
 </div>
-<div id="outline-container-orgaa92275" class="outline-3">
-<h3 id="orgaa92275"><span class="section-number-3">4.9</span> 区域锁</h3>
+<div id="outline-container-orgca103e2" class="outline-3">
+<h3 id="orgca103e2"><span class="section-number-3">4.9</span> 区域锁</h3>
 <div class="outline-text-3" id="text-4-9">
 <p>
 通过mlock系统调用，Linux可以将页面锁在内存里．其核心函数是do_mlock，可以找到受影响范围的vma，然后将它们锁在内存里，不允许换出．
@@ -889,16 +896,16 @@ mremap是一个系统调用，可以用来增长或收缩一个内存映射．�
 </p>
 </div>
 </div>
-<div id="outline-container-org54cd227" class="outline-3">
-<h3 id="org54cd227"><span class="section-number-3">4.10</span> 解锁区域</h3>
+<div id="outline-container-orge0eb61a" class="outline-3">
+<h3 id="orge0eb61a"><span class="section-number-3">4.10</span> 解锁区域</h3>
 <div class="outline-text-3" id="text-4-10">
 <p>
 通过munlock可以解除锁定到内存．
 </p>
 </div>
 </div>
-<div id="outline-container-org9f60ca8" class="outline-3">
-<h3 id="org9f60ca8"><span class="section-number-3">4.11</span> 删除区域</h3>
+<div id="outline-container-orgacc185a" class="outline-3">
+<h3 id="orgacc185a"><span class="section-number-3">4.11</span> 删除区域</h3>
 <div class="outline-text-3" id="text-4-11">
 <p>
 do_munmap可以用于删除内存区域．而在进程退出时调用exit_mmap来unmap所有映射．
@@ -906,8 +913,8 @@ do_munmap可以用于删除内存区域．而在进程退出时调用exit_mmap�
 </div>
 </div>
 </div>
-<div id="outline-container-org0d9d7b0" class="outline-2">
-<h2 id="org0d9d7b0"><span class="section-number-2">5</span> 异常处理</h2>
+<div id="outline-container-orge0bdb32" class="outline-2">
+<h2 id="orge0bdb32"><span class="section-number-2">5</span> 异常处理</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 VM一个重要的部分就是内核要能捕获地址空间的异常，注意这不是bug．这一节不会描述除0这样的异常，而仅是关注page fault的异常．有两种情形会引起不恰当的引用，一是进程通过syscall向内核发送了无效的指针，内核必须要能捕获并且地址要确保在PAGE_OFFSET下．其二就是使用copy_from_user或者copy_to_user来从用户空间读或写．
@@ -918,8 +925,8 @@ VM一个重要的部分就是内核要能捕获地址空间的异常，注意这
 </p>
 </div>
 </div>
-<div id="outline-container-orge612fbe" class="outline-2">
-<h2 id="orge612fbe"><span class="section-number-2">6</span> Page Fault</h2>
+<div id="outline-container-orgc954724" class="outline-2">
+<h2 id="orgc954724"><span class="section-number-2">6</span> Page Fault</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 在进程线性地址空间的页面没有必要长驻在内存里．进程对于内存的分配要求并不会立即得到满足，一次分配其实很可能只是在vm_area_struct里预留了空间．而对于交换出去的只读页面也是非持久驻留的．
@@ -930,17 +937,139 @@ VM一个重要的部分就是内核要能捕获地址空间的异常，注意这
 </p>
 
 <p>
-page fault主要有两种类型，一是major的，再者是minor的．major fault就是说数据必须从磁盘上读，这是十分昂贵的操作．而minor fault是页面在内存里但可能不属于当前进程．Linux将这个两个信息维护在task_struct-&gt;maj_flt和task_struct-&gt;min_flt成员里．
+page fault主要有两种类型，一是major的，再者是minor的．major fault就是说数据必须从磁盘上读，这是十分昂贵的操作．而minor fault是页面在内存里但可能不属于当前进程．Linux将这两个信息维护在task_struct-&gt;maj_flt和task_struct-&gt;min_flt成员里．
+</p>
+
+<p>
+Linux的page fault句柄可以识别并处理下表中一些不同类型的页错误．
+</p>
+
+<table>
+
+
+<colgroup>
+<col  class="org-left">
+
+<col  class="org-left">
+
+<col  class="org-left">
+</colgroup>
+<tbody>
+<tr>
+<td class="org-left">异常</td>
+<td class="org-left">类型</td>
+<td class="org-left">行为</td>
+</tr>
+
+<tr>
+<td class="org-left">内存区域有效但是页面未分配</td>
+<td class="org-left">minor</td>
+<td class="org-left">物理页面分配器分配一个页帧</td>
+</tr>
+
+<tr>
+<td class="org-left">内存区域无效但是紧邻像栈这样的可扩展区域</td>
+<td class="org-left">minor</td>
+<td class="org-left">扩展区域并分配页面</td>
+</tr>
+
+<tr>
+<td class="org-left">页面交换出去了，但是存在于交换缓存中</td>
+<td class="org-left">minor</td>
+<td class="org-left">在进程页表空间重新建立一下映射，并且对于交换缓存减去一个引用</td>
+</tr>
+
+<tr>
+<td class="org-left">页面交换到了像磁盘这样的下级存储中</td>
+<td class="org-left">major</td>
+<td class="org-left">使用存储在pte中的信息来找到页面在哪里并从磁盘里读取</td>
+</tr>
+
+<tr>
+<td class="org-left">写了只读的页面</td>
+<td class="org-left">minor</td>
+<td class="org-left">如果是个COW页面，则复制一份这个页面，把复制的这个页面标识为可写并分配给进程，如果写本身就是非法的，发送SIGSEGV信号</td>
+</tr>
+
+<tr>
+<td class="org-left">内存区域无效或者进程没有权限访问</td>
+<td class="org-left">error</td>
+<td class="org-left">给进程发送SIGSEGV信号</td>
+</tr>
+
+<tr>
+<td class="org-left">在内核地址空间发生了分页异常</td>
+<td class="org-left">minor</td>
+<td class="org-left">如果异常发生在vmalloc区域，当前进程的页表被更新为init_mm．vmalloc区域是内核唯一能合法发生page fault的空间．</td>
+</tr>
+
+<tr>
+<td class="org-left">地址是用户空间但却处于内核模式</td>
+<td class="org-left">error</td>
+<td class="org-left">这意味着内核没有正确的从用户空间拷贝从而造成分页错误，这是严重的内核bug</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+<br>
+各架构会定义自己架构相关的函数来处理分页错误．尽管这个名字可以是任意的，但通行的选择就是叫do_page_fault．这个函数提供了丰富的信息，比如发生错误的地址，是不是仅是没有找到页面，抑或是一个权限保护错误，是读还是写的错误，以及错误是来自user还是kernel空间．该函数会负责确定错误的类型以及该由何种架构无关的代码去处理．下面的图展示了该函数的许多信息．
+</p>
+
+
+<div id="org73b1b2b" class="figure">
+<p><img src="./img/do_page_fault_flow.png" alt="do_page_fault_flow.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 5: </span>do_page_fault的流程</p>
+</div>
+
+<p>
+handle_mm_fault是一个架构无关的函数，会执行COW（Copy-On-Write）机制等．
+</p>
+</div>
+<div id="outline-container-org04ad11c" class="outline-3">
+<h3 id="org04ad11c"><span class="section-number-3">6.1</span> 处理分页异常</h3>
+<div class="outline-text-3" id="text-6-1">
+<p>
+一旦异常句柄确认引起异常是来自一个有效内存区域的有效页面，就会调用架构无关的
+handle_mm_fault函数．它的调用图如下：
+</p>
+
+
+<div id="org15e2bc7" class="figure">
+<p><img src="./img/handle_mm_fault_flow.png" alt="handle_mm_fault_flow.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 6: </span>handle_mm_fault的调用图</p>
+</div>
+
+<p>
+注意最新的代码可能不是这样的流程了，不过变化也仅是个别函数名变了，总体流程是没有变的，比如handle_mm_fault其实是__handle_mm_fault函数了．对于这些函数在内核里如果找不到名字，那么在git log里是很容易看到它们是怎样变化的．大体来说，研究流程和原理时，这些具体的函数名字究竟是什么，并不重要．
+</p>
+
+<p>
+如果相应的条目不存在，就会调用相应的函数来分配，并且调用handle_pte_fault．依据pte属性的不同，上图中的某个处理函数会被调用．第一阶段的决定是确认pte是否存在，或者是否分配了页面．如果pte没有分配，也就是pte_none返回了true，那么do_no_page就会被调用，这叫做按需分配．而如果页面被swap out到磁盘，就会调用do_swap_page．
 </p>
 </div>
 </div>
-<div id="outline-container-org43d1fa6" class="outline-2">
-<h2 id="org43d1fa6"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
+
+
+<div id="outline-container-org2b2365b" class="outline-3">
+<h3 id="org2b2365b"><span class="section-number-3">6.2</span> 按需分配</h3>
+</div>
+<div id="outline-container-org45a8214" class="outline-3">
+<h3 id="org45a8214"><span class="section-number-3">6.3</span> 按需分页</h3>
+</div>
+<div id="outline-container-orgacdec34" class="outline-3">
+<h3 id="orgacdec34"><span class="section-number-3">6.4</span> COW页面</h3>
+</div>
+</div>
+<div id="outline-container-orgc35cf9d" class="outline-2">
+<h2 id="orgc35cf9d"><span class="section-number-2">7</span> 拷贝到/拷贝自用户空间</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-09-25 Sat 23:16</p>
+<p class="date">Created: 2021-09-26 Sun 22:44</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
