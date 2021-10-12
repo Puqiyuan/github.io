@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-09-14 Tue 22:46 -->
+<!-- 2021-10-12 Tue 22:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>并发与竟态</title>
@@ -129,10 +129,22 @@ for the JavaScript code in this tag.
 <p>
 当信号量的值被初始化为1时，这样的信号量在给定的时间就只能有一个进程访问了，这就是互斥体．
 </p>
+
+<p>
+为了使用信号量，内核代码必须包含&lt;asm/semaphore.h&gt;，相关的结构体就叫semaphore. 可以使用sema_init函数来初始化：
+</p>
+
+<p>
+void sema_init(struct semaphore *sem, int val);
+</p>
+
+<p>
+其中val就是初始化给sem的初始值．
+</p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-09-14 Tue 22:46</p>
+<p class="date">Created: 2021-10-12 Tue 22:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
