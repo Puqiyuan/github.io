@@ -48,3 +48,5 @@ if (!dptr->data[s_pos]) {
 void sema_init(struct semaphore *sem, int val);
 
 其中val就是初始化给sem的初始值．
+
+通常，信号量使用在互斥模式下，为了简化这种情况的使用，内核提供了一些辅助函数和宏．
