@@ -37,6 +37,8 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
     2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]．
 
     3) [[./kernel/mm/mm_series/process_addr_space.html][进程地址空间]]．
+
+    4) [[./kernel/mm/mm_series/boot_mem_allocator.html][启动内存管理器]]．
 ** 进程管理
   + [[https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf][lkd]]介绍的进程管理知识：
     1) [[./kernel/lkd/proc/proc_mm.html][进程管理]]（参看lkd）。

@@ -1,0 +1,6 @@
+#+TITLE: 启动内存分配器
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css"> 
+
+在编译时去初始化所有核心的内核内存数据结构是不切实际的，因为这时对硬件有许多限制．
