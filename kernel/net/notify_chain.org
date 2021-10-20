@@ -66,9 +66,23 @@ notifier_call就是要执行的函数，而next用来链接下一个元素，pri
 #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/not2.png]]
 
-如图，比如可以通过register_inetaddr_notifier来注册到inetaddr_chain通知链．
+如图，比如可以通过register_inetaddr_notifier来注册到inetaddr_chain通知链，其它inet6addr_chain和netdev_chain通知链类似．
 
-notifier_block的
+对于每个通知链，notifier_block的实例被插入到列表中，这些实例由权限排序．权限相同的话就是依据插入顺序了，先到的插入到尾部．
+
+而通知的生成由函数notifier_call_chain来做到，该函数仅是根据权限依次调用注册好的函数．需要注意的是，回调函数的执行是在调用notifier_call_chain函数的进程上下文．
+
+被notifier_call_chain调用的回调函数可以返回NOTIFY_XXX值，比如NOTIFY_OK代表通知被正确的处理．
+
+需要注意的是，对于同一个通知链，其notifier_call_chain函数可能同时的在不同CPU上被调用．处理互斥与序列化访问是回调函数的责任．
+
+内核定义了至少10个不同的通知链，在本系列文章中主要包括网络方面的事件：
+
+inetaddr_chain：当在接口上的IPv4地址插入，删除或改变时就发送通知．
+
+netdev_chain：当网卡设备注册时发送通知．
+
+当然网络代码也可以注册到由其它内核系统生成通知的通知链上，比如某些NIC设备驱动就会注册到reboot_notifier_list通知链上，这样就可以获得系统重启的通知．
 * 定义通知链
 * 注册通知链
 * 发送事件到通知链
