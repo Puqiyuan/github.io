@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-10-12 Tue 22:43 -->
+<!-- 2021-10-20 Wed 21:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>并发与竟态</title>
@@ -141,10 +141,53 @@ void sema_init(struct semaphore *sem, int val);
 <p>
 其中val就是初始化给sem的初始值．
 </p>
+
+<p>
+通常，信号量使用在互斥模式下，为了简化这种情况的使用，内核提供了一些辅助函数和宏：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">DECLARE_MUTEX</span>(name);
+<span style="color: #93E0E3;">DECLARE_MUTEX_LOCKED</span>(name);
+</pre>
+</div>
+
+<p>
+这时，一个名为name的信号量被初始化为1(DECLARE_MUTEX)或者是初始化为0(DECLARE_MUTEX_LOCKED)．后一种情况，mutex自一个锁住状态开始，在线程能访问前必须显式的解锁．
+</p>
+
+<p>
+在Linux的世界里，P函数被叫做down操作．down是指该函数或递减信号量的值，并且有可能使得调用者进入睡眠状态，直到信号量可以提供．对于down是有几个版本可以提供的：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">down</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">semaphore</span> *<span style="color: #DFAF8F;">sem</span>);
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">down_interruptible</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">semaphore</span> *<span style="color: #DFAF8F;">sem</span>);
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">down_trylock</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">semaphore</span> *<span style="color: #DFAF8F;">sem</span>);
+</pre>
+</div>
+
+<p>
+down会递减信号量的值．down_interruptible做类似的事情，但是操作是可以中断的，几乎所有情形下都是使用这个版本的，这个版本允许正在一个信号量上等待的进程被中止等待．使用down_interruptible需要一点额外的小心，如果操作被中断，函数就会返回一个非零的值，这是调用者就并未持有信号量，需要检查它的返回值，并且根据不同的情况做不同的处理．
+</p>
+
+<p>
+而最后一个down_trylock不会睡眠，如果信号量在调用时不可提供的话，它会立即以一个非0的值返回．
+</p>
+
+<p>
+一旦线程成功的调用了down，就是说持有了信号量，线程现在就可以访问由信号量保护起来的临界区．当操作完成后，信号量必须被返回．所谓的V操作，就是函数up：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">up</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">semaphore</span> *<span style="color: #DFAF8F;">sem</span>);
+</pre>
+</div>
+
+<p>
+可以看出，任何持有信号量的线程都必须通过调用up释放一次(且仅一次)．如果在持有信号量的时候遭遇了错误，那么在返回给调用者前必须先释放信号量．未释放信号量是一个容易出现的错误，进程可能在毫无关联的地方挂掉，并且这样的问题很难复现．
+</p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-10-12 Tue 22:43</p>
+<p class="date">Created: 2021-10-20 Wed 21:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

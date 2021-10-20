@@ -49,4 +49,28 @@ void sema_init(struct semaphore *sem, int val);
 
 其中val就是初始化给sem的初始值．
 
-通常，信号量使用在互斥模式下，为了简化这种情况的使用，内核提供了一些辅助函数和宏．
+通常，信号量使用在互斥模式下，为了简化这种情况的使用，内核提供了一些辅助函数和宏：
+#+begin_src c
+DECLARE_MUTEX(name);
+DECLARE_MUTEX_LOCKED(name);
+#+end_src
+
+这时，一个名为name的信号量被初始化为1(DECLARE_MUTEX)或者是初始化为0(DECLARE_MUTEX_LOCKED)．后一种情况，mutex自一个锁住状态开始，在线程能访问前必须显式的解锁．
+
+在Linux的世界里，P函数被叫做down操作．down是指该函数或递减信号量的值，并且有可能使得调用者进入睡眠状态，直到信号量可以提供．对于down是有几个版本可以提供的：
+#+begin_src c
+void down(struct semaphore *sem);
+int down_interruptible(struct semaphore *sem);
+int down_trylock(struct semaphore *sem);
+#+end_src
+
+down会递减信号量的值．down_interruptible做类似的事情，但是操作是可以中断的，几乎所有情形下都是使用这个版本的，这个版本允许正在一个信号量上等待的进程被中止等待．使用down_interruptible需要一点额外的小心，如果操作被中断，函数就会返回一个非零的值，这是调用者就并未持有信号量，需要检查它的返回值，并且根据不同的情况做不同的处理．
+
+而最后一个down_trylock不会睡眠，如果信号量在调用时不可提供的话，它会立即以一个非0的值返回．
+
+一旦线程成功的调用了down，就是说持有了信号量，线程现在就可以访问由信号量保护起来的临界区．当操作完成后，信号量必须被返回．所谓的V操作，就是函数up：
+#+begin_src c
+void up(struct semaphore *sem);
+#+end_src
+
+可以看出，任何持有信号量的线程都必须通过调用up释放一次(且仅一次)．如果在持有信号量的时候遭遇了错误，那么在返回给调用者前必须先释放信号量．未释放信号量是一个容易出现的错误，进程可能在毫无关联的地方挂掉，并且这样的问题很难复现．
