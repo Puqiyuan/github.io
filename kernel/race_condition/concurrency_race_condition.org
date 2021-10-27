@@ -81,5 +81,14 @@ void up(struct semaphore *sem);
 #+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
 [[./img/scull_dev_struct.png]]
 
-在底部的成员sem就是我们的信号量了．对于每个虚拟scull设备，都有一个不同的信号量，当然，只使用一个全局的信号量也是正确的，然而多个scull设备没有共享的资源，所以就没有理由让一个进程使用一个scull设备时而另一个需要使用不同scull设备的进程需要等待．对于每个设备都使用不同的信号量，操作多个设备可以并行，提高效率．
+在底部的成员sem就是我们的信号量了．对于每个虚拟scull设备，都有一个不同的信号量，当然，只使用一个全局的信号量也是正确的，然而多个scull设备没有共享的资源，所以没有理由让一个进程使用某个个scull设备时而另一个需要使用不同scull设备的进程需要等待．对于每个设备都使用不同的信号量，这样操作多个设备时就可以并行，提高效率．
 
+在使用信号量前必须初始化．scull在加载时执行如下的初始化代码：
+#+CAPTION: 初始化信号量
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/init_sem.png]]
+
+在scull设备准备好向系统其它部分使用时信号量必须被初始化好，因此init_MUTEX在scull_setup_cdev之前被调用．如果调换顺序，可能会造成竞态．
+
+下面在涉及到scull_dev结构体时，没有持有信号量时是不能访问scull_dev结构体的．因此scull_
