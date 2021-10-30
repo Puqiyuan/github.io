@@ -71,10 +71,126 @@ openat函数的存在主要为了解决几个问题，首先它提供了一种�
 
 所谓TOCTTOU错，就是程序在调用了两个文件相关的操作时，就会容易出些问题，因为第二个调用要依赖第一个调用的结果．因为这两个调用不是原子的，在这两个系统调用之间，文件可能会改变，因此可能会无效第一个调用的结果，这就可能会导致程序错误．
 
-
 * creat函数
+一个新文件也可以通过调用creat函数来创建．
+#+CAPTION: creat函数
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/creat.png]]
+
+注意这个函数等价于：
+
+open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
+
+后面在描述文件访问权限的细节时会进一步介绍mode参数．
 * close函数
+一个打开的文件可以通过调用close函数来关闭：
+#+CAPTION: close函数
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/close.png]]
+
+当进程退出时，所有打开的文件都会被内核自动关闭．许多程序都利用这一点从而不用显示的关闭打开的文件．
 * lseek函数
+
+每一个打开的文件都有一个与之关联的当前文件偏移，它通常是一个非负的整数，代表着从文件开始的字节数．读写操作通常是由当前文件偏移之始，并且读写完毕会加上读写的字节数．在不指定O_APPEND的情况下，当打开文件时这个偏移通常是0．
+
+一个打开的文件其偏移可以通过lseek函数来设置：
+#+CAPTION: lseek函数
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/lseek.png]]
+
+对于offset如何解释要依据whence参数：
+1) 如果whence是SEEK_SET的话，文件的偏移被设置为自文件起始的offset个字节．
+2) 如果whence是SEEK_CUR，文件的偏移就设置成当前的偏移加上offset，offset可以是正或负．
+3) 如果whence是SEEK_END，文件的偏移被设置成文件的大小加上offset，offset可以是正或负．
+
+由于lseek返回新的文件偏移，可以从当前位置seek到0个字节来得到当前的偏移：
+#+begin_src c
+off_t currpos;
+currpos = lseek(fd, 0, SEEK_CUR);
+#+end_src
+
+该技术也可以用来确定一个文件是否可以进行seeking．如果文件描述符指向的是pipe，FIFO，或者是socket，lseek会设置errno为ESPIPE并且返回-1．
+
+*Example*
+
+下面的程序测试来自标准的输入是否是可seek的：
+
+#+begin_src c
+#include "apue.h"
+int main(int argc, char *argv[])
+{
+  if (lseek(STDIN_FILENO, 0, SEEK_CUR) == -1)
+    printf("cannot seek\n");
+
+  else
+    printf("seek OK\n");
+  
+  return 0;
+}
+#+end_src
+
+调用这个程序，输出如下：
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/seek.png]]
+
+通常情况下，一个文件的偏移必须是非负的整数．但是，某些设备的偏移可以是负的．对于常规文件来说，偏移必须是非负的．因为可能会有非负的值，这样就必须小心的和-1进行比较，而不是只是测试是小于0.
+
+lseek仅是记录了在内核里当前文件的偏移，而并没有发出任何的I/O操作．这个偏移随后被下个读或写操作使用．
+
+文件偏移是可以大于文件大小的，在这种情况下，写将会扩展文件．这就是在文件中创造了一个洞，这是允许的．在文件中没有实际写入的部分都是0．
+
+文件中的空洞是不要求实际的存储空间的．取决于文件系统的实现，当在文件尾之后写入时，可能会分配新的磁盘块来存储数据．但是对于旧文件尾和实际写入的位置之间却没有必要分配磁盘块．
+
+*Example*
+
+下面的程序在文件中创建了一个空洞：
+#+begin_src c
+#include "apue.h"
+#include <fcntl.h>
+
+char buf1[] = "abcdefghij";
+char buf2[] = "ABCDEFGHIJ";
+
+int main(void)
+{
+  int fd;
+  
+  if ((fd = creat("file.hole", FILE_MODE)) < 0)
+    err_sys("create error");
+
+  if (write(fd, buf1, 10) != 10)
+    err_sys("buf1 write error");
+
+  if (lseek(fd, 16384, SEEK_SET) == -1)
+    err_sys("lseek error");
+
+  if (write(fd, buf2, 10) != 10)
+    err_sys("buf2 write error");
+    
+  exit(0);
+}
+#+end_src
+
+运行这个程序可以得到如下的结果：
+#+CAPTION: 在文件中创造空洞
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/create_hole.png]]
+
+使用od程序可以查看这个文件的内容，-c选项是说以字符形式打印文件的内容．可以看到没有写的文件部分是0．每行开始的七个数字是八进制的字节偏移．
+
+通过创建一个一模一样大小但是没有空洞的文件：
+#+CAPTION: 比较大小
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/compare_size_hole.png]]
+
+可以知道，没有空洞的文件占据20个磁盘块，而有空洞的文件占据仅仅8个磁盘块．后面还会介绍更多关于空洞的细节．
 * read函数
 * write函数
 * I/O效率
