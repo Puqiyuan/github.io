@@ -40,9 +40,7 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
 
     4) [[./kernel/mm/mm_series/boot_mem_allocator.html][启动内存管理器]]．
 ** 进程管理
-  + [[https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf][lkd]]介绍的进程管理知识：
-    1) [[./kernel/lkd/proc/proc_mm.html][进程管理]]（参看lkd）。
-    # 2) 进程调度
+[[./kernel/process/process.html][进程基础]]．
 ** 网络
   + [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
   + [[./kernel/net/critical_data_struct.html][关键数据结构]]。

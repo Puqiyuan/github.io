@@ -1,0 +1,6 @@
+#+TITLE: 进程
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css"> 
+
+对任何多程序操作系统来说，进程的概念都是很基本的．

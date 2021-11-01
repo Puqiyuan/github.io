@@ -1,6 +1,0 @@
-#+TITLE: 进程管理
-#+AUTHOR: Cauchy(pqy7172@gmail.com)
-#+EMAIL: pqy7172@gmail.com
-#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
-
-本文阐述Kernel的进程管理，主要参考ch3 of [[https://github.com/Puqiyuan/books/blob/main/cs/lkd.pdf][lkd]]。
