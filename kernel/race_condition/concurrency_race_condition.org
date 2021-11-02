@@ -91,4 +91,24 @@ void up(struct semaphore *sem);
 
 在scull设备准备好向系统其它部分使用时信号量必须被初始化好，因此init_MUTEX在scull_setup_cdev之前被调用．如果调换顺序，可能会造成竞态．
 
-下面在涉及到scull_dev结构体时，没有持有信号量时是不能访问scull_dev结构体的．因此scull_
+下面在涉及到scull_dev结构体时，没有持有信号量时是不能访问scull_dev结构体的．比如scull_write函数就以下面这样的代码开始：
+#+CAPTION: 获得信号量
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/scull_write_begin.png]]
+
+注意检查down_interruptible的返回值，如果是返回非0，操作就会被中断．通常在这种情况下返回-ERESTARTSYS．较上层的内核代码看到这个返回值时要么重启这个调用或者将错误返回给用户．如果返回-ERESTARTSYS，就必须撤销所有用户可见的改变，这样再次尝试系统调用时才是正确的状态．如果不能撤销所有的改变，就应该返回-EINTR．
+
+不论scull_write能否成功执行其它任务，都必须释放信号量．如果一切正常，最后将会执行如下几行代码：
+#+CAPTION: 释放信号量
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 10% :height 10%
+[[./img/out_sem.png]]
+
+这段代码释放信号量并且返回状态．在scull_write函数里，可能有几处会导致scull_write函数失败．包括内存分配失败，尝试从用户空间拷贝数据的失败．在这些情况下，代码会执行goto out，确保正确的清理工作有被执行．
+
+*读者/写者信号量*
+
+信号量对所有的调用者都执行互斥操作，不论这些线程是做什么类型的工作．然而许多任务都可以划分出两个完全不同类型的工作，一是只读保护的数据结构，二是必须作出改变的．通常允许多个并发的读者是可能的，因为没有人尝试改变．因为这样做可以优化性能，只读的任务可以并发的进行从而不用等待其它读者退出关键区．
+
+对这种情况，Linux内核提供一种特别的信号量叫做rwsem．rwsem在驱动里用的较少，
