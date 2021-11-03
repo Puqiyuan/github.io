@@ -111,4 +111,20 @@ void up(struct semaphore *sem);
 
 信号量对所有的调用者都执行互斥操作，不论这些线程是做什么类型的工作．然而许多任务都可以划分出两个完全不同类型的工作，一是只读保护的数据结构，二是必须作出改变的．通常允许多个并发的读者是可能的，因为没有人尝试改变．因为这样做可以优化性能，只读的任务可以并发的进行从而不用等待其它读者退出关键区．
 
-对这种情况，Linux内核提供一种特别的信号量叫做rwsem．rwsem在驱动里用的较少，
+对这种情况，Linux内核提供一种特别的信号量叫做rwsem．rwsem在驱动里用的较少．
+
+使用rwsem的代码必须包含<linux/rwsem.h>，相关的结构体是struct rw_semaphore．rwsem必须调用如下的函数初始化：
+
+void init_rwsem(struct rw_semaphore *sem);
+
+下面的接口用于只读的代码访问：
+#+CAPTION: rw_semaphore只读
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/only_read_rw.png]]
+
+调用down_read将会允许对保护资源进行只读的访问，可以和其它读者并发执行．注意对down_read的调用可能将进程置于不可中断睡眠．down_read_trylock则在读访问不可提供时不会等待，如果访问允许的话返回非0，不允许返回0．通过down_read获得的rwsem，最后必须通过up_read来释放．
+
+而对于写者的接口也是相似的．
+
+rwsem允许一个写者和无限个读者去持有信号量．写者的权限更高，只要一直有写者尝试进入临界区，那么只有当所有写者完成工作时才允许读者持有．这可能会导致饥饿，就是读者被拒绝访问很长一段时间，也就是这时有许多的写者在竞争对信号量的使用．基于此，rwsem最好适用于写很少发生，并且写时时间很短的场景．
