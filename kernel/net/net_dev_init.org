@@ -1,0 +1,7 @@
+#+TITLE: 网络设备初始化
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+
+现代操作系统的灵活性引入了初始化的复杂性．
