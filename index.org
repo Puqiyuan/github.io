@@ -39,6 +39,8 @@ For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟�
     3) [[./kernel/mm/mm_series/process_addr_space.html][进程地址空间]]．
 
     4) [[./kernel/mm/mm_series/boot_mem_allocator.html][启动内存管理器]]．
+
+    5) [[./kernel/mm/mm_series/phy_page_alloc.html][物理页面分配]].
 ** 进程管理
 [[./kernel/process/process.html][进程基础]]．
 ** 网络
