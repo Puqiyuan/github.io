@@ -128,3 +128,41 @@ void init_rwsem(struct rw_semaphore *sem);
 而对于写者的接口也是相似的．
 
 rwsem允许一个写者和无限个读者去持有信号量．写者的权限更高，只要一直有写者尝试进入临界区，那么只有当所有写者完成工作时才允许读者持有．这可能会导致饥饿，就是读者被拒绝访问很长一段时间，也就是这时有许多的写者在竞争对信号量的使用．基于此，rwsem最好适用于写很少发生，并且写时时间很短的场景．
+
+*完成量*
+
+在内核里一种常见的编程模式是，在当前进程之外发起某些活动，然后等待活动的完成．这些活动可以是创建新的内核线程或者用户空间进程，或者发送一个请求到已存在的进程，再或者是某些硬件操作．在这种情况下，很容易想到使用信号量来同步两个任务，像下面这样的代码：
+
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 10% :height 10%
+[[./img/semaphore_com.png]]
+
+这样外部的任务完成时可以调用up(&sem)了．
+
+实践证明，在这种场景下，信号量不是最好的选择．正常情况下，尝试获得信号量的代码多数都应该是发现信号量是可用的．如果有对信号量的竞争，性能就会有损失那么锁方案需要重新评估．所以信号量主要是用在大多数情况是可用的情况下．在上面介绍的沟通任务的完成情况下，调用down的线程通常会等待，因此性能会降低．信号量在某些情况下也可能会导致竞态，这时是自动变量，在有进程调用up时，这个信号量可能会消失．
+
+这些问题促使了完成量的引入．完成量是一种轻量级的方式：可以使得一个线程去告诉另一个线程任务已经完成．为了使用完成量，代码里应该包括<linux/completion.h>．完成量可以通过如下代码创建：
+#+begin_src c
+DECLARE_COMPLETION(my_completion);
+#+end_src
+
+或者是动态的创建：
+#+begin_src c
+struct completion my_completion;
+/* ... */
+init_completion(&my_completion);
+#+end_src
+
+等待完成就是简单的C调用：
+#+begin_src c
+void wait_for_completion(struct completion *c);
+#+end_src
+
+另一方面，实际的完成事件通过以下函数发出：
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/signal_completion.png]]
+
+

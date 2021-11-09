@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-11-03 Wed 21:34 -->
+<!-- 2021-11-09 Tue 23:05 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>并发与竟态</title>
@@ -189,7 +189,7 @@ down会递减信号量的值．down_interruptible做类似的事情，但是操�
 信号量机制提供了一种工具，它可以保证在访问scull_dev结构体时避免竞态问题．但是如何正确使用这个工具却是由我们自己来决定的．使用锁原语的关键是精确的定义出哪个资源需要被保护，以及每次对这些资源的访问都需要被正确的锁住．在例子驱动里，这个结构体就是scull_dev：
 </p>
 
-<div id="orgc876ed1" class="figure">
+<div id="org0b5aab5" class="figure">
 <p><img src="./img/scull_dev_struct.png" alt="scull_dev_struct.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 1: </span>scull_dev结构体</p>
@@ -203,7 +203,7 @@ down会递减信号量的值．down_interruptible做类似的事情，但是操�
 在使用信号量前必须初始化．scull在加载时执行如下的初始化代码：
 </p>
 
-<div id="org05c65d1" class="figure">
+<div id="orgbc647d0" class="figure">
 <p><img src="./img/init_sem.png" alt="init_sem.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>初始化信号量</p>
@@ -217,7 +217,7 @@ down会递减信号量的值．down_interruptible做类似的事情，但是操�
 下面在涉及到scull_dev结构体时，没有持有信号量时是不能访问scull_dev结构体的．比如scull_write函数就以下面这样的代码开始：
 </p>
 
-<div id="org48eb7fd" class="figure">
+<div id="org22f181d" class="figure">
 <p><img src="./img/scull_write_begin.png" alt="scull_write_begin.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>获得信号量</p>
@@ -231,7 +231,7 @@ down会递减信号量的值．down_interruptible做类似的事情，但是操�
 不论scull_write能否成功执行其它任务，都必须释放信号量．如果一切正常，最后将会执行如下几行代码：
 </p>
 
-<div id="orga7c0183" class="figure">
+<div id="org252e242" class="figure">
 <p><img src="./img/out_sem.png" alt="out_sem.png" width="10%" height="10%">
 </p>
 <p><span class="figure-number">Figure 4: </span>释放信号量</p>
@@ -265,7 +265,7 @@ void init_rwsem(struct rw_semaphore *sem);
 下面的接口用于只读的代码访问：
 </p>
 
-<div id="org2fd2ef7" class="figure">
+<div id="org7333566" class="figure">
 <p><img src="./img/only_read_rw.png" alt="only_read_rw.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 5: </span>rw_semaphore只读</p>
@@ -282,10 +282,67 @@ void init_rwsem(struct rw_semaphore *sem);
 <p>
 rwsem允许一个写者和无限个读者去持有信号量．写者的权限更高，只要一直有写者尝试进入临界区，那么只有当所有写者完成工作时才允许读者持有．这可能会导致饥饿，就是读者被拒绝访问很长一段时间，也就是这时有许多的写者在竞争对信号量的使用．基于此，rwsem最好适用于写很少发生，并且写时时间很短的场景．
 </p>
+
+<p>
+<b>完成量</b>
+</p>
+
+<p>
+在内核里一种常见的编程模式是，在当前进程之外发起某些活动，然后等待活动的完成．这些活动可以是创建新的内核线程或者用户空间进程，或者发送一个请求到已存在的进程，再或者是某些硬件操作．在这种情况下，很容易想到使用信号量来同步两个任务，像下面这样的代码：
+</p>
+
+
+<div id="org8058378" class="figure">
+<p><img src="./img/semaphore_com.png" alt="semaphore_com.png" width="10%" height="10%">
+</p>
+</div>
+
+<p>
+这样外部的任务完成时可以调用up(&amp;sem)了．
+</p>
+
+<p>
+实践证明，在这种场景下，信号量不是最好的选择．正常情况下，尝试获得信号量的代码多数都应该是发现信号量是可用的．如果有对信号量的竞争，性能就会有损失那么锁方案需要重新评估．所以信号量主要是用在大多数情况是可用的情况下．在上面介绍的沟通任务的完成情况下，调用down的线程通常会等待，因此性能会降低．信号量在某些情况下也可能会导致竞态，这时是自动变量，在有进程调用up时，这个信号量可能会消失．
+</p>
+
+<p>
+这些问题促使了完成量的引入．完成量是一种轻量级的方式：可以使得一个线程去告诉另一个线程任务已经完成．为了使用完成量，代码里应该包括&lt;linux/completion.h&gt;．完成量可以通过如下代码创建：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">DECLARE_COMPLETION</span>(my_completion);
+</pre>
+</div>
+
+<p>
+或者是动态的创建：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">completion</span> <span style="color: #DFAF8F;">my_completion</span>;
+<span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">...</span><span style="color: #5F7F5F;"> */</span>
+init_completion(&amp;my_completion);
+</pre>
+</div>
+
+<p>
+等待完成就是简单的C调用：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">wait_for_completion</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">completion</span> *<span style="color: #DFAF8F;">c</span>);
+</pre>
+</div>
+
+<p>
+另一方面，实际的完成事件通过以下函数发出：
+</p>
+
+<div id="org6bace0d" class="figure">
+<p><img src="./img/signal_completion.png" alt="signal_completion.png" width="20%" height="20%">
+</p>
+</div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-11-03 Wed 21:34</p>
+<p class="date">Created: 2021-11-09 Tue 23:05</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
