@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-11-05 Fri 21:27 -->
+<!-- 2021-11-10 Wed 23:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>网络设备初始化</title>
@@ -58,13 +58,121 @@ for the JavaScript code in this tag.
 <body>
 <div id="content">
 <h1 class="title">网络设备初始化</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orga2aee2e">1. 系统初始化概要</a></li>
+<li><a href="#org45adcc1">2. 设备注册与初始化</a></li>
+<li><a href="#org712685d">3. NIC初始化的目标</a></li>
+<li><a href="#org803d51b">4. 设备与内核的交互</a></li>
+<li><a href="#org0eb33aa">5. 初始化选项</a></li>
+<li><a href="#orgfdf8689">6. 模块选项</a></li>
+<li><a href="#orgb9b6388">7. 设备处理层初始化：net_dev_init</a></li>
+<li><a href="#org8b46426">8. 用户空间程序</a></li>
+<li><a href="#orga5643fd">9. 虚拟设备</a></li>
+</ul>
+</div>
+</div>
 <p>
-现代操作系统的灵活性引入了初始化的复杂性．
+现代操作系统的灵活性引入了初始化的复杂性．首先，设备驱动既可以作为模块加载也可以作为内核的静态的一部分．其次，设备可以在启动时候存在或者是运行时插入，运行时插入的叫做热插拔设备，包括USB，PCI卡等．本文后面会介绍热插拔是如何影响发生在内核和用户空间的事情的．
 </p>
+
+<p>
+本文主要会涉及到以下几点：
+</p>
+<ul class="org-ul">
+<li>核心网络代码的初始化．</li>
+<li>NIC的初始化．</li>
+<li>NIC如何使用中断，以及IRQ句柄如何被分配和释放，驱动如何共享IRQ也会被介绍到．</li>
+<li>用户如何提供配置参数给设备驱动．</li>
+<li>设备初始化的时候在用户空间和内核之间如何交互．我们会看到内核空间如何运行一个辅助函数可以用来加载正确的设备驱动或者给NIC应用用户空间的配置．尤其是，我们将会看到热插拔功能．</li>
+<li>虚拟设备在配置方面和用户交互时和真实的设备有何不同．</li>
+</ul>
+
+<div id="outline-container-orga2aee2e" class="outline-2">
+<h2 id="orga2aee2e"><span class="section-number-2">1</span> 系统初始化概要</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+下面的图展示了内核一些子系统在启动时的调用序列：
+</p>
+
+<div id="org63fda71" class="figure">
+<p><img src="./img/kernel_init.png" alt="kernel_init.png" width="40%" height="40%">
+</p>
+<p><span class="figure-number">Figure 1: </span>内核初始化</p>
+</div>
+
+<p>
+当内核启动时，会执行start_kernel，这个函数会初始化许多的子系统，如上图所示．在start_kernel结束前，会调用init内核线程，这个线程会负责其余的初始化工作．本文大部分的初始化活动都是在函数do_basic_setup中做的．
+</p>
+
+<p>
+在各种初始化任务中，主要感兴趣三种：
+</p>
+
+<p>
+启动时选项：有两个函数主要用来解析启动加载器(LILO或者GRUB)传过来的配置参数．后面还会看到这两个函数的细节．
+</p>
+
+<p>
+中断与定时器：通过init_IRQ和softirq_init可以初始化硬件和软件中断．中断的细节后面还会介绍，在本文只关心设备驱动怎样注册一个句柄关联到一个IRQ以及IRQ是如何在内存里组织的．定时器也会在启动的早期被初始化，所以后面的任务可以使用它们．
+</p>
+
+<p>
+初始化函数：内核子系统以及内嵌的设备驱动通过调用do_initcalls完成初始化．
+</p>
+
+<p>
+run_init_process决定运行哪个是系统中的第一个进程，其PID是1并且直到系统关机绝不会暂停．通常这个程序就是init．然而系统管理员通过init=是可以指定一个不同的程序的．如果没有指定的话，内核会去一些固定的目录寻找，没找到的话就报panic了．
+</p>
+</div>
+</div>
+<div id="outline-container-org45adcc1" class="outline-2">
+<h2 id="org45adcc1"><span class="section-number-2">2</span> 设备注册与初始化</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+网络设备要想能使用，就必须被内核识别并且关联到正确的驱动．驱动在私有数据结构里存放了所有供设备工作以及与其它内核部件交互的信息．注册和初始化的任务，一部分由核心内核负责另一部分由设置驱动负责:
+</p>
+
+<p>
+硬件初始化：由设备驱动和通用总线(比如PCI或USB)层完成．
+</p>
+
+<p>
+软件初始化：
+</p>
+
+<p>
+特征初始化：
+</p>
+</div>
+</div>
+<div id="outline-container-org712685d" class="outline-2">
+<h2 id="org712685d"><span class="section-number-2">3</span> NIC初始化的目标</h2>
+</div>
+<div id="outline-container-org803d51b" class="outline-2">
+<h2 id="org803d51b"><span class="section-number-2">4</span> 设备与内核的交互</h2>
+</div>
+<div id="outline-container-org0eb33aa" class="outline-2">
+<h2 id="org0eb33aa"><span class="section-number-2">5</span> 初始化选项</h2>
+</div>
+<div id="outline-container-orgfdf8689" class="outline-2">
+<h2 id="orgfdf8689"><span class="section-number-2">6</span> 模块选项</h2>
+</div>
+<div id="outline-container-orgb9b6388" class="outline-2">
+<h2 id="orgb9b6388"><span class="section-number-2">7</span> 设备处理层初始化：net_dev_init</h2>
+</div>
+<div id="outline-container-org8b46426" class="outline-2">
+<h2 id="org8b46426"><span class="section-number-2">8</span> 用户空间程序</h2>
+</div>
+<div id="outline-container-orga5643fd" class="outline-2">
+<h2 id="orga5643fd"><span class="section-number-2">9</span> 虚拟设备</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-11-05 Fri 21:27</p>
+<p class="date">Created: 2021-11-10 Wed 23:00</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
