@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-11-12 Fri 23:38 -->
+<!-- 2021-11-13 Sat 11:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>分段虚拟内存</title>
@@ -62,39 +62,39 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org1bb957c">1. 实模式分段</a></li>
-<li><a href="#org42cdb0a">2. 虚拟8086模式分段</a></li>
-<li><a href="#org129cded">3. 保护模式分段内存模型</a>
+<li><a href="#org20857ee">1. 实模式分段</a></li>
+<li><a href="#org8263491">2. 虚拟8086模式分段</a></li>
+<li><a href="#org791aa32">3. 保护模式分段内存模型</a>
 <ul>
-<li><a href="#org435c2c2">3.1. 多段模型</a></li>
-<li><a href="#org374fa6e">3.2. 平坦内存模型</a></li>
-<li><a href="#org4329463">3.3. 64位模式下的分段</a></li>
+<li><a href="#orgb87d1db">3.1. 多段模型</a></li>
+<li><a href="#org86c4004">3.2. 平坦内存模型</a></li>
+<li><a href="#orge302dc1">3.3. 64位模式下的分段</a></li>
 </ul>
 </li>
-<li><a href="#orgafa238e">4. 分段数据结构与寄存器</a></li>
-<li><a href="#orgb573f15">5. 段选择子与寄存器</a>
+<li><a href="#orgc2415af">4. 分段数据结构与寄存器</a></li>
+<li><a href="#org2010d90">5. 段选择子与寄存器</a>
 <ul>
-<li><a href="#orgbbd87f9">5.1. 段选择子</a></li>
-<li><a href="#orgdd4d818">5.2. 段寄存器</a></li>
+<li><a href="#org5f580b9">5.1. 段选择子</a></li>
+<li><a href="#orgeb5d228">5.2. 段寄存器</a></li>
 </ul>
 </li>
-<li><a href="#org5345763">6. 描述符表</a>
+<li><a href="#org5bb7327">6. 描述符表</a>
 <ul>
-<li><a href="#orgf138438">6.1. 全局描述符表</a></li>
-<li><a href="#orgf78d8af">6.2. 全局描述符表寄存器</a></li>
-<li><a href="#org0b6726c">6.3. 局部描述符表</a></li>
-<li><a href="#orgd6d341f">6.4. 局部描述符表寄存器</a></li>
-<li><a href="#org2d17680">6.5. 中断描述符表</a></li>
-<li><a href="#orgfa2fe93">6.6. 中断描述符表寄存器</a></li>
+<li><a href="#orgf517eee">6.1. 全局描述符表</a></li>
+<li><a href="#orgef93816">6.2. 全局描述符表寄存器</a></li>
+<li><a href="#orge13dcb5">6.3. 局部描述符表</a></li>
+<li><a href="#orge439343">6.4. 局部描述符表寄存器</a></li>
+<li><a href="#org53d88f4">6.5. 中断描述符表</a></li>
+<li><a href="#orgd4fff96">6.6. 中断描述符表寄存器</a></li>
 </ul>
 </li>
-<li><a href="#orgf33c43e">7. Legacy分段描述符</a></li>
-<li><a href="#org03a7627">8. Long-mode分段描述符</a></li>
-<li><a href="#org57abcf4">9. 分段保护概要</a></li>
-<li><a href="#orga53c0da">10. 数据访问权限检查</a></li>
-<li><a href="#org6995316">11. 控制转换权限检查</a></li>
-<li><a href="#orgd68f568">12. 限长检查</a></li>
-<li><a href="#org6720a12">13. 类型检查</a></li>
+<li><a href="#orga22b94b">7. Legacy分段描述符</a></li>
+<li><a href="#org05ad886">8. Long-mode分段描述符</a></li>
+<li><a href="#orgdb606fa">9. 分段保护概要</a></li>
+<li><a href="#orga3fdecd">10. 数据访问权限检查</a></li>
+<li><a href="#orgabd7b93">11. 控制转换权限检查</a></li>
+<li><a href="#orgf9a5740">12. 限长检查</a></li>
+<li><a href="#org107f311">13. 类型检查</a></li>
 </ul>
 </div>
 </div>
@@ -117,8 +117,8 @@ for the JavaScript code in this tag.
 <li>在兼容模式下，分段的功能和legacy mode下一样。</li>
 <li>64-bit模式下，分段是禁用了的，64-bit的虚拟地址是平坦寻址的。然而某些段寄存器仍旧保留了它的功能，尤其是系统段寄存器。</li>
 </ul>
-<div id="outline-container-org1bb957c" class="outline-2">
-<h2 id="org1bb957c"><span class="section-number-2">1</span> 实模式分段</h2>
+<div id="outline-container-org20857ee" class="outline-2">
+<h2 id="org20857ee"><span class="section-number-2">1</span> 实模式分段</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 在重启或加电后，处理器一开始总是会进入实模式，保护模式从实模式进入。
@@ -141,8 +141,8 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 </div>
 </div>
-<div id="outline-container-org42cdb0a" class="outline-2">
-<h2 id="org42cdb0a"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
+<div id="outline-container-org8263491" class="outline-2">
+<h2 id="org8263491"><span class="section-number-2">2</span> 虚拟8086模式分段</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 虚拟8086模式可以支持16-bit的实模式程序运行在保护模式下。它会使用相对简单的内存分段，可选的分页机制，以及限长保护检查。在虚拟8086模式运行的程序可以访问最大1MB的内存空间。
@@ -153,15 +153,15 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 </div>
 </div>
-<div id="outline-container-org129cded" class="outline-2">
-<h2 id="org129cded"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
+<div id="outline-container-org791aa32" class="outline-2">
+<h2 id="org791aa32"><span class="section-number-2">3</span> 保护模式分段内存模型</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 系统软件使用分段机制来支持两个基本的分段内存模型：平坦内存模型以及多段模型．这些分段模型在传统模式以及以及兼容模式都有支持．
 </p>
 </div>
-<div id="outline-container-org435c2c2" class="outline-3">
-<h3 id="org435c2c2"><span class="section-number-3">3.1</span> 多段模型</h3>
+<div id="outline-container-orgb87d1db" class="outline-3">
+<h3 id="orgb87d1db"><span class="section-number-3">3.1</span> 多段模型</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 多段内存模型中，每个段寄存器可以引用一个独特的基址地址和一个独特的段大小．段的大小可以小至单字节大至4G．当使用分页翻译时，多个段可以映射到单个页或者多页可以映射到一个段．对系统软件来说，多段内存模型提供了最大的灵活性．
@@ -172,16 +172,16 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 </div>
 </div>
-<div id="outline-container-org374fa6e" class="outline-3">
-<h3 id="org374fa6e"><span class="section-number-3">3.2</span> 平坦内存模型</h3>
+<div id="outline-container-org86c4004" class="outline-3">
+<h3 id="org86c4004"><span class="section-number-3">3.2</span> 平坦内存模型</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 平坦内存是最容易实现的分段形式．尽管分段不能禁止，平坦内存模型却可以使得系统软件绕过大部分的分段机制．
 </p>
 </div>
 </div>
-<div id="outline-container-org4329463" class="outline-3">
-<h3 id="org4329463"><span class="section-number-3">3.3</span> 64位模式下的分段</h3>
+<div id="outline-container-orge302dc1" class="outline-3">
+<h3 id="orge302dc1"><span class="section-number-3">3.3</span> 64位模式下的分段</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 64bit模式下，分段禁止了．段基址的值被忽略并被分段硬件视作0．相似地，段限长以及大多数属性被忽略，但也有几个例外．CS段的DPL，D以及L属性分别被用来确定程序的权限级，默认的操作数大小，以及程序是否运行在64bit模式或兼容模式．FS和GS段在地址计算中可以被当作基址寄存器，这些段可以有非0的基地址值．这可以加速对某些线程局部数据以及某些系统软件数据结构的寻址．
@@ -189,14 +189,14 @@ GDT，LDT以及TSS在实模式下不被使用。
 </div>
 </div>
 </div>
-<div id="outline-container-orgafa238e" class="outline-2">
-<h2 id="orgafa238e"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
+<div id="outline-container-orgc2415af" class="outline-2">
+<h2 id="orgc2415af"><span class="section-number-2">4</span> 分段数据结构与寄存器</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 下面的图显示了被分段机制使用的一些数据结构：
 </p>
 
-<div id="org1823ae3" class="figure">
+<div id="org05de8fc" class="figure">
 <p><img src="./img/data_struct_segment.png" alt="data_struct_segment.png" width="50%" height="50%">
 </p>
 <p><span class="figure-number">Figure 1: </span>分段的数据结构</p>
@@ -212,7 +212,7 @@ GDT，LDT以及TSS在实模式下不被使用。
 下面的图显示了由分段机制使用的寄存器：
 </p>
 
-<div id="org726c439" class="figure">
+<div id="org7c26b86" class="figure">
 <p><img src="./img/segment_descriptor.png" alt="segment_descriptor.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>分段以及描述符表寄存器</p>
@@ -228,19 +228,19 @@ GDT，LDT以及TSS在实模式下不被使用。
 </ul>
 </div>
 </div>
-<div id="outline-container-orgb573f15" class="outline-2">
-<h2 id="orgb573f15"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
+<div id="outline-container-org2010d90" class="outline-2">
+<h2 id="org2010d90"><span class="section-number-2">5</span> 段选择子与寄存器</h2>
 <div class="outline-text-2" id="text-5">
 </div>
-<div id="outline-container-orgbbd87f9" class="outline-3">
-<h3 id="orgbbd87f9"><span class="section-number-3">5.1</span> 段选择子</h3>
+<div id="outline-container-org5f580b9" class="outline-3">
+<h3 id="org5f580b9"><span class="section-number-3">5.1</span> 段选择子</h3>
 <div class="outline-text-3" id="text-5-1">
 <p>
 段选择子指向全局或局部描述符表里的条目，下面的图展示了段描述符的格式：
 </p>
 
 
-<div id="org4ac032b" class="figure">
+<div id="org244ac61" class="figure">
 <p><img src="./img/segment-selector.png" alt="segment-selector.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>段选择子的格式</p>
@@ -264,15 +264,15 @@ GDT，LDT以及TSS在实模式下不被使用。
 </div>
 </div>
 
-<div id="outline-container-orgdd4d818" class="outline-3">
-<h3 id="orgdd4d818"><span class="section-number-3">5.2</span> 段寄存器</h3>
+<div id="outline-container-orgeb5d228" class="outline-3">
+<h3 id="orgeb5d228"><span class="section-number-3">5.2</span> 段寄存器</h3>
 <div class="outline-text-3" id="text-5-2">
 <p>
 六个16比特的段寄存器用来引用一次最多六个段．所有的软件进程都会要求CS和SS寄存器中被加载段选择子，而是否使用DS，ES，FS或GS却是可选的，但是几乎所有的软件都会访问数据，故而在DS中填选择子也就是必要的了．下面的表列出了支持哪些段寄存器以及它们的作用：
 </p>
 
 
-<div id="orgf0cd0c3" class="figure">
+<div id="org8795292" class="figure">
 <p><img src="./img/segment_register.png" alt="segment_register.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 4: </span>段寄存器</p>
@@ -287,7 +287,7 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 
 
-<div id="org9590bf3" class="figure">
+<div id="orga21d78f" class="figure">
 <p><img src="./img/segment_reg_format.png" alt="segment_reg_format.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 5: </span>段寄存器格式</p>
@@ -308,8 +308,8 @@ GDT，LDT以及TSS在实模式下不被使用。
 </div>
 </div>
 </div>
-<div id="outline-container-org5345763" class="outline-2">
-<h2 id="org5345763"><span class="section-number-2">6</span> 描述符表</h2>
+<div id="outline-container-org5bb7327" class="outline-2">
+<h2 id="org5bb7327"><span class="section-number-2">6</span> 描述符表</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 当保护模式打开时(CR0.PE=1)，分段机制就会使用描述符表．这些表所存放的条目，描述了一个段的位置，大小以及权限信息．在保护模式下的内存引用都会通过描述符表条目．
@@ -328,8 +328,8 @@ GDT，LDT以及TSS在实模式下不被使用。
 通过初始化对应的描述符表寄存器，软件可以设置描述符表在内存里的位置．接下来介绍下描述符表与描述符表寄存器.
 </p>
 </div>
-<div id="outline-container-orgf138438" class="outline-3">
-<h3 id="orgf138438"><span class="section-number-3">6.1</span> 全局描述符表</h3>
+<div id="outline-container-orgf517eee" class="outline-3">
+<h3 id="orgf517eee"><span class="section-number-3">6.1</span> 全局描述符表</h3>
 <div class="outline-text-3" id="text-6-1">
 <p>
 保护模式的系统软件必须创建一个全局描述符表．GDT所包含的代码段或数据段(用户段)描述符条目，其对应的段是可以被所有进程共享的．除了用户段，GDT也可以存放门描述符以及其它的段描述符．系统软件可以将GDT存放在内存里的任何位置，并且对于非权限软件的访问，要保护起来．
@@ -340,7 +340,7 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 
 
-<div id="org7993511" class="figure">
+<div id="org8f31a93" class="figure">
 <p><img src="./img/ldt_gdt_access.png" alt="ldt_gdt_access.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 6: </span>访问GDT或LDT描述符表</p>
@@ -351,48 +351,71 @@ GDT，LDT以及TSS在实模式下不被使用。
 </p>
 </div>
 </div>
-<div id="outline-container-orgf78d8af" class="outline-3">
-<h3 id="orgf78d8af"><span class="section-number-3">6.2</span> 全局描述符表寄存器</h3>
+<div id="outline-container-orgef93816" class="outline-3">
+<h3 id="orgef93816"><span class="section-number-3">6.2</span> 全局描述符表寄存器</h3>
+<div class="outline-text-3" id="text-6-2">
+<p>
+全局描述符表寄存器指向GDT在内存中的位置并且定义了GDT表的大小．这个寄存器通过LGDT指令从内存里加载．下面的图展示了在long模式下的GDTR格式：
+</p>
+
+<div id="org8e3646b" class="figure">
+<p><img src="./img/gdtr_idtr_format.png" alt="gdtr_idtr_format.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 7: </span>GDTR及IDTR格式</p>
 </div>
-<div id="outline-container-org0b6726c" class="outline-3">
-<h3 id="org0b6726c"><span class="section-number-3">6.3</span> 局部描述符表</h3>
+
+<p>
+GDTR包含两个域：
+</p>
+
+<p>
+<b>Limit</b> 2字节．共16比特，指明了GDT的大小和限长．limit的值和基地址的值相加，即得GDT结束字节的位置．如果软件尝试访问超过GDT限制的描述符，通用保护异常(#GP)就会发生．
+</p>
+
+<p>
+<b>基地址</b> 8字节．基地址域存放了GDT在虚拟内存的开始地址．GDT可以位于虚拟地址空间的任意字节地 址，但是系统软件应该将它对齐到四字节边界处，避免访问非对齐数据时带来的性能损失．
+</p>
 </div>
-<div id="outline-container-orgd6d341f" class="outline-3">
-<h3 id="orgd6d341f"><span class="section-number-3">6.4</span> 局部描述符表寄存器</h3>
 </div>
-<div id="outline-container-org2d17680" class="outline-3">
-<h3 id="org2d17680"><span class="section-number-3">6.5</span> 中断描述符表</h3>
+<div id="outline-container-orge13dcb5" class="outline-3">
+<h3 id="orge13dcb5"><span class="section-number-3">6.3</span> 局部描述符表</h3>
 </div>
-<div id="outline-container-orgfa2fe93" class="outline-3">
-<h3 id="orgfa2fe93"><span class="section-number-3">6.6</span> 中断描述符表寄存器</h3>
+<div id="outline-container-orge439343" class="outline-3">
+<h3 id="orge439343"><span class="section-number-3">6.4</span> 局部描述符表寄存器</h3>
+</div>
+<div id="outline-container-org53d88f4" class="outline-3">
+<h3 id="org53d88f4"><span class="section-number-3">6.5</span> 中断描述符表</h3>
+</div>
+<div id="outline-container-orgd4fff96" class="outline-3">
+<h3 id="orgd4fff96"><span class="section-number-3">6.6</span> 中断描述符表寄存器</h3>
 </div>
 </div>
 
-<div id="outline-container-orgf33c43e" class="outline-2">
-<h2 id="orgf33c43e"><span class="section-number-2">7</span> Legacy分段描述符</h2>
+<div id="outline-container-orga22b94b" class="outline-2">
+<h2 id="orga22b94b"><span class="section-number-2">7</span> Legacy分段描述符</h2>
 </div>
-<div id="outline-container-org03a7627" class="outline-2">
-<h2 id="org03a7627"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
+<div id="outline-container-org05ad886" class="outline-2">
+<h2 id="org05ad886"><span class="section-number-2">8</span> Long-mode分段描述符</h2>
 </div>
-<div id="outline-container-org57abcf4" class="outline-2">
-<h2 id="org57abcf4"><span class="section-number-2">9</span> 分段保护概要</h2>
+<div id="outline-container-orgdb606fa" class="outline-2">
+<h2 id="orgdb606fa"><span class="section-number-2">9</span> 分段保护概要</h2>
 </div>
-<div id="outline-container-orga53c0da" class="outline-2">
-<h2 id="orga53c0da"><span class="section-number-2">10</span> 数据访问权限检查</h2>
+<div id="outline-container-orga3fdecd" class="outline-2">
+<h2 id="orga3fdecd"><span class="section-number-2">10</span> 数据访问权限检查</h2>
 </div>
-<div id="outline-container-org6995316" class="outline-2">
-<h2 id="org6995316"><span class="section-number-2">11</span> 控制转换权限检查</h2>
+<div id="outline-container-orgabd7b93" class="outline-2">
+<h2 id="orgabd7b93"><span class="section-number-2">11</span> 控制转换权限检查</h2>
 </div>
-<div id="outline-container-orgd68f568" class="outline-2">
-<h2 id="orgd68f568"><span class="section-number-2">12</span> 限长检查</h2>
+<div id="outline-container-orgf9a5740" class="outline-2">
+<h2 id="orgf9a5740"><span class="section-number-2">12</span> 限长检查</h2>
 </div>
-<div id="outline-container-org6720a12" class="outline-2">
-<h2 id="org6720a12"><span class="section-number-2">13</span> 类型检查</h2>
+<div id="outline-container-org107f311" class="outline-2">
+<h2 id="org107f311"><span class="section-number-2">13</span> 类型检查</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-11-12 Fri 23:38</p>
+<p class="date">Created: 2021-11-13 Sat 11:43</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
