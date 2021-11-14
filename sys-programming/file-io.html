@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-11-07 Sun 19:26 -->
+<!-- 2021-11-14 Sun 17:18 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文件I/O</title>
@@ -62,27 +62,26 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb1b782a">1. 介绍</a></li>
-<li><a href="#orgd9d4513">2. 文件描述符</a></li>
-<li><a href="#org01c0af2">3. open和openat</a></li>
-<li><a href="#orge9a615b">4. creat函数</a></li>
-<li><a href="#orgc55de41">5. close函数</a></li>
-<li><a href="#orgc81b3fb">6. lseek函数</a></li>
-<li><a href="#orgf8fb2b2">7. read函数</a></li>
-<li><a href="#orgda13a3b">8. write函数</a></li>
-<li><a href="#org3742429">9. I/O效率</a></li>
-<li><a href="#org5437e34">10. 文件共享</a></li>
-<li><a href="#org1031c6c">11. 原子操作</a></li>
-<li><a href="#org4f42707">12. dup和dup2</a></li>
-<li><a href="#org8840be6">13. sync/fsync/fdatasync函数</a></li>
-<li><a href="#orgb75365d">14. fcntl函数</a></li>
-<li><a href="#org66c2796">15. ioctl函数</a></li>
-<li><a href="#org0da8360">16. /dev/fd</a></li>
+<li><a href="#orgc7e84d8">1. 介绍</a></li>
+<li><a href="#org576b054">2. 文件描述符</a></li>
+<li><a href="#orge0464c5">3. open和openat</a></li>
+<li><a href="#org8751d8f">4. creat函数</a></li>
+<li><a href="#org323a01f">5. close函数</a></li>
+<li><a href="#org4d16c04">6. lseek函数</a></li>
+<li><a href="#orgfe2cb8e">7. read函数</a></li>
+<li><a href="#org71a40c4">8. write函数</a></li>
+<li><a href="#orgdc20258">9. I/O效率</a></li>
+<li><a href="#org5f7ba95">10. 原子操作</a></li>
+<li><a href="#orgcf48036">11. dup和dup2</a></li>
+<li><a href="#orgdc54576">12. sync/fsync/fdatasync函数</a></li>
+<li><a href="#org8d26838">13. fcntl函数</a></li>
+<li><a href="#org7659f23">14. ioctl函数</a></li>
+<li><a href="#org949d7cb">15. /dev/fd</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgb1b782a" class="outline-2">
-<h2 id="orgb1b782a"><span class="section-number-2">1</span> 介绍</h2>
+<div id="outline-container-orgc7e84d8" class="outline-2">
+<h2 id="orgc7e84d8"><span class="section-number-2">1</span> 介绍</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 本文主要讨论UNIX系统的文件I/O函数，大多数文件操作仅需通过五个函数就可以完成：open，read，write，lseek以及close．后面会看到各种各样的buffer大小会对read以及write函数产生影响．
@@ -97,8 +96,8 @@ for the JavaScript code in this tag.
 </p>
 </div>
 </div>
-<div id="outline-container-orgd9d4513" class="outline-2">
-<h2 id="orgd9d4513"><span class="section-number-2">2</span> 文件描述符</h2>
+<div id="outline-container-org576b054" class="outline-2">
+<h2 id="org576b054"><span class="section-number-2">2</span> 文件描述符</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 对于内核来说，所有打开的文件都可以通过文件描述符来引用到，一个文件描述符是一个非负的整数．当打开或新建一个文件时，内核都会返回一个文件描述符给进程．当在读写文件时，传给read或write的参数是由open或creat函数返回的文件描述符．
@@ -113,14 +112,14 @@ for the JavaScript code in this tag.
 </p>
 </div>
 </div>
-<div id="outline-container-org01c0af2" class="outline-2">
-<h2 id="org01c0af2"><span class="section-number-2">3</span> open和openat</h2>
+<div id="outline-container-orge0464c5" class="outline-2">
+<h2 id="orge0464c5"><span class="section-number-2">3</span> open和openat</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 一个文件可以通过open或openat函数来创建：
 </p>
 
-<div id="org51bf058" class="figure">
+<div id="orgf3fedf6" class="figure">
 <p><img src="./img/open.png" alt="open.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 1: </span>open和opeanat函数</p>
@@ -225,14 +224,14 @@ openat函数的存在主要为了解决几个问题，首先它提供了一种�
 </div>
 </div>
 
-<div id="outline-container-orge9a615b" class="outline-2">
-<h2 id="orge9a615b"><span class="section-number-2">4</span> creat函数</h2>
+<div id="outline-container-org8751d8f" class="outline-2">
+<h2 id="org8751d8f"><span class="section-number-2">4</span> creat函数</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 一个新文件也可以通过调用creat函数来创建．
 </p>
 
-<div id="orgd8fd548" class="figure">
+<div id="orgdfd0d45" class="figure">
 <p><img src="./img/creat.png" alt="creat.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 2: </span>creat函数</p>
@@ -251,14 +250,14 @@ open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
 </p>
 </div>
 </div>
-<div id="outline-container-orgc55de41" class="outline-2">
-<h2 id="orgc55de41"><span class="section-number-2">5</span> close函数</h2>
+<div id="outline-container-org323a01f" class="outline-2">
+<h2 id="org323a01f"><span class="section-number-2">5</span> close函数</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 一个打开的文件可以通过调用close函数来关闭：
 </p>
 
-<div id="orge201bb5" class="figure">
+<div id="orgc45d956" class="figure">
 <p><img src="./img/close.png" alt="close.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 3: </span>close函数</p>
@@ -269,8 +268,8 @@ open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
 </p>
 </div>
 </div>
-<div id="outline-container-orgc81b3fb" class="outline-2">
-<h2 id="orgc81b3fb"><span class="section-number-2">6</span> lseek函数</h2>
+<div id="outline-container-org4d16c04" class="outline-2">
+<h2 id="org4d16c04"><span class="section-number-2">6</span> lseek函数</h2>
 <div class="outline-text-2" id="text-6">
 <p>
 每一个打开的文件都有一个与之关联的当前文件偏移，它通常是一个非负的整数，代表着从文件开始的字节数．读写操作通常是由当前文件偏移之始，并且读写完毕会加上读写的字节数．在不指定O_APPEND的情况下，当打开文件时这个偏移通常是0．
@@ -280,7 +279,7 @@ open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
 一个打开的文件其偏移可以通过lseek函数来设置：
 </p>
 
-<div id="org155522b" class="figure">
+<div id="orgfe1517d" class="figure">
 <p><img src="./img/lseek.png" alt="lseek.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 4: </span>lseek函数</p>
@@ -335,7 +334,7 @@ currpos = lseek(fd, 0, SEEK_CUR);
 调用这个程序，输出如下：
 </p>
 
-<div id="org1cf84e9" class="figure">
+<div id="orgb6ccddd" class="figure">
 <p><img src="./img/seek.png" alt="seek.png" width="30%" height="30%">
 </p>
 </div>
@@ -395,7 +394,7 @@ lseek仅是记录了在内核里当前文件的偏移，而并没有发出任何
 运行这个程序可以得到如下的结果：
 </p>
 
-<div id="org2c6d136" class="figure">
+<div id="orge7c8ffe" class="figure">
 <p><img src="./img/create_hole.png" alt="create_hole.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 6: </span>在文件中创造空洞</p>
@@ -409,7 +408,7 @@ lseek仅是记录了在内核里当前文件的偏移，而并没有发出任何
 通过创建一个一模一样大小但是没有空洞的文件：
 </p>
 
-<div id="org65f09b1" class="figure">
+<div id="org68a6d93" class="figure">
 <p><img src="./img/compare_size_hole.png" alt="compare_size_hole.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 7: </span>比较大小</p>
@@ -424,15 +423,15 @@ lseek使用的偏移是off_t类型的，实现上在不同的平台上允许不�
 </p>
 </div>
 </div>
-<div id="outline-container-orgf8fb2b2" class="outline-2">
-<h2 id="orgf8fb2b2"><span class="section-number-2">7</span> read函数</h2>
+<div id="outline-container-orgfe2cb8e" class="outline-2">
+<h2 id="orgfe2cb8e"><span class="section-number-2">7</span> read函数</h2>
 <div class="outline-text-2" id="text-7">
 <p>
 通过read函数，数据可以从打开的文件里读出来．
 </p>
 
 
-<div id="org6aed560" class="figure">
+<div id="orge083a76" class="figure">
 <p><img src="./img/read.png" alt="read.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 8: </span>read</p>
@@ -459,14 +458,14 @@ read函数从当前的文件偏移开始读，在返回之前，偏移会增加�
 </p>
 </div>
 </div>
-<div id="outline-container-orgda13a3b" class="outline-2">
-<h2 id="orgda13a3b"><span class="section-number-2">8</span> write函数</h2>
+<div id="outline-container-org71a40c4" class="outline-2">
+<h2 id="org71a40c4"><span class="section-number-2">8</span> write函数</h2>
 <div class="outline-text-2" id="text-8">
 <p>
 通过write函数，可以向一个打开的文件写入数据．
 </p>
 
-<div id="org0c8128e" class="figure">
+<div id="org6f35740" class="figure">
 <p><img src="./img/write.png" alt="write.png" width="30%" height="30%">
 </p>
 <p><span class="figure-number">Figure 9: </span>write</p>
@@ -481,35 +480,77 @@ read函数从当前的文件偏移开始读，在返回之前，偏移会增加�
 </p>
 </div>
 </div>
-<div id="outline-container-org3742429" class="outline-2">
-<h2 id="org3742429"><span class="section-number-2">9</span> I/O效率</h2>
+<div id="outline-container-orgdc20258" class="outline-2">
+<h2 id="orgdc20258"><span class="section-number-2">9</span> I/O效率</h2>
+<div class="outline-text-2" id="text-9">
+<p>
+下图的程序使用read和write拷贝文件：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">"apue.h"</span>
+
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">BUFFSIZE</span> 4096
+
+<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">main</span>(<span style="color: #7CB8BB;">void</span>)
+{
+  <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">n</span>;
+  <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">buf</span>[BUFFSIZE];
+
+  <span style="color: #F0DFAF; font-weight: bold;">while</span> ((n = read(STDIN_FILENO, buf, BUFFSIZE)) &gt; 0)
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (write(STDOUT_FILENO, buf, n) != n)
+      err_sys(<span style="color: #CC9393;">"write error"</span>);
+
+  <span style="color: #F0DFAF; font-weight: bold;">if</span> (n &lt; 0)
+    err_sys(<span style="color: #CC9393;">"read error"</span>);
+
+
+  exit(0);
+}
+</pre>
 </div>
 
-<div id="outline-container-org5437e34" class="outline-2">
-<h2 id="org5437e34"><span class="section-number-2">10</span> 文件共享</h2>
+<p>
+关于这个程序有以下几点说明：
+</p>
+<ol class="org-ol">
+<li>该程序从标准输入读，而写入到标准输出．在程序执行之前这些都由shell设置好了，可以便利用户使用shell的I/O重定向功能．</li>
+<li>程序没有关闭输入和输出文件．在进程退出时内核会关闭进程所有打开的文件描述符．</li>
+<li>对于文本文件和二进制文件都可以工作，因为对于UNIX内核来说这二者没有区别．</li>
+</ol>
+
+<p>
+使用不同大小的BUFFSIZE可以提高效率，下面有这样的图：
+</p>
+
+<div id="org161ac09" class="figure">
+<p><img src="./img/read_time.png" alt="read_time.png" width="30%" height="30%">
+</p>
+<p><span class="figure-number">Figure 10: </span>在Linux上使用不同的缓存大小测量读时间</p>
 </div>
-<div id="outline-container-org1031c6c" class="outline-2">
-<h2 id="org1031c6c"><span class="section-number-2">11</span> 原子操作</h2>
 </div>
-<div id="outline-container-org4f42707" class="outline-2">
-<h2 id="org4f42707"><span class="section-number-2">12</span> dup和dup2</h2>
 </div>
-<div id="outline-container-org8840be6" class="outline-2">
-<h2 id="org8840be6"><span class="section-number-2">13</span> sync/fsync/fdatasync函数</h2>
+<div id="outline-container-org5f7ba95" class="outline-2">
+<h2 id="org5f7ba95"><span class="section-number-2">10</span> 原子操作</h2>
 </div>
-<div id="outline-container-orgb75365d" class="outline-2">
-<h2 id="orgb75365d"><span class="section-number-2">14</span> fcntl函数</h2>
+<div id="outline-container-orgcf48036" class="outline-2">
+<h2 id="orgcf48036"><span class="section-number-2">11</span> dup和dup2</h2>
 </div>
-<div id="outline-container-org66c2796" class="outline-2">
-<h2 id="org66c2796"><span class="section-number-2">15</span> ioctl函数</h2>
+<div id="outline-container-orgdc54576" class="outline-2">
+<h2 id="orgdc54576"><span class="section-number-2">12</span> sync/fsync/fdatasync函数</h2>
 </div>
-<div id="outline-container-org0da8360" class="outline-2">
-<h2 id="org0da8360"><span class="section-number-2">16</span> /dev/fd</h2>
+<div id="outline-container-org8d26838" class="outline-2">
+<h2 id="org8d26838"><span class="section-number-2">13</span> fcntl函数</h2>
+</div>
+<div id="outline-container-org7659f23" class="outline-2">
+<h2 id="org7659f23"><span class="section-number-2">14</span> ioctl函数</h2>
+</div>
+<div id="outline-container-org949d7cb" class="outline-2">
+<h2 id="org949d7cb"><span class="section-number-2">15</span> /dev/fd</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-11-07 Sun 19:26</p>
+<p class="date">Created: 2021-11-14 Sun 17:18</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
