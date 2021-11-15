@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-11-08 Mon 23:34 -->
+<!-- 2021-11-15 Mon 23:16 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程</title>
@@ -62,11 +62,11 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org11e289e">1. 进程和轻量级进程</a></li>
-<li><a href="#orge9a6040">2. 进程描述符</a></li>
-<li><a href="#orge4a47ae">3. 进程切换</a></li>
-<li><a href="#orgc58b99d">4. 创建进程</a></li>
-<li><a href="#orge094cc5">5. 销毁进程</a></li>
+<li><a href="#orgbeab315">1. 进程和轻量级进程</a></li>
+<li><a href="#org6dfa37b">2. 进程描述符</a></li>
+<li><a href="#org87a7f65">3. 进程切换</a></li>
+<li><a href="#orgf70e8c9">4. 创建进程</a></li>
+<li><a href="#org7300b66">5. 销毁进程</a></li>
 </ul>
 </div>
 </div>
@@ -78,8 +78,8 @@ for the JavaScript code in this tag.
 在本文中，讨论进程的属性，内核是怎样执行进程切换的．最后介绍进程是如何创建以及销毁的．
 </p>
 
-<div id="outline-container-org11e289e" class="outline-2">
-<h2 id="org11e289e"><span class="section-number-2">1</span> 进程和轻量级进程</h2>
+<div id="outline-container-orgbeab315" class="outline-2">
+<h2 id="orgbeab315"><span class="section-number-2">1</span> 进程和轻量级进程</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 进程可能有几个不同的意义．在本文里，采用OS教材一般的定义：进程是在执行中的实例．
@@ -92,24 +92,30 @@ for the JavaScript code in this tag.
 <p>
 从内核的角度来说，进程是作为一个实体，可以分配系统资源(包括CPU时间，内存等)．
 </p>
+
+<p>
+当一个进程被创建时，它几乎和它的父进程一模一样．尽管子进程和父进程或许共享那些包括程序代码段的页面．它们有分开的数据(栈)，这样进程对一个内存位置的修改就不会对父进程可见了．
+</p>
 </div>
 </div>
-<div id="outline-container-orge9a6040" class="outline-2">
-<h2 id="orge9a6040"><span class="section-number-2">2</span> 进程描述符</h2>
+
+
+<div id="outline-container-org6dfa37b" class="outline-2">
+<h2 id="org6dfa37b"><span class="section-number-2">2</span> 进程描述符</h2>
 </div>
-<div id="outline-container-orge4a47ae" class="outline-2">
-<h2 id="orge4a47ae"><span class="section-number-2">3</span> 进程切换</h2>
+<div id="outline-container-org87a7f65" class="outline-2">
+<h2 id="org87a7f65"><span class="section-number-2">3</span> 进程切换</h2>
 </div>
-<div id="outline-container-orgc58b99d" class="outline-2">
-<h2 id="orgc58b99d"><span class="section-number-2">4</span> 创建进程</h2>
+<div id="outline-container-orgf70e8c9" class="outline-2">
+<h2 id="orgf70e8c9"><span class="section-number-2">4</span> 创建进程</h2>
 </div>
-<div id="outline-container-orge094cc5" class="outline-2">
-<h2 id="orge094cc5"><span class="section-number-2">5</span> 销毁进程</h2>
+<div id="outline-container-org7300b66" class="outline-2">
+<h2 id="org7300b66"><span class="section-number-2">5</span> 销毁进程</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-11-08 Mon 23:34</p>
+<p class="date">Created: 2021-11-15 Mon 23:16</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
