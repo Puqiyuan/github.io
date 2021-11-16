@@ -165,4 +165,12 @@ void wait_for_completion(struct completion *c);
 #+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
 [[./img/signal_completion.png]]
 
+如果有超过一个线程在等待相同的事件完成时，这两个函数的行为不一样．complete仅仅唤醒等待线程中的一个，而complete_all会唤醒所有的进程．在大多数情况下仅有一个等待者，这两个函数产生一样的行为．
 
+完成量通常是一次性的设备，就是说只用一次就丢弃了．不过，只要多加小心，完成量数据结构是可以重用的．
+
+下面有个例子示意了如何使用complete模块．这个模块定义了一个简单的设备，它的作用是：任何尝试从设备读都会等待(通过wait_for_completion)，直到某些其它的进程写设备了．下面是实现代码：
+#+CAPTION: 
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 30% :height 30%
+[[./img/simple_complete.png]]
