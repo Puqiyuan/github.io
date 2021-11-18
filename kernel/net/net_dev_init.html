@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2021-11-17 Wed 23:15 -->
+<!-- 2021-11-18 Thu 22:33 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>网络设备初始化</title>
@@ -62,15 +62,15 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orga26d1ff">1. 系统初始化概要</a></li>
-<li><a href="#org6ef4b4f">2. 设备注册与初始化</a></li>
-<li><a href="#org78f2be4">3. NIC初始化的目标</a></li>
-<li><a href="#org1ce4b86">4. 设备与内核的交互</a></li>
-<li><a href="#org624a6df">5. 初始化选项</a></li>
-<li><a href="#org6f68ff0">6. 模块选项</a></li>
-<li><a href="#orgd649ba5">7. 设备处理层初始化：net_dev_init</a></li>
-<li><a href="#orgc7e9b57">8. 用户空间程序</a></li>
-<li><a href="#org957f7c5">9. 虚拟设备</a></li>
+<li><a href="#org72e7fc0">1. 系统初始化概要</a></li>
+<li><a href="#org2a71cbf">2. 设备注册与初始化</a></li>
+<li><a href="#org3178fd2">3. NIC初始化的目标</a></li>
+<li><a href="#org2ce5285">4. 设备与内核的交互</a></li>
+<li><a href="#org0fe1529">5. 初始化选项</a></li>
+<li><a href="#org43b303c">6. 模块选项</a></li>
+<li><a href="#orgd4438eb">7. 设备处理层初始化：net_dev_init</a></li>
+<li><a href="#org4baf1be">8. 用户空间程序</a></li>
+<li><a href="#org1646908">9. 虚拟设备</a></li>
 </ul>
 </div>
 </div>
@@ -90,14 +90,14 @@ for the JavaScript code in this tag.
 <li>虚拟设备在配置方面和用户交互时和真实的设备有何不同．</li>
 </ul>
 
-<div id="outline-container-orga26d1ff" class="outline-2">
-<h2 id="orga26d1ff"><span class="section-number-2">1</span> 系统初始化概要</h2>
+<div id="outline-container-org72e7fc0" class="outline-2">
+<h2 id="org72e7fc0"><span class="section-number-2">1</span> 系统初始化概要</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 下面的图展示了内核一些子系统在启动时的调用序列：
 </p>
 
-<div id="org2e239dd" class="figure">
+<div id="orgab8b1a3" class="figure">
 <p><img src="./img/kernel_init.png" alt="kernel_init.png" width="40%" height="40%">
 </p>
 <p><span class="figure-number">Figure 1: </span>内核初始化</p>
@@ -128,8 +128,8 @@ run_init_process决定运行哪个是系统中的第一个进程，其PID是1并
 </p>
 </div>
 </div>
-<div id="outline-container-org6ef4b4f" class="outline-2">
-<h2 id="org6ef4b4f"><span class="section-number-2">2</span> 设备注册与初始化</h2>
+<div id="outline-container-org2a71cbf" class="outline-2">
+<h2 id="org2a71cbf"><span class="section-number-2">2</span> 设备注册与初始化</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 网络设备要想能使用，就必须被内核识别并且关联到正确的驱动．驱动在私有数据结构里存放了所有供设备工作以及与其它内核部件交互的信息．注册和初始化的任务，一部分由核心内核负责另一部分由设置驱动负责:
@@ -144,35 +144,52 @@ run_init_process决定运行哪个是系统中的第一个进程，其PID是1并
 </p>
 
 <p>
-特征初始化：Linux内核提供了许多网络选项．
+特征初始化：Linux内核提供了许多网络选项．它们中的一些每个设备的配置都不一样，设备初始化时需要留心．一个例子就是流量控制，这个子系统实现了QoS，它可以决定数据包是如何在出包队列上入队和出队．
+</p>
+
+<p>
+前面有文章介绍到net_device里有一些函数指针内核可以使用它们和设备驱动以及内核一些特征交互．这些设备的初始化一部分是依据设备的类型，再有一部分就是设备是如何制作的以及它的模型．由于以太网的流行，本文主要专注以太卡设备的初始化(但是其它设备是极其类似的)．
 </p>
 </div>
 </div>
-<div id="outline-container-org78f2be4" class="outline-2">
-<h2 id="org78f2be4"><span class="section-number-2">3</span> NIC初始化的目标</h2>
+<div id="outline-container-org3178fd2" class="outline-2">
+<h2 id="org3178fd2"><span class="section-number-2">3</span> NIC初始化的目标</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+Linux内核的网络设备都由net_device结构体表示，后面还有文章会描述这个数据结构是怎么分配的以
+及其中的成员是怎么初始化的，一部分是由设备驱动，而另一部分是核心内核代码做的．在本文主要关
+注设备驱动是如何分配资源从而建立设备/内核之间的交流，比如：
+</p>
+
+<p>
+IRQ
+</p>
 </div>
-<div id="outline-container-org1ce4b86" class="outline-2">
-<h2 id="org1ce4b86"><span class="section-number-2">4</span> 设备与内核的交互</h2>
 </div>
-<div id="outline-container-org624a6df" class="outline-2">
-<h2 id="org624a6df"><span class="section-number-2">5</span> 初始化选项</h2>
+
+
+<div id="outline-container-org2ce5285" class="outline-2">
+<h2 id="org2ce5285"><span class="section-number-2">4</span> 设备与内核的交互</h2>
 </div>
-<div id="outline-container-org6f68ff0" class="outline-2">
-<h2 id="org6f68ff0"><span class="section-number-2">6</span> 模块选项</h2>
+<div id="outline-container-org0fe1529" class="outline-2">
+<h2 id="org0fe1529"><span class="section-number-2">5</span> 初始化选项</h2>
 </div>
-<div id="outline-container-orgd649ba5" class="outline-2">
-<h2 id="orgd649ba5"><span class="section-number-2">7</span> 设备处理层初始化：net_dev_init</h2>
+<div id="outline-container-org43b303c" class="outline-2">
+<h2 id="org43b303c"><span class="section-number-2">6</span> 模块选项</h2>
 </div>
-<div id="outline-container-orgc7e9b57" class="outline-2">
-<h2 id="orgc7e9b57"><span class="section-number-2">8</span> 用户空间程序</h2>
+<div id="outline-container-orgd4438eb" class="outline-2">
+<h2 id="orgd4438eb"><span class="section-number-2">7</span> 设备处理层初始化：net_dev_init</h2>
 </div>
-<div id="outline-container-org957f7c5" class="outline-2">
-<h2 id="org957f7c5"><span class="section-number-2">9</span> 虚拟设备</h2>
+<div id="outline-container-org4baf1be" class="outline-2">
+<h2 id="org4baf1be"><span class="section-number-2">8</span> 用户空间程序</h2>
+</div>
+<div id="outline-container-org1646908" class="outline-2">
+<h2 id="org1646908"><span class="section-number-2">9</span> 虚拟设备</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2021-11-17 Wed 23:15</p>
+<p class="date">Created: 2021-11-18 Thu 22:33</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
