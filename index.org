@@ -1,85 +1,15 @@
-#+TITLE: Notes of Computer Technology
+#+TITLE: Dissect Kernel
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="./org-manual.css" type="text/css"> 
 
 #+BEGIN_CENTER
-这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。
-#+END_CENTER
-
-#+BEGIN_CENTER
-理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，无论技术多简单多复杂。热爱技术也热爱生活。:-)
+该页面记录了对内核代码的分析，以问题场景为导向，由问题展开代码分析。
 #+END_CENTER
 
 #+BEGIN_CENTER
 有任何想法请联系作者Cauchy(Qiyuan Pu)：pqy7172@gmail.com。
 #+END_CENTER
-
-#+BEGIN_CENTER
-For github repo: https://github.com/Puqiyuan/Puqiyuan.github.io. 这个repo跟踪了我的所有学习记录, 每天进步一点. ;-)
-#+END_CENTER
-
-* Linux系统管理
-- [[./sys-admin/pipe-redirection.html][管道与重定向]]。
-- [[./sys-admin/packaging-system.html][包管理系统－工具以及基本原理]]．
-* Linux系统开发
-- [[./sys-programming/unix-system-overview.html][Unix系统概要]].
-- [[./sys-programming/thread.html][Linux线程之一]]。
-- [[././sys-programming/file-io.html][文件I/O]].
-* Linux内核
-[[./kernel/kernel_func.html][内核函数及结构体解释]]．
-** 内存管理
-  + [[./kernel/mm/x86-mm/mm.html][80x86内存管理]]。    
-
-  + 系列文章
-    1) [[./kernel/mm/mm_series/des-phy-mem.html][内存管理之描述物理内存]]。
-      
-    2) [[./kernel/mm/mm_series/ptm.html][内存管理之页表管理]]．
-
-    3) [[./kernel/mm/mm_series/process_addr_space.html][进程地址空间]]．
-
-    4) [[./kernel/mm/mm_series/boot_mem_allocator.html][启动内存管理器]]．
-
-    5) [[./kernel/mm/mm_series/phy_page_alloc.html][物理页面分配]].
-** 进程管理
-[[./kernel/process/process.html][进程基础]]．
-** 网络
-  + [[./kernel/net/pci_net_card.html][PCI层与网卡]]。
-  + [[./kernel/net/critical_data_struct.html][关键数据结构]]。
-  + [[./kernel/net/user_to_kernel.html][用户空间到内核层的接口]]．
-  + [[./kernel/net/notify_chain.html][通知链]]．
-  + [[././kernel/net/net_dev_init.html][网络设备初始化]].
-      
-** 中断与异常
-  + 内核[[./kernel/interrupts/interrupts.html][中断与异常]]（参考
-    [[https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf][ulk]]）。
-** 杂项
-  + [[./kernel/driver/io_port.html][关于驱动的一些内核接口介绍]]。
-  + [[./kernel/driver/scull.html][一个简单的字符驱动程序]]。
-  + [[./kernel/net/infra_com_init.html][用于组件初始化的内核基础设施.]]
-  + [[./kernel/debug/debug-tech.html][内核调试手段及工具]]。
-  + [[./kernel/race_condition/concurrency_race_condition.html][并发与竟态．]]
-  
-* 算法与数据结构
-- [[./algo/shiftand.html][Shift-And算法]]。
-* 体系架构
-- [[./arch/sys-programming-overview.html][系统编程概要]]。
-- AMD64(X86-64)架构下的系统资源[[./arch/amd64-sys-resources.html][介绍]]。
-- AMD64(X86-64)架构下的[[./arch/segmented_virtual_memory.html][分段虚拟内存]]。
-* 编译器与优化
-- [[./compiler/pointer-array-optimization.html][编译器优化对数组和指针的性能影响]]。
-- [[./compiler/unroll_loop.html][unroll小循环对性能的提升]]。
-- [[./compiler/quick_bool_expr.html][重排bool表达式对于条件判断语句的性能影响]]。
-    
-* 网络基础
-* 虚拟化技术
-* ROS开发记录
-下述系列文章记录了自己的操作系统ROS的开发过程。
-
-1) [[./ros/i386-on-x64.html][x64机器上搭建i386开发环境]]。
-* 杂项
-- 一份较为详细的翻墙指南[[./bypass/index.html][Bypass Guide]]。
-- 大学老师对于教育的[[./misc/thoughts.html][看法]]。
-- Debian[[./misc/install.html][安装指导]]。
-- [[./misc/tips.html][实践操作记录]]。
-- 微线程切换在X86，X86-64，ARM，ARM64几种平台上的[[./kernel/process-management/switch-protected.html][实现]]。
+* net
+- [[./kernel/net/ipfrag_high_thresh.html][ipfrag_high_thresh参数作用]]。

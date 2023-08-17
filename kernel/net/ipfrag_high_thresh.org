@@ -1,0 +1,24 @@
+#+TITLE: ipfrag_high_thresh参数的作用
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css"> 
+ipfrag_high_thresh是Linux内核网络参数之一，它用于控制IP分片的处理行为。IP分片是在网络通信过程中，由于MTU（最大传输单元）限制，数据包被分割成更小的片段以便传输。接收端需要重新组装这些分片，以恢复原始数据包。
+
+ipfrag_high_thresh参数指定了一个阈值，当系统中正在等待重新组装的分片数量达到或超过该阈值时，系统会采取措施以避免过多的内存消耗。一旦达到这个阈值，内核将开始丢弃更多的分片，以避免过度的内存使用，同时保留已经组装好的分片。
+
+使用命令：
+: sysctl net.ipv4.ipfrag_high_thresh
+可以查看当前系统这个值的配置是多少。而使用命令：
+: sysctl -w net.ipv4.ipfrag_high_thresh=new_value
+可以更改这个值，其实际影响的就是/proc/sys/net/ipv4/ipfrag_high_thresh文件。
+
+下面分析下关于这块的网络内核代码。
+
+在初始化阶段，ipv4_frags_init_net函数会设置一个long类型的high_thresh值为4 * 1024 * 1024：
+#+begin_src c
+  net->ipv4.frags.high_thresh = 4 * 1024 * 1024;
+#+end_src
+所以内核里使用这个值其实是ipv4.frags.high_thresh这个量。关键是随后有如何下调用流程将这个量注册到/proc系统下，所以才能通过sysctl命令去修改。
+
+: ipv4_frags_init_net->ip4_frags_ns_ctl_register->register_net_sysctl

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2021-11-06 Sat 20:14 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes of Computer Technology</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="./org-manual.css" type="text/css">
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2020 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Notes of Computer Technology</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org2cfe319">1. Linux系统管理</a></li>
+<li><a href="#org6ec91e2">2. Linux系统开发</a></li>
+<li><a href="#org04522fe">3. Linux内核</a>
+<ul>
+<li><a href="#org2337079">3.1. 内存管理</a></li>
+<li><a href="#orgb778de7">3.2. 进程管理</a></li>
+<li><a href="#orgf05f32c">3.3. 网络</a></li>
+<li><a href="#org364829b">3.4. 中断与异常</a></li>
+<li><a href="#org1bf2ed0">3.5. 杂项</a></li>
+</ul>
+</li>
+<li><a href="#orgc1521cb">4. 算法与数据结构</a></li>
+<li><a href="#org37759b6">5. 体系架构</a></li>
+<li><a href="#org80a1284">6. 编译器与优化</a></li>
+<li><a href="#org077aa48">7. 网络基础</a></li>
+<li><a href="#org3c903af">8. 虚拟化技术</a></li>
+<li><a href="#org3cef59a">9. ROS开发记录</a></li>
+<li><a href="#org404ae6d">10. 杂项</a></li>
+</ul>
+</div>
+</div>
+<div class="org-center">
+<p>
+这是一个始终处于更新中的页面，这里存放着有关于各种计算机技术的研究、学习、总结。
+</p>
+</div>
+
+<div class="org-center">
+<p>
+理论（技术）是灰色的，但生活之树是常青的。技术来源于生活，无论技术多简单多复杂。热爱技术也热爱生活。:-)
+</p>
+</div>
+
+<div class="org-center">
+<p>
+有任何想法请联系作者Cauchy(Qiyuan Pu)：pqy7172@gmail.com。
+</p>
+</div>
+
+<div class="org-center">
+<p>
+For github repo: <a href="https://github.com/Puqiyuan/Puqiyuan.github.io">https://github.com/Puqiyuan/Puqiyuan.github.io</a>. 这个repo跟踪了我的所有学习记录, 每天进步一点. ;-)
+</p>
+</div>
+
+<div id="outline-container-org2cfe319" class="outline-2">
+<h2 id="org2cfe319"><span class="section-number-2">1</span> Linux系统管理</h2>
+<div class="outline-text-2" id="text-1">
+<ul class="org-ul">
+<li><a href="./sys-admin/pipe-redirection.html">管道与重定向</a>。</li>
+<li><a href="./sys-admin/packaging-system.html">包管理系统－工具以及基本原理</a>．</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org6ec91e2" class="outline-2">
+<h2 id="org6ec91e2"><span class="section-number-2">2</span> Linux系统开发</h2>
+<div class="outline-text-2" id="text-2">
+<ul class="org-ul">
+<li><a href="./sys-programming/unix-system-overview.html">Unix系统概要</a>.</li>
+<li><a href="./sys-programming/thread.html">Linux线程之一</a>。</li>
+<li><a href="././sys-programming/file-io.html">文件I/O</a>.</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org04522fe" class="outline-2">
+<h2 id="org04522fe"><span class="section-number-2">3</span> Linux内核</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+<a href="./kernel/kernel_func.html">内核函数及结构体解释</a>．
+</p>
+</div>
+<div id="outline-container-org2337079" class="outline-3">
+<h3 id="org2337079"><span class="section-number-3">3.1</span> 内存管理</h3>
+<div class="outline-text-3" id="text-3-1">
+<ul class="org-ul">
+<li><a href="./kernel/mm/x86-mm/mm.html">80x86内存管理</a>。</li>
+
+<li>系列文章
+<ol class="org-ol">
+<li><a href="./kernel/mm/mm_series/des-phy-mem.html">内存管理之描述物理内存</a>。</li>
+
+<li><a href="./kernel/mm/mm_series/ptm.html">内存管理之页表管理</a>．</li>
+
+<li><a href="./kernel/mm/mm_series/process_addr_space.html">进程地址空间</a>．</li>
+
+<li><a href="./kernel/mm/mm_series/boot_mem_allocator.html">启动内存管理器</a>．</li>
+
+<li><a href="./kernel/mm/mm_series/phy_page_alloc.html">物理页面分配</a>.</li>
+</ol></li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgb778de7" class="outline-3">
+<h3 id="orgb778de7"><span class="section-number-3">3.2</span> 进程管理</h3>
+<div class="outline-text-3" id="text-3-2">
+<p>
+<a href="./kernel/process/process.html">进程基础</a>．
+</p>
+</div>
+</div>
+<div id="outline-container-orgf05f32c" class="outline-3">
+<h3 id="orgf05f32c"><span class="section-number-3">3.3</span> 网络</h3>
+<div class="outline-text-3" id="text-3-3">
+<ul class="org-ul">
+<li><a href="./kernel/net/pci_net_card.html">PCI层与网卡</a>。</li>
+<li><a href="./kernel/net/critical_data_struct.html">关键数据结构</a>。</li>
+<li><a href="./kernel/net/user_to_kernel.html">用户空间到内核层的接口</a>．</li>
+<li><a href="./kernel/net/notify_chain.html">通知链</a>．</li>
+<li><a href="././kernel/net/net_dev_init.html">网络设备初始化</a>.</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org364829b" class="outline-3">
+<h3 id="org364829b"><span class="section-number-3">3.4</span> 中断与异常</h3>
+<div class="outline-text-3" id="text-3-4">
+<ul class="org-ul">
+<li>内核<a href="./kernel/interrupts/interrupts.html">中断与异常</a>（参考
+<a href="https://github.com/Puqiyuan/books/blob/main/cs/ulk.pdf">ulk</a>）。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org1bf2ed0" class="outline-3">
+<h3 id="org1bf2ed0"><span class="section-number-3">3.5</span> 杂项</h3>
+<div class="outline-text-3" id="text-3-5">
+<ul class="org-ul">
+<li><a href="./kernel/driver/io_port.html">关于驱动的一些内核接口介绍</a>。</li>
+<li><a href="./kernel/driver/scull.html">一个简单的字符驱动程序</a>。</li>
+<li><a href="./kernel/net/infra_com_init.html">用于组件初始化的内核基础设施.</a></li>
+<li><a href="./kernel/debug/debug-tech.html">内核调试手段及工具</a>。</li>
+<li><a href="./kernel/race_condition/concurrency_race_condition.html">并发与竟态．</a></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgc1521cb" class="outline-2">
+<h2 id="orgc1521cb"><span class="section-number-2">4</span> 算法与数据结构</h2>
+<div class="outline-text-2" id="text-4">
+<ul class="org-ul">
+<li><a href="./algo/shiftand.html">Shift-And算法</a>。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org37759b6" class="outline-2">
+<h2 id="org37759b6"><span class="section-number-2">5</span> 体系架构</h2>
+<div class="outline-text-2" id="text-5">
+<ul class="org-ul">
+<li><a href="./arch/sys-programming-overview.html">系统编程概要</a>。</li>
+<li>AMD64(X86-64)架构下的系统资源<a href="./arch/amd64-sys-resources.html">介绍</a>。</li>
+<li>AMD64(X86-64)架构下的<a href="./arch/segmented_virtual_memory.html">分段虚拟内存</a>。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org80a1284" class="outline-2">
+<h2 id="org80a1284"><span class="section-number-2">6</span> 编译器与优化</h2>
+<div class="outline-text-2" id="text-6">
+<ul class="org-ul">
+<li><a href="./compiler/pointer-array-optimization.html">编译器优化对数组和指针的性能影响</a>。</li>
+<li><a href="./compiler/unroll_loop.html">unroll小循环对性能的提升</a>。</li>
+<li><a href="./compiler/quick_bool_expr.html">重排bool表达式对于条件判断语句的性能影响</a>。</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org077aa48" class="outline-2">
+<h2 id="org077aa48"><span class="section-number-2">7</span> 网络基础</h2>
+</div>
+<div id="outline-container-org3c903af" class="outline-2">
+<h2 id="org3c903af"><span class="section-number-2">8</span> 虚拟化技术</h2>
+</div>
+<div id="outline-container-org3cef59a" class="outline-2">
+<h2 id="org3cef59a"><span class="section-number-2">9</span> ROS开发记录</h2>
+<div class="outline-text-2" id="text-9">
+<p>
+下述系列文章记录了自己的操作系统ROS的开发过程。
+</p>
+
+<ol class="org-ol">
+<li><a href="./ros/i386-on-x64.html">x64机器上搭建i386开发环境</a>。</li>
+</ol>
+</div>
+</div>
+<div id="outline-container-org404ae6d" class="outline-2">
+<h2 id="org404ae6d"><span class="section-number-2">10</span> 杂项</h2>
+<div class="outline-text-2" id="text-10">
+<ul class="org-ul">
+<li>一份较为详细的翻墙指南<a href="./bypass/index.html">Bypass Guide</a>。</li>
+<li>大学老师对于教育的<a href="./misc/thoughts.html">看法</a>。</li>
+<li>Debian<a href="./misc/install.html">安装指导</a>。</li>
+<li><a href="./misc/tips.html">实践操作记录</a>。</li>
+<li>微线程切换在X86，X86-64，ARM，ARM64几种平台上的<a href="./kernel/process-management/switch-protected.html">实现</a>。</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2021-11-06 Sat 20:14</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
