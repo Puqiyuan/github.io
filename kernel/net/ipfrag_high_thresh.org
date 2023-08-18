@@ -22,3 +22,77 @@ ipfrag_high_thresh参数指定了一个阈值，当系统中正在等待重新�
 所以内核里使用这个值其实是ipv4.frags.high_thresh这个量。关键是随后有如何下调用流程将这个量注册到/proc系统下，所以才能通过sysctl命令去修改。
 
 : ipv4_frags_init_net->ip4_frags_ns_ctl_register->register_net_sysctl
+在ip4_frags_ns_ctl_register函数中：
+#+begin_src c
+static int __net_init ip4_frags_ns_ctl_register(struct net *net)
+{
+	struct ctl_table *table;
+
+	table = ip4_frags_ns_ctl_table;
+	if (!net_eq(net, &init_net)) {
+		table = kmemdup(table, sizeof(ip4_frags_ns_ctl_table), GFP_KERNEL);
+		table[0].data = &net->ipv4.frags.high_thresh;
+	}
+
+	hdr = register_net_sysctl(net, "net/ipv4", table);
+}
+#+end_src
+可以看到，这个table里的data所指的量就是high_thresh。table会注册到/proc/sys/net/ipv4下，具体的注册流程就不看了，那是另外一个主题。而table是通过ip4_frags_ns_ctl_table这个表复制而来的。通过查看ip4_frags_ns_ctl_table的定义知道，这个proc文件的名字是ipfrag_high_thresh，而proc处理函数是proc_doulongvec_minmax：
+
+#+begin_src c
+  static struct ctl_table ip4_frags_ns_ctl_table[] = {
+	{
+		.procname	= "ipfrag_high_thresh",
+		.data		= &init_net.ipv4.frags.high_thresh,
+		.maxlen		= sizeof(unsigned long),
+		.mode		= 0644,
+		.proc_handler	= proc_doulongvec_minmax,
+		.extra1		= &init_net.ipv4.frags.low_thresh
+	},
+#+end_src
+不论是分析proc_doulongvec_minmax的作用还是查看register_net_sysctl->__register_sysctl_table函数里对proc_handler的注释都可以知道，该函数就是处理来自用户态的输入，进而写或读到/proc/sys/net/ipv4/ipfrag_high_thresh文件，从而影响到table[0]所指的net->ipv4.frags.high_thresh量。
+
+以上都只是在说high_thresh这个量是如何在内核里初始化好后以供用户读写。下面来分析下内核网络栈怎么使用这个参数的。首先一个可能的网络收包流程如下：
+: 设备触发中断->...__netif_receive_skb->__netif_receive_skb_core->ip_rcv->ip_rcv_finish->dst_input->ip_local_deliver->ip_defrag->ip_find->inet_frag_find
+
+在inet_frag_find函数里有如下代码：
+#+begin_src c
+  if (!nf->high_thresh || frag_mem_limit(nf) > nf->high_thresh)
+          return NULL;
+#+end_src
+#+begin_src c
+  static inline long frag_mem_limit(const struct netns_frags *nf)
+  {
+          return atomic_long_read(&nf->mem);
+  }
+#+end_src
+
+可以很清楚的看到，high_thresh做为一个阀值，当已经使用的内存计数大于这个阀值时，返回NULL。
+返回NULL意味着什么呢？这会导致父函数ip_find也返回NULL，而在ip_defrag里，如果ip_find返回
+NULL的话，就简单的调用kfree_skb去丢弃现在这个skb包，并返回ENOMEM：
+#+begin_src c
+  int ip_defrag(struct net *net, struct sk_buff *skb, u32 user)
+  {
+          /* Lookup (or create) queue header */
+          qp = ip_find(net, ip_hdr(skb), user, vif);
+          if (qp) {
+                  int ret;
+  
+                  spin_lock(&qp->q.lock);
+  
+                  ret = ip_frag_queue(qp, skb);
+  
+                  spin_unlock(&qp->q.lock);
+                  ipq_put(qp);
+                  return ret;
+          }
+  
+          __IP_INC_STATS(net, IPSTATS_MIB_REASMFAILS);
+          kfree_skb(skb);
+          return -ENOMEM;
+  }
+#+end_src
+
+最后一个小问题，何时去增加nf->mem内存计数呢？当然是ip_find返回非NULL值，在if (qp)条件满足的流程里：
+: ip_defrag->ip_frag_queue->add_frag_mem_limit
+至于何时减少这个内存计数，可以对sub_frag_mem_limit函数做类似分析。

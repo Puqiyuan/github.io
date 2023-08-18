@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-08-17 Thu 17:58 -->
+<!-- 2023-08-18 Fri 11:19 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ipfrag_high_thresh参数的作用</title>
@@ -78,10 +78,112 @@ sysctl -w net.ipv4.ipfrag_high_thresh=new_value
 <pre class="example">
 ipv4_frags_init_net-&gt;ip4_frags_ns_ctl_register-&gt;register_net_sysctl
 </pre>
+
+<p>
+在ip4_frags_ns_ctl_register函数中：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__net_init</span> ip4_frags_ns_ctl_register(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">net</span> *<span style="color: #DFAF8F;">net</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">ctl_table</span> *<span style="color: #DFAF8F;">table</span>;
+
+        table = ip4_frags_ns_ctl_table;
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>net_eq(net, &amp;init_net)) {
+                table = kmemdup(table, <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(ip4_frags_ns_ctl_table), GFP_KERNEL);
+                table[0].data = &amp;net-&gt;ipv4.frags.high_thresh;
+        }
+
+        hdr = register_net_sysctl(net, <span style="color: #CC9393;">"net/ipv4"</span>, table);
+}
+</pre>
+</div>
+<p>
+可以看到，这个table里的data所指的量就是high_thresh。table会注册到/proc/sys/net/ipv4下，具体的注册流程就不看了，那是另外一个主题。而table是通过ip4_frags_ns_ctl_table这个表复制而来的。通过查看ip4_frags_ns_ctl_table的定义知道，这个proc文件的名字是ipfrag_high_thresh，而proc处理函数是proc_doulongvec_minmax：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">ctl_table</span> <span style="color: #DFAF8F;">ip4_frags_ns_ctl_table</span>[] = {
+      {
+              .procname = <span style="color: #CC9393;">"ipfrag_high_thresh"</span>,
+              .data             = &amp;init_net.ipv4.frags.high_thresh,
+              .maxlen           = <span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>),
+              .mode             = 0644,
+              .proc_handler     = proc_doulongvec_minmax,
+              .extra1           = &amp;init_net.ipv4.frags.low_thresh
+      },
+</pre>
+</div>
+<p>
+不论是分析proc_doulongvec_minmax的作用还是查看register_net_sysctl-&gt;__register_sysctl_table函数里对proc_handler的注释都可以知道，该函数就是处理来自用户态的输入，进而写或读到/proc/sys/net/ipv4/ipfrag_high_thresh文件，从而影响到table[0]所指的net-&gt;ipv4.frags.high_thresh量。
+</p>
+
+<p>
+以上都只是在说high_thresh这个量是如何在内核里初始化好后以供用户读写。下面来分析下内核网络栈怎么使用这个参数的。首先一个可能的网络收包流程如下：
+</p>
+<pre class="example">
+设备触发中断-&gt;...__netif_receive_skb-&gt;__netif_receive_skb_core-&gt;ip_rcv-&gt;ip_rcv_finish-&gt;dst_input-&gt;ip_local_deliver-&gt;ip_defrag-&gt;ip_find-&gt;inet_frag_find
+</pre>
+
+
+<p>
+在inet_frag_find函数里有如下代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>nf-&gt;high_thresh || frag_mem_limit(nf) &gt; nf-&gt;high_thresh)
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">NULL</span>;
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">long</span> <span style="color: #93E0E3;">frag_mem_limit</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">netns_frags</span> *<span style="color: #DFAF8F;">nf</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> atomic_long_read(&amp;nf-&gt;mem);
+}
+</pre>
+</div>
+
+<p>
+可以很清楚的看到，high_thresh做为一个阀值，当已经使用的内存计数大于这个阀值时，返回NULL。
+返回NULL意味着什么呢？这会导致父函数ip_find也返回NULL，而在ip_defrag里，如果ip_find返回
+NULL的话，就简单的调用kfree_skb去丢弃现在这个skb包，并返回ENOMEM：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">ip_defrag</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">net</span> *<span style="color: #DFAF8F;">net</span>, <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">sk_buff</span> *<span style="color: #DFAF8F;">skb</span>, <span style="color: #7CB8BB;">u32</span> <span style="color: #DFAF8F;">user</span>)
+{
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Lookup (or create) queue header</span><span style="color: #5F7F5F;"> */</span>
+        qp = ip_find(net, ip_hdr(skb), user, vif);
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (qp) {
+                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">ret</span>;
+
+                spin_lock(&amp;qp-&gt;q.lock);
+
+                ret = ip_frag_queue(qp, skb);
+
+                spin_unlock(&amp;qp-&gt;q.lock);
+                ipq_put(qp);
+                <span style="color: #F0DFAF; font-weight: bold;">return</span> ret;
+        }
+
+        __IP_INC_STATS(net, IPSTATS_MIB_REASMFAILS);
+        kfree_skb(skb);
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> -ENOMEM;
+}
+</pre>
+</div>
+
+<p>
+最后一个小问题，何时去增加nf-&gt;mem内存计数呢？当然是ip_find返回非NULL值，在if (qp)条件满足的流程里：
+</p>
+<pre class="example">
+ip_defrag-&gt;ip_frag_queue-&gt;add_frag_mem_limit
+</pre>
+
+<p>
+至于何时减少这个内存计数，可以对sub_frag_mem_limit函数做类似分析。
+</p>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-08-17 Thu 17:58</p>
+<p class="date">Created: 2023-08-18 Fri 11:19</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
