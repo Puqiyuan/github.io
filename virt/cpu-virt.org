@@ -1,0 +1,204 @@
+#+TITLE: CPU计算虚拟化：KVM与QEMU
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
+本文主要分析下KVM/QEMU对CPU的虚拟化。KVM/QEMU还完成了许多的功能，比如内存虚拟化，中断虚拟化等，但这些功能不是本文的主题。
+
+本文分五个方面来分析CPU的虚拟化，依次展开。
+
+* 虚拟机的创建
+QEMU在初始化阶段，通过如下调用链到kvm_init函数：
+: main->qemu_init->configure_accelerators->qemu_opts_foreach->do_configure_accelerator->accel_init_machine->kvm_init
+在kvm_init函数中有如下代码：
+#+begin_src c
+  KVMState *s;
+  s = KVM_STATE(ms->accelerator);
+  s->fd = qemu_open_old("/dev/kvm", O_RDWR);
+#+end_src
+可以看到，这里打开了/dev/kvm文件，并且将返回的文件描述符保存在了KVMState的fd成员里。将来通过这个fd可以调用ioctl，内核的kvm模块其功能就是通过/dev/kvm设备文件导出的。关于这点后面再详细分析。现在还需要继续详细分析这几行QEMU代码。
+
+首先是类型为KVMState的变量s的来源。代码中出现了KVM_STATE宏，QEMU代码中到处充斥中这种大写的宏，其定义都是类似的方式，针对KVM_STATE来说如下代码定义了它：
+#+begin_src c
+  DECLARE_INSTANCE_CHECKER(KVMState, KVM_STATE,
+                           TYPE_KVM_ACCEL)
+#+end_src
+而DECLARE_INSTANCE_CHECKER定义在include/qom/object.h中。
+
+简单介绍下qom，qom是QEMU Object Model的简写，是一种用于构建和管理QEMU设备的对象模型。QOM允许以一种层次化和组合性的方式构建虚拟设备，使得设备的模拟和管理更加灵活和可扩展。
+
+QOM为设备提供了一种统一的方式来定义和组织属性、方法和信号。每个设备都是一个QOM实例，具有一组属性（例如，CPU的时钟频率、内存大小等）、方法（例如，设备初始化、读取寄存器等）以及可能的信号（事件通知）。同时也提供了更好的代码复用性。
+
+在QEMU源代码中，有许多与QOM相关的代码，包括设备的定义、实例化、属性、方法和信号的设置等。
+
+说回DECLARE_INSTANCE_CHECKER，其定义为：
+#+begin_src c
+  #define DECLARE_INSTANCE_CHECKER(InstanceType, OBJ_NAME, TYPENAME)	\
+          static inline G_GNUC_UNUSED InstanceType *			\
+          OBJ_NAME(const void *obj)					\
+          { return OBJECT_CHECK(InstanceType, obj, TYPENAME); }
+#+end_src
+可以看到，OBJ_NAME作为传进来的参数，被定义为只有一行return的函数，当然这个函数很短，肯定是要内联的，但这不影响在分析代码时，就把它当作函数看待。继续看OBJECT_CHECK：
+#+begin_src c
+  #define OBJECT_CHECK(type, obj, name)					\
+          ((type *)object_dynamic_cast_assert(OBJECT(obj), (name),	\
+                                              __FILE__, __LINE__, __func__))
+#+end_src
+看到这里就明白了，其实就是个强转，将传进来的void *指针转换为指向KVMState类型的指针。ms->accelerator的类型是AccelState，那么想必KVMState的第一个成员就是AccelState类型的成员了，这样它们才能强转。相当于（ms）拥有一个AccelState类型的指针时，而该AccelState来自KVMState，那么可以直接强转为KVMState类型，就可以引用KVMState里除开AccelState外的其它成员了。这种强转其实就是个继承关系了，在各种软件项目里屡见不鲜，不论它们以何种方式（外衣）出现。
+
+那么现在就是分析ms->accelerator的出处了。在accel_init_machine里有：
+#+begin_src c
+  int accel_init_machine(AccelState *accel, MachineState *ms)
+  {
+          ms->accelerator = accel;
+  }
+#+end_src
+还需要再往上看父函数，在do_configure_accelerator中：
+#+begin_src c
+  static int do_configure_accelerator(void *opaque, QemuOpts *opts, Error **errp)
+  {
+          const char *acc = qemu_opt_get(opts, "accel");
+          AccelClass *ac = accel_find(acc);
+          AccelState *accel;
+          accel = ACCEL(object_new_with_class(OBJECT_CLASS(ac)));
+          ret = accel_init_machine(accel, current_machine);
+  }
+#+end_src
+看到这里就明晰了，qemu_opt_get就是根据传入的参数去找accelerator的字符串名字，比如在启动qemu时传入了-enable-kvm，那么这里的acc就是指向串“kvm”了。而accel_find往下一路调用，最后会来到glib提供的g_hash_table_lookup函数，也就是说，包括accelerator在内的很多对象，都会事先存在hash表里，然后后面要用时通过“kvm”这样的key去找，当然真正的key串可能是组合了一些其它的字符，比如kvm-accel，见accel_find->ACCEL_CLASS_NAME。
+
+顺便提下，current_machine也是先在初始化阶段的qemu_create_machine里创建出来：
+#+begin_src c
+current_machine = MACHINE(object_new_with_class(OBJECT_CLASS(machine_class)));
+#+end_src
+
+这里以kvm accelerator这种type类型的对象注册为例，来分析下一个对象的注册到hash表的流程，有此一例，其它对象的注册类似。在accel/kvm/kvm-all.c中，有如下代码：
+#+begin_src c
+  static const TypeInfo kvm_accel_type = {
+          .name = TYPE_KVM_ACCEL,
+          .parent = TYPE_ACCEL,
+          .instance_init = kvm_accel_instance_init,
+          .class_init = kvm_accel_class_init,
+          .instance_size = sizeof(KVMState),
+  };
+  static void kvm_type_init(void)
+  {
+          type_register_static(&kvm_accel_type);
+  }
+#+end_src
+从type_register_static一路往下的话，就会看到g_hash_table_insert，这个就和前面通过
+g_hash_table_lookup去寻找加速器对应起来了，只有这里insert，后面才能lookup。现在还有唯一一
+个问题，那就是kvm_type_init这个函数何时执行，qemu项目的代码里并没有找到直接调用这个函数的
+地方。秘密就在这行代码：
+#+begin_src c
+type_init(kvm_type_init);
+#+end_src
+type_init定义如下：
+#+begin_src c
+  #define type_init(function) module_init(function, MODULE_INIT_QOM)
+#+end_src
+#+begin_src c
+#define module_init(function, type)					      \
+static void __attribute__((constructor)) do_qemu_init_ ## function(void)    \
+{								              \
+    register_module_init(function, type);                               \ 
+}
+#+end_src
+可以看到这里用了constructor修饰，被这个gcc属性修饰的函数，会先于main函数的执行，而register_module_init关键的就下面几行：
+#+begin_src c
+  ModuleEntry *e;
+  e->init = fn;
+  QTAILQ_INSERT_TAIL(l, e, node);
+#+end_src
+可以看到也就是把传进来的kvm_type_init给放到了e->init里，可以理解为先于main执行的这段代码，主要是个注册作用，而真正调用这个动作还是在main里做的：
+: main->qemu_init->qemu_init_subsystems->module_call_init->kvm_type_init
+
+上述流程当然是先于configure_accelerator里通过accel_find去寻找加速器的，也就是main调用的qemu_init函数里，是先调用qemu_init_subsystems而后调用configure_accelerator的。
+
+继续看给accel真正分配空间就是在object_new_with_with_class里了：
+: object_new_with_class->object_new_with_type->g_malloc
+  
+这里又出现了大写的ACCEL宏，可以想见其作用无非就是强转指针类型了：
+#+begin_src c
+  #define ACCEL(obj)					\
+          OBJECT_CHECK(AccelState, (obj), TYPE_ACCEL)
+#+end_src
+到现在就有了一个KVMState，现在回过头来给出KVMState的一些作用，可以理解为内核实现了KVM模块，那么它在QEMU这样的用户程序里有一个代表就是KVMState，其中的fd成员就保存了打开/dev/kvm时返回的fd。每次运行一个QEMU程序，就会申请一个这个结构体。
+
+回到kvm_init函数，再往下有如下重要的代码：
+#+begin_src c
+  do{
+          ret = kvm_ioctl(s, KVM_CREATE_VM, type);
+   } while (ret == -EINTR);
+  s->vmfd = ret;
+#+end_src
+#+begin_src c
+  int kvm_ioctl(KVMState *s, int type, ...)
+  {
+          ret = ioctl(s->fd, type, arg);
+          return ret;
+  }
+#+end_src
+可以看到这里就使用了前面打开/dev/kvm的fd来调用ioctl，这个ioctl支持KVM_CREATE_VM这样的命令，在内核里的实现是kvm_dev_ioctl。并且将返回的ret文件描述符保存到了KVMState的vmfd成员，将来又可以在这个fd上调用它的ioctl，比如创建vcpu，在内核里对应这个vmfd的ioctl函数实现是kvm_vm_ioctl。关于这点后面还会分析。
+
+*可以总结下，通过调用qemu_open_old函数，由/dev/kvm文件得到的fd，表示了一个KVM模块功能的合集，而通过KVM_CREATE_VM命令在/dev/kvm上的fd调用ioctl得到的vmfd，表示了一台虚拟机。*
+
+在分析内核侧前，想特别的提下，QEMU作为一个用户程序，不论其代码怎么写，其起始入口函数都是softmmu/main.c:main，从这里入口会运行很多复杂的流程。而分析代码从这个函数起始，也算是扭住了千头万绪的线头。一些流程上先后顺序的确定也会很清晰。
+
+现在可以看下内核KVM侧关于虚拟机创建的实现了。首先是初始化阶段/dev/kvm设备文件的注册，只有注册好了这个文件，用户程序才能open它，并在这上面使用ioctl函数。
+
+内核的虚拟化实现是作为一个模块而存在，amd的svm，和intel的vmx实现不一样。但是内核抽出了公共部分在virt/kvm下。具体来说，针对/dev/kvm的初始化注册，由kvm_init函数里调用misc_register来实现。而对kvm_init的调用，对于intel来说就是arch/x86/kvm/vmx/vmx.c：
+#+begin_src c
+  module_init(vmx_init);
+#+end_src
+#+begin_src c
+  static int __init vmx_init(void)
+  {
+          r = kvm_init(&vmx_x86_ops, sizeof(struct vcpu_vmx),
+                       __alignof__(struct vcpu_vmx), THIS_MODULE);
+  }
+#+end_src
+#+begin_src c
+  int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
+               struct module *module)
+  {
+          r = misc_register(&kvm_dev);
+  }
+#+end_src
+这里的kvm_dev定义为：
+#+begin_src c
+  static struct file_operations kvm_chardev_ops = {
+          .unlocked_ioctl = kvm_dev_ioctl,
+          .llseek         = noop_llseek,
+          KVM_COMPAT(kvm_dev_ioctl),
+  };
+  
+  static struct miscdevice kvm_dev = {
+          KVM_MINOR,
+          "kvm",
+          &kvm_chardev_ops,
+  };
+#+end_src
+可以看到，/dev/kvm文件关联的fop就是kvm_chardev_ops，对/dev/kvm使用ioctl时，就会来到kvm_dev_ioctl函数。现在主要关心kvm_ioctl以KVM_CREATE_VM调用ioctl时的内核代码，在这个命令下，内核会进入kvm_dev_ioctl_create_vm函数。该函数比较关键的流程如下：
+#+begin_src c
+  int r;
+  struct kvm *kvm;
+  kvm = kvm_create_vm(type);
+  r = get_unused_fd_flags(O_CLOEXEC);
+  file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR);
+  fd_install(r, file);
+  return r;
+#+end_src
+先是创建一个kvm结构体，一台vm都有一个kvm结构体，而kvm结构体里有内核对VCPU的表示比如kvm_cpu结构体，所有VCPU都在vcpus数组里，也有mm_struct结构体，vm所用的虚拟内存就是用户进程的虚拟地址空间，当然还有其它很多信息。
+
+然后通过get_unused_fd_flags得到一个文件描述符r，最后返回的是这个文件描述符。随后调用anon_inode_getfile分配一个匿名的inode，file->private_data就是kvm，将来通过这个file（或fd）都可以找到kvm结构体。当然，fd和file要关联到当前进程的打开文件描述符表current->files里，后面通过fdget函数得到fd关联的file。
+
+前面已经总结强调过了，get_unused_fd_flags返回的vmfd就是代表了一台虚拟机，Linux一切皆文件，针对这个文件（虚拟机），其操作的函数集就是kvm_vm_fops，这个fops里最关键的就是kvm_vm_ioctl函数了。比如针对一台虚拟机可以创建vcpu，这些事情都是后面小节的主题了。
+
+总之到目前，总算是有了一台虚拟机，对比真实硬件机器来说，可以理解为主板以及上面的插槽这些都做好了，就等后面插上CPU（创建VCPU），插上需要的外设等。
+* QEMU CPU创建
+
+* KVM CPU创建
+
+* VCPU的运行
+
+* VCPU的调度
