@@ -196,6 +196,153 @@ static void __attribute__((constructor)) do_qemu_init_ ## function(void)    \
 
 总之到目前，总算是有了一台虚拟机，对比真实硬件机器来说，可以理解为主板以及上面的插槽这些都做好了，就等后面插上CPU（创建VCPU），插上需要的外设等。
 * QEMU CPU创建
+TODO
+
+而kvm_start_vcpu_thread被如下调用链调用：
+: main->qemu_init->qmp_x_exit_preconfig->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set->
+: property_set_bool->device_set_realized->x86_cpu_realizefn->qemu_init_vcpu->kvm_start_vcpu_thread
+以上其实就是主板的初始化流程，就这个调用链而言，最后关心的是CPU具现化。以下分析这个调用链
+
+
+
+在object_property_set里有个set回调，它主要是看一个对象（这里是CPU）是否具有realized属性，
+若有的话， *那么object_property_set里怎么就能按如下方式调用set函数呢？*
+#+begin_src c
+  bool object_property_set(Object *obj, const char *name, Visitor *v,
+                           Error **errp)
+  {
+          ObjectProperty *prop = object_property_find_err(obj, name, errp);
+          prop->set(obj, v, name, prop->opaque, errp);
+  }
+#+end_src
+这里set函数其实就是property_set_bool。
+先列一个调用链：
+: main->qemu_init->qemu_create_machine->select_machine->object_class_get_list->object_class_foreach->g_hash_table_foreach->object_class_foreach_tramp->type_initialize(递归三次)->device_class_init->object_class_property_add_bool
+这里先分析下这个调用链是在干什么，再分析最后的object_class_property_add_bool。简要的说，这个调用链是要对加入type_table哈希表中的所有类型进行初始化，具体的说，包括设置（ *不是调用*
+）具现化的回调函数，比如device_set_realized，后面真正具现化的时候再调用这样的回调函数。
+
+到这里可以总结下QEMU代码的流程了，主要是以下几个阶段：
+1. 注册。
+2. 初始化。
+3. 具现化。
+4. 运行时。
+记住这几个阶段，以后在处理QEMU+KVM的具体问题或者继续深挖代码时，能时刻清晰自己处于哪个阶段，而不只是具体问题的“指哪打哪”很局部，还多了一点全局观念或角度。
+
+上面object_class_property_add_bool的调用链包括后面分析的object_class_property_add_bool都是归结于初始化阶段。而本节一开始分析CPU的创建过程其实是具体设备的具现化阶段了。下面再介绍一下注册阶段。以设备类的TypeInfo，device_type_info量为例来分析这个注册过程。其实关于这个type init的过程上节对kvm_accel_type注册的分析已经涉及过了，已经不是新鲜玩意了，首先有：
+#+begin_src c
+type_init(qdev_register_types)
+#+end_src
+这个type_init怎么运行起来上节已经介绍了，这里只是从qdev_register_types一路往下，看看type_table_add函数：
+#+begin_src c
+  static void type_table_add(TypeImpl *ti)
+  {
+          g_hash_table_insert(type_table_get(), (void *)ti->name, ti);
+  }
+  static GHashTable *type_table_get(void)
+  {
+          static GHashTable *type_table;
+          if (type_table == NULL) {
+                  type_table = g_hash_table_new(g_str_hash, g_str_equal);
+          }
+          return type_table;
+  }
+#+end_src
+这里可以看到这个类型表的落脚点，名字就叫：type_table，是个static类型的，初始化一次为NULL，第一次运行创建这样一个表，在函数退出时依旧有效。并且可以将各种类型加入到这个表中。这样注册完成后，就可以在初始化阶段时，调用各个TypeInfo的class_init函数了，就是在type_initialize（可能递归多次）里调用class_init函数。
+
+以上其实又涉及到了QOM的概念， 在上节已经首次提出了QOM的一方面。这里针对本节的角度再次总结QOM的另一方面。 *QOM：Qemu Object Model。所谓model，就是有一定的套路或范式，不论来多少类型、设备，都按这个注册、初始化最后具现的流程来编码，具体点就是到处设置回调函数。*
+
+后面还会遇到QOM的体现，本文会更多的以具体代码里去阐述QOM的概念，不然只是上节的QOM概念会空洞。
+
+现在开始分析object_class_property_add_bool，以解答前面的问题“object_property_set里怎么就能按如下方式调用set函数呢”。在这个函数中有：
+#+begin_src c
+  ObjectProperty *
+  object_class_property_add_bool(ObjectClass *klass, const char *name,
+                                 bool (*get)(Object *, Error **),
+                                 void (*set)(Object *, bool, Error **))
+  {
+          BoolProperty *prop = g_malloc0(sizeof(*prop));
+          prop->get = get;
+          prop->set = set;
+          return object_class_property_add(klass, name, "bool",
+                                           get ? property_get_bool : NULL,
+                                           set ? property_set_bool : NULL,
+                                           NULL,
+                                           prop);
+  }
+#+end_src
+上面的set函数其实就是device_set_realized，这在object_class_property_add_bool的父函数device_class_init里可以看到，这里要注意，object_class_property_add_bool自己也构造了一个BoolProperty类型的prop属性，这个BoolProperty的set函数是device_set_realized，并将它作为最后一个参数传递给了object_class_property_add，这个函数在下面马上会分析，它也构造了一个prop，不过是ObjectProperty类型的。
+#+begin_src c
+  ObjectProperty *
+  object_class_property_add(ObjectClass *klass,
+                            const char *name,
+                            const char *type,
+                            ObjectPropertyAccessor *get,
+                            ObjectPropertyAccessor *set,
+                            ObjectPropertyRelease *release,
+                            void *opaque)
+  {
+          ObjectProperty *prop;
+          prop = g_malloc0(sizeof(*prop));
+          prop->set = set;
+          prop->opaque = opaque;
+          g_hash_table_insert(klass->properties, prop->name, prop);
+          return prop;
+  }
+#+end_src
+可以看到这里调用了g_hash_table_insert函数将一个prop加入到了properties哈希表中，其key就是传进来的name字符串，为realized。这样在前面的object_property_set函数中就可以通过object_property_find_err函数，以name参数为realized找到其对应的prop，进而调用这个prop对应的set函数：property_set_bool。同时还有很重要的一点，opaque被保存在了prop->opaue成员里，这样在早先分析过的object_property_set函数里，在先找到了ObjectProperty类型的prop后，才能从这个prop里取出opaque，而opaque又作为一个BoolProperty类型的参数传递给object_property_set里调用的set函数（也就是property_set_bool），这样在这个set函数里又才调用BoolProperty的set回调为device_set_realized，进而去执行具现化的流程。
+
+分析完device_set_realized，往下打算分析下x86_cpu_realizefn函数的调用。device_set_realized里对x86_cpu_realizefn调用是这样的：
+#+begin_src c
+  static void device_set_realized(Object *obj, bool value, Error **errp)
+  {
+          DeviceState *dev = DEVICE(obj);
+          DeviceClass *dc = DEVICE_GET_CLASS(dev);
+          if (dc->realize) {
+                  dc->realize(dev, &local_err);
+          }
+  }
+#+end_src
+
+这里出现了大写的DEVICE，这点在前面提到过，也是QOM的一个方面。但是具体的DEVICE的实现，前面没有提到，这里简要分析下。
+
+DEVICE的最开始定义在include/hw/qdev-core.h里有：
+#+begin_src c
+OBJECT_DECLARE_TYPE(DeviceState, DeviceClass, DEVICE)
+#+end_src
+#+begin_src c
+  #define OBJECT_DECLARE_TYPE(InstanceType, ClassType, MODULE_OBJ_NAME) \
+          typedef struct InstanceType InstanceType; \
+          typedef struct ClassType ClassType; \
+          \
+          G_DEFINE_AUTOPTR_CLEANUP_FUNC(InstanceType, object_unref) \
+          \
+          DECLARE_OBJ_CHECKERS(InstanceType, ClassType, \
+                               MODULE_OBJ_NAME, TYPE_##MODULE_OBJ_NAME)
+#+end_src
+#+begin_src c
+  #define DECLARE_OBJ_CHECKERS(InstanceType, ClassType, OBJ_NAME, TYPENAME) \
+          DECLARE_INSTANCE_CHECKER(InstanceType, OBJ_NAME, TYPENAME)	\
+          \
+          DECLARE_CLASS_CHECKERS(ClassType, OBJ_NAME, TYPENAME)
+#+end_src
+可以看到上节介绍过的DECLARE_INSTANCE_CHECKER，里面会有DEVICE的定义，就不再进一步贴代码了。这里主要关心下DECLARE_CLASS_CHECKERS，这个前面没有介绍过。
+#+begin_src c
+  define DECLARE_CLASS_CHECKERS(ClassType, OBJ_NAME, TYPENAME) \
+       static inline G_GNUC_UNUSED ClassType * \
+       OBJ_NAME##_GET_CLASS(const void *obj) \
+  { return OBJECT_GET_CLASS(ClassType, obj, TYPENAME); } \
+  \
+  static inline G_GNUC_UNUSED ClassType * \
+  OBJ_NAME##_CLASS(const void *klass) \
+  { return OBJECT_CLASS_CHECK(ClassType, klass, TYPENAME); }
+#+end_src
+可以看到，OBJ_NAME被替换为OBJECT_DECLARE_TYPE宏的第三个参数为DEVICE，这样就有了device_set_realized函数里可以用DEVICE_GET_CLASS了。再往下跟OBJECT_GET_CLASS->object_get_class的话会知道，最后实际获取的就是obj->class，这里就不再贴代码了。
+
+回到device_set_realized函数，里面最主要的就是通过dc调用了realize函数了。这又是一个回调，那么这个回调在哪里设置的呢，分析这个问题，又要引出QOM的另一方面了：object的继承。下面分析这个问题。
+
+先看几个结构体：
+
+到目前为止，本文花了很多篇幅去阐述QOM，还较少涉及虚拟化本身，笔者认为这是必要的，从某种角度来说，QOM就代表了QEMU代码的组织，并且弄清楚这种组织或调用关系有可能比虚拟化本身更费劲。但对QOM的清晰，会有助于对QEMU代码的全局把握。当然虚拟化本身后面肯定还会深入的。
 
 * KVM CPU创建
 

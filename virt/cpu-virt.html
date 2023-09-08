@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-08-25 Fri 10:43 -->
+<!-- 2023-09-08 Fri 17:54 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgdd0ae41">1. 虚拟机的创建</a></li>
-<li><a href="#orga9d8b4c">2. QEMU CPU创建</a></li>
-<li><a href="#orgdb71851">3. KVM CPU创建</a></li>
-<li><a href="#org96b4ef6">4. VCPU的运行</a></li>
-<li><a href="#org2bf45b5">5. VCPU的调度</a></li>
+<li><a href="#org3bc38de">1. 虚拟机的创建</a></li>
+<li><a href="#org165f86a">2. QEMU CPU创建</a></li>
+<li><a href="#orgdea1d5f">3. KVM CPU创建</a></li>
+<li><a href="#org6b11279">4. VCPU的运行</a></li>
+<li><a href="#org9da4f2b">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -54,8 +54,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-orgdd0ae41" class="outline-2">
-<h2 id="orgdd0ae41"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-org3bc38de" class="outline-2">
+<h2 id="org3bc38de"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -347,25 +347,240 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-orga9d8b4c" class="outline-2">
-<h2 id="orga9d8b4c"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org165f86a" class="outline-2">
+<h2 id="org165f86a"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+TODO
+</p>
+
+<p>
+而kvm_start_vcpu_thread被如下调用链调用：
+</p>
+<pre class="example">
+main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt;
+property_set_bool-&gt;device_set_realized-&gt;x86_cpu_realizefn-&gt;qemu_init_vcpu-&gt;kvm_start_vcpu_thread
+</pre>
+
+<p>
+以上其实就是主板的初始化流程，就这个调用链而言，最后关心的是CPU具现化。以下分析这个调用链
+</p>
+
+
+
+<p>
+在object_property_set里有个set回调，它主要是看一个对象（这里是CPU）是否具有realized属性，
+若有的话， <b>那么object_property_set里怎么就能按如下方式调用set函数呢？</b>
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">bool</span> <span style="color: #93E0E3;">object_property_set</span>(<span style="color: #7CB8BB;">Object</span> *<span style="color: #DFAF8F;">obj</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">name</span>, <span style="color: #7CB8BB;">Visitor</span> *<span style="color: #DFAF8F;">v</span>,
+                         <span style="color: #7CB8BB;">Error</span> **<span style="color: #DFAF8F;">errp</span>)
+{
+        <span style="color: #7CB8BB;">ObjectProperty</span> *<span style="color: #DFAF8F;">prop</span> = object_property_find_err(obj, name, errp);
+        prop-&gt;set(obj, v, name, prop-&gt;opaque, errp);
+}
+</pre>
+</div>
+<p>
+这里set函数其实就是property_set_bool。
+先列一个调用链：
+</p>
+<pre class="example">
+main-&gt;qemu_init-&gt;qemu_create_machine-&gt;select_machine-&gt;object_class_get_list-&gt;object_class_foreach-&gt;g_hash_table_foreach-&gt;object_class_foreach_tramp-&gt;type_initialize(递归三次)-&gt;device_class_init-&gt;object_class_property_add_bool
+</pre>
+
+<p>
+这里先分析下这个调用链是在干什么，再分析最后的object_class_property_add_bool。简要的说，这个调用链是要对加入type_table哈希表中的所有类型进行初始化，具体的说，包括设置（ <b>不是调用</b>
+）具现化的回调函数，比如device_set_realized，后面真正具现化的时候再调用这样的回调函数。
+</p>
+
+<p>
+到这里可以总结下QEMU代码的流程了，主要是以下几个阶段：
+</p>
+<ol class="org-ol">
+<li>注册。</li>
+<li>初始化。</li>
+<li>具现化。</li>
+<li>运行时。</li>
+</ol>
+<p>
+记住这几个阶段，以后在处理QEMU+KVM的具体问题或者继续深挖代码时，能时刻清晰自己处于哪个阶段，而不只是具体问题的“指哪打哪”很局部，还多了一点全局观念或角度。
+</p>
+
+<p>
+上面object_class_property_add_bool的调用链包括后面分析的object_class_property_add_bool都是归结于初始化阶段。而本节一开始分析CPU的创建过程其实是具体设备的具现化阶段了。下面再介绍一下注册阶段。以设备类的TypeInfo，device_type_info量为例来分析这个注册过程。其实关于这个type init的过程上节对kvm_accel_type注册的分析已经涉及过了，已经不是新鲜玩意了，首先有：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">type_init</span>(qdev_register_types)
+</pre>
+</div>
+<p>
+这个type_init怎么运行起来上节已经介绍了，这里只是从qdev_register_types一路往下，看看type_table_add函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">type_table_add</span>(<span style="color: #7CB8BB;">TypeImpl</span> *<span style="color: #DFAF8F;">ti</span>)
+{
+        g_hash_table_insert(type_table_get(), (<span style="color: #7CB8BB;">void</span> *)ti-&gt;name, ti);
+}
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">GHashTable</span> *<span style="color: #93E0E3;">type_table_get</span>(<span style="color: #7CB8BB;">void</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">GHashTable</span> *<span style="color: #DFAF8F;">type_table</span>;
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (type_table == <span style="color: #BFEBBF;">NULL</span>) {
+                type_table = g_hash_table_new(g_str_hash, g_str_equal);
+        }
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> type_table;
+}
+</pre>
+</div>
+<p>
+这里可以看到这个类型表的落脚点，名字就叫：type_table，是个static类型的，初始化一次为NULL，第一次运行创建这样一个表，在函数退出时依旧有效。并且可以将各种类型加入到这个表中。这样注册完成后，就可以在初始化阶段时，调用各个TypeInfo的class_init函数了，就是在type_initialize（可能递归多次）里调用class_init函数。
+</p>
+
+<p>
+以上其实又涉及到了QOM的概念， 在上节已经首次提出了QOM的一方面。这里针对本节的角度再次总结QOM的另一方面。 <b>QOM：Qemu Object Model。所谓model，就是有一定的套路或范式，不论来多少类型、设备，都按这个注册、初始化最后具现的流程来编码，具体点就是到处设置回调函数。</b>
+</p>
+
+<p>
+后面还会遇到QOM的体现，本文会更多的以具体代码里去阐述QOM的概念，不然只是上节的QOM概念会空洞。
+</p>
+
+<p>
+现在开始分析object_class_property_add_bool，以解答前面的问题“object_property_set里怎么就能按如下方式调用set函数呢”。在这个函数中有：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">ObjectProperty</span> *
+<span style="color: #93E0E3;">object_class_property_add_bool</span>(<span style="color: #7CB8BB;">ObjectClass</span> *<span style="color: #DFAF8F;">klass</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">name</span>,
+                               <span style="color: #7CB8BB;">bool</span> (*<span style="color: #93E0E3;">get</span>)(<span style="color: #7CB8BB;">Object</span> *, <span style="color: #7CB8BB;">Error</span> **),
+                               <span style="color: #7CB8BB;">void</span> (*<span style="color: #93E0E3;">set</span>)(<span style="color: #7CB8BB;">Object</span> *, <span style="color: #7CB8BB;">bool</span>, <span style="color: #7CB8BB;">Error</span> **))
+{
+        <span style="color: #7CB8BB;">BoolProperty</span> *<span style="color: #DFAF8F;">prop</span> = g_malloc0(<span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(*prop));
+        prop-&gt;get = get;
+        prop-&gt;set = set;
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> object_class_property_add(klass, name, <span style="color: #CC9393;">"bool"</span>,
+                                         get ? property_get_bool : <span style="color: #BFEBBF;">NULL</span>,
+                                         set ? property_set_bool : <span style="color: #BFEBBF;">NULL</span>,
+                                         <span style="color: #BFEBBF;">NULL</span>,
+                                         prop);
+}
+</pre>
+</div>
+<p>
+上面的set函数其实就是device_set_realized，这在object_class_property_add_bool的父函数device_class_init里可以看到，这里要注意，object_class_property_add_bool自己也构造了一个BoolProperty类型的prop属性，这个BoolProperty的set函数是device_set_realized，并将它作为最后一个参数传递给了object_class_property_add，这个函数在下面马上会分析，它也构造了一个prop，不过是ObjectProperty类型的。
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">ObjectProperty</span> *
+<span style="color: #93E0E3;">object_class_property_add</span>(<span style="color: #7CB8BB;">ObjectClass</span> *<span style="color: #DFAF8F;">klass</span>,
+                          <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">name</span>,
+                          <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">type</span>,
+                          <span style="color: #7CB8BB;">ObjectPropertyAccessor</span> *<span style="color: #DFAF8F;">get</span>,
+                          <span style="color: #7CB8BB;">ObjectPropertyAccessor</span> *<span style="color: #DFAF8F;">set</span>,
+                          <span style="color: #7CB8BB;">ObjectPropertyRelease</span> *<span style="color: #DFAF8F;">release</span>,
+                          <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">opaque</span>)
+{
+        <span style="color: #7CB8BB;">ObjectProperty</span> *<span style="color: #DFAF8F;">prop</span>;
+        prop = g_malloc0(<span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(*prop));
+        prop-&gt;set = set;
+        prop-&gt;opaque = opaque;
+        g_hash_table_insert(klass-&gt;properties, prop-&gt;name, prop);
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> prop;
+}
+</pre>
+</div>
+<p>
+可以看到这里调用了g_hash_table_insert函数将一个prop加入到了properties哈希表中，其key就是传进来的name字符串，为realized。这样在前面的object_property_set函数中就可以通过object_property_find_err函数，以name参数为realized找到其对应的prop，进而调用这个prop对应的set函数：property_set_bool。同时还有很重要的一点，opaque被保存在了prop-&gt;opaue成员里，这样在早先分析过的object_property_set函数里，在先找到了ObjectProperty类型的prop后，才能从这个prop里取出opaque，而opaque又作为一个BoolProperty类型的参数传递给object_property_set里调用的set函数（也就是property_set_bool），这样在这个set函数里又才调用BoolProperty的set回调为device_set_realized，进而去执行具现化的流程。
+</p>
+
+<p>
+分析完device_set_realized，往下打算分析下x86_cpu_realizefn函数的调用。device_set_realized里对x86_cpu_realizefn调用是这样的：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">device_set_realized</span>(<span style="color: #7CB8BB;">Object</span> *<span style="color: #DFAF8F;">obj</span>, <span style="color: #7CB8BB;">bool</span> <span style="color: #DFAF8F;">value</span>, <span style="color: #7CB8BB;">Error</span> **<span style="color: #DFAF8F;">errp</span>)
+{
+        <span style="color: #7CB8BB;">DeviceState</span> *<span style="color: #DFAF8F;">dev</span> = DEVICE(obj);
+        <span style="color: #7CB8BB;">DeviceClass</span> *<span style="color: #DFAF8F;">dc</span> = DEVICE_GET_CLASS(dev);
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (dc-&gt;realize) {
+                dc-&gt;realize(dev, &amp;local_err);
+        }
+}
+</pre>
 </div>
 
-<div id="outline-container-orgdb71851" class="outline-2">
-<h2 id="orgdb71851"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+<p>
+这里出现了大写的DEVICE，这点在前面提到过，也是QOM的一个方面。但是具体的DEVICE的实现，前面没有提到，这里简要分析下。
+</p>
+
+<p>
+DEVICE的最开始定义在include/hw/qdev-core.h里有：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">OBJECT_DECLARE_TYPE</span>(DeviceState, DeviceClass, DEVICE)
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">OBJECT_DECLARE_TYPE</span>(<span style="color: #DFAF8F;">InstanceType</span>, <span style="color: #DFAF8F;">ClassType</span>, <span style="color: #DFAF8F;">MODULE_OBJ_NAME</span>) \
+        <span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">InstanceType</span> <span style="color: #7CB8BB;">InstanceType</span>; \
+        <span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">ClassType</span> <span style="color: #7CB8BB;">ClassType</span>; \
+        \
+        G_DEFINE_AUTOPTR_CLEANUP_FUNC(InstanceType, object_unref) \
+        \
+        DECLARE_OBJ_CHECKERS(InstanceType, ClassType, \
+                             MODULE_OBJ_NAME, TYPE_##MODULE_OBJ_NAME)
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">DECLARE_OBJ_CHECKERS</span>(<span style="color: #DFAF8F;">InstanceType</span>, <span style="color: #DFAF8F;">ClassType</span>, <span style="color: #DFAF8F;">OBJ_NAME</span>, <span style="color: #DFAF8F;">TYPENAME</span>) \
+        DECLARE_INSTANCE_CHECKER(InstanceType, OBJ_NAME, TYPENAME)      \
+        \
+        DECLARE_CLASS_CHECKERS(ClassType, OBJ_NAME, TYPENAME)
+</pre>
+</div>
+<p>
+可以看到上节介绍过的DECLARE_INSTANCE_CHECKER，里面会有DEVICE的定义，就不再进一步贴代码了。这里主要关心下DECLARE_CLASS_CHECKERS，这个前面没有介绍过。
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">define</span> <span style="color: #93E0E3;">DECLARE_CLASS_CHECKERS</span>(ClassType, OBJ_NAME, TYPENAME) \
+     <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">G_GNUC_UNUSED</span> <span style="color: #DFAF8F;">ClassType</span> * \
+     OBJ_NAME##_GET_CLASS(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">obj</span>) \
+{ <span style="color: #F0DFAF; font-weight: bold;">return</span> OBJECT_GET_CLASS(ClassType, obj, TYPENAME); } \
+\
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">G_GNUC_UNUSED</span> <span style="color: #DFAF8F;">ClassType</span> * \
+OBJ_NAME##_CLASS(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">klass</span>) \
+{ <span style="color: #F0DFAF; font-weight: bold;">return</span> OBJECT_CLASS_CHECK(ClassType, klass, TYPENAME); }
+</pre>
+</div>
+<p>
+可以看到，OBJ_NAME被替换为OBJECT_DECLARE_TYPE宏的第三个参数为DEVICE，这样就有了device_set_realized函数里可以用DEVICE_GET_CLASS了。再往下跟OBJECT_GET_CLASS-&gt;object_get_class的话会知道，最后实际获取的就是obj-&gt;class，这里就不再贴代码了。
+</p>
+
+<p>
+回到device_set_realized函数，里面最主要的就是通过dc调用了realize函数了。这又是一个回调，那么这个回调在哪里设置的呢，分析这个问题，又要引出QOM的另一方面了：object的继承。下面分析这个问题。
+</p>
+
+<p>
+先看几个结构体：
+</p>
+
+<p>
+到目前为止，本文花了很多篇幅去阐述QOM，还较少涉及虚拟化本身，笔者认为这是必要的，从某种角度来说，QOM就代表了QEMU代码的组织，并且弄清楚这种组织或调用关系有可能比虚拟化本身更费劲。但对QOM的清晰，会有助于对QEMU代码的全局把握。当然虚拟化本身后面肯定还会深入的。
+</p>
+</div>
 </div>
 
-<div id="outline-container-org96b4ef6" class="outline-2">
-<h2 id="org96b4ef6"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<div id="outline-container-orgdea1d5f" class="outline-2">
+<h2 id="orgdea1d5f"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-org2bf45b5" class="outline-2">
-<h2 id="org2bf45b5"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org6b11279" class="outline-2">
+<h2 id="org6b11279"><span class="section-number-2">4.</span> VCPU的运行</h2>
+</div>
+
+<div id="outline-container-org9da4f2b" class="outline-2">
+<h2 id="org9da4f2b"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-08-25 Fri 10:43</p>
+<p class="date">Created: 2023-09-08 Fri 17:54</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
