@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-09-08 Fri 17:54 -->
+<!-- 2023-09-12 Tue 11:11 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3bc38de">1. 虚拟机的创建</a></li>
-<li><a href="#org165f86a">2. QEMU CPU创建</a></li>
-<li><a href="#orgdea1d5f">3. KVM CPU创建</a></li>
-<li><a href="#org6b11279">4. VCPU的运行</a></li>
-<li><a href="#org9da4f2b">5. VCPU的调度</a></li>
+<li><a href="#org257605c">1. 虚拟机的创建</a></li>
+<li><a href="#org14e736b">2. QEMU CPU创建</a></li>
+<li><a href="#org4144ae9">3. KVM CPU创建</a></li>
+<li><a href="#orgca47c36">4. VCPU的运行</a></li>
+<li><a href="#org2a65c15">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -51,11 +51,15 @@
 </p>
 
 <p>
+本文的硬件平台是AMD Ryzen 7 4800U。
+</p>
+
+<p>
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-org3bc38de" class="outline-2">
-<h2 id="org3bc38de"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-org257605c" class="outline-2">
+<h2 id="org257605c"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -347,29 +351,47 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org165f86a" class="outline-2">
-<h2 id="org165f86a"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org14e736b" class="outline-2">
+<h2 id="org14e736b"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
-TODO
-</p>
-
-<p>
-而kvm_start_vcpu_thread被如下调用链调用：
+QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代
+表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
 </p>
 <pre class="example">
-main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt;
+main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt;
 property_set_bool-&gt;device_set_realized-&gt;x86_cpu_realizefn-&gt;qemu_init_vcpu-&gt;kvm_start_vcpu_thread
 </pre>
 
 <p>
-以上其实就是主板的初始化流程，就这个调用链而言，最后关心的是CPU具现化。以下分析这个调用链
+以上其实就是主板的初始化流程，就这个调用链而言，最后的函数才关心的是CPU具现化。以下分析这个调用链本身是怎么被调用起来的，分析这点更多的是涉及到QOM，也就是QEMU代码的组织，而关于在QEMU代码里VCPU创建本身在本节偏后部分会介绍到。
 </p>
 
-
+<p>
+首先看machine_run_board_init是如何调用起pc_init1的，在machine_run_board_init函数里：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">machine_run_board_init</span>(<span style="color: #7CB8BB;">MachineState</span> *<span style="color: #DFAF8F;">machine</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">mem_path</span>, <span style="color: #7CB8BB;">Error</span> **<span style="color: #DFAF8F;">errp</span>)
+{
+        <span style="color: #7CB8BB;">MachineClass</span> *<span style="color: #DFAF8F;">machine_class</span> = MACHINE_GET_CLASS(machine);
+        machine_class-&gt;init(machine);
+}
+</pre>
+</div>
+<p>
+这里init函数在我的硬件平台就是pc_init1。这个回调是怎么设置的呢？
+</p>
 
 <p>
-在object_property_set里有个set回调，它主要是看一个对象（这里是CPU）是否具有realized属性，
+QEMU里x86平台的虚拟主板分为两类，一是i440fx，二是q35。i440fx是一个用于模拟Intel 440fx芯片组的虚拟平台。Intel i440fx芯片组是20世纪90年代早期的一个常见的PC主板芯片组，用于支持Intel的Pentium和Pentium Pro处理器。在虚拟化环境中，i440fx主板模拟了这个旧型号的主板，以便运行旧的操作系统或应用程序，或者为测试和开发目的。而q35模拟了更现代的主板和硬件特性，以便更好地支持现代操作系统和应用程序。
+</p>
+
+<p>
+不论是i440fx还是q35，都是通过DEFINE_PC_MACHINE宏来注册一个具体的pc machine实例。而DEFINE_PC_MACHINE里就会设置好init函数，init本身是pc_init_##suffix，但这个函数里面会调用pc_init1。对于i440fx来说，就是DEFINE_I440FX_MACHINE里调用DEFINE_PC_MACHINE。
+</p>
+
+<p>
+继续往后看object_property_set函数，在object_property_set里有个set回调，它主要是看一个对象（这里是CPU）是否具有realized属性，
 若有的话， <b>那么object_property_set里怎么就能按如下方式调用set函数呢？</b>
 </p>
 <div class="org-src-container">
@@ -553,34 +575,195 @@ OBJ_NAME##_CLASS(<span style="color: #F0DFAF; font-weight: bold;">const</span> <
 </p>
 
 <p>
-回到device_set_realized函数，里面最主要的就是通过dc调用了realize函数了。这又是一个回调，那么这个回调在哪里设置的呢，分析这个问题，又要引出QOM的另一方面了：object的继承。下面分析这个问题。
+回到device_set_realized函数，里面最主要的就是通过dc调用了realize函数（就是x86_cpu_realizefn）了。这又是一个回调，那么这个回调在哪里设置的呢，分析这个问题，又要引出QOM的另一方面了： <b>object的继承</b> 。下面分析这个问题。
 </p>
 
 <p>
 先看几个结构体：
 </p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">x86_cpu_type_info</span> = {
+        name = TYPE_X86_CPU,
+        .parent = TYPE_CPU,
+        .class_init = x86_cpu_common_class_init,
+};
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">cpu_type_info</span> = {
+        .name = TYPE_CPU,
+        .parent = TYPE_DEVICE,
+        .class_init = cpu_class_init,
+};
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">device_type_info</span> = {
+        .name = TYPE_DEVICE,
+        .parent = TYPE_OBJECT,
+        .class_init = device_class_init,
+};
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">object_info</span> = {
+        .name = TYPE_OBJECT,
+        .class_init = object_class_init,
+};
+</pre>
+</div>
+<p>
+观察以上TypeInfo定义，可以很清楚的看到，它们构成了父子继承关系，这就是QOM对各种虚拟计算机对象的一种抽象，在类型的初始化阶段时，会递归调用type_initialize函数，就是如果一个TypeInfo如果有parent，会先对parent这个TypeImpl调用type_initialize，然后到递归的最底层时，会调用class_init（如果有的话）：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">type_initialize</span>(<span style="color: #7CB8BB;">TypeImpl</span> *<span style="color: #DFAF8F;">ti</span>)
+{
+        parent = type_get_parent(ti);
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (parent) {
+                type_initialize(parent);
+        }
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (ti-&gt;class_init) {
+                ti-&gt;class_init(ti-&gt;class, ti-&gt;class_data);
+        }
+}
+</pre>
+</div>
+<p>
+而对于x86_cpu_type_info的class_init来说（x86_cpu_common_class_init），就会调用device_class_set_parent_realize来设置realize回调函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">x86_cpu_common_class_init</span>(<span style="color: #7CB8BB;">ObjectClass</span> *<span style="color: #DFAF8F;">oc</span>, <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">data</span>)
+{
+        <span style="color: #7CB8BB;">X86CPUClass</span> *<span style="color: #DFAF8F;">xcc</span> = X86_CPU_CLASS(oc);
+        <span style="color: #7CB8BB;">DeviceClass</span> *<span style="color: #DFAF8F;">dc</span> = DEVICE_CLASS(oc);
+        device_class_set_parent_realize(dc, x86_cpu_realizefn,
+                                        &amp;xcc-&gt;parent_realize);
+}
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">device_class_set_parent_realize</span>(<span style="color: #7CB8BB;">DeviceClass</span> *<span style="color: #DFAF8F;">dc</span>,
+                                     <span style="color: #7CB8BB;">DeviceRealize</span> <span style="color: #DFAF8F;">dev_realize</span>,
+                                     <span style="color: #7CB8BB;">DeviceRealize</span> *<span style="color: #DFAF8F;">parent_realize</span>)
+{
+        *parent_realize = dc-&gt;realize;
+        dc-&gt;realize = dev_realize;
+}
+</pre>
+</div>
+<p>
+这样设置好以后，在device_set_realized中就可以以dc-&gt;realize这样的方式调用了。至于上面具有继承关系的各个TypeInfo，它们是如何注册的，这点不再赘述，前面已经有多个例子分析到。
+</p>
+
+<p>
+再往后看调用链，来到qemu_init_vcpu，里面有：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">qemu_init_vcpu</span>(<span style="color: #7CB8BB;">CPUState</span> *<span style="color: #DFAF8F;">cpu</span>)
+{
+        cpus_accel-&gt;create_vcpu_thread(cpu);
+}
+</pre>
+</div>
+<p>
+create_vcpu_thread（就是kvm_start_vcpu_thread）是一开始kvm_start_vcpu_thread调用链里的最后一个回调了，对于它笔者不打算详细分析了，因为到这里对于QOM的套路已经驾轻就熟了，这里只是简单列下代码并简单解释下，以验证或加深理解。以后的QEMU+KVM关于QOM的主题分析也不会这么详细了，在那些文档里，涉及到QOM的分析，都会请移步至此。
+</p>
+
+<p>
+关于如何调用起create_vcpu_thread，如下一些代码所示：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;accel_init_interfaces-&gt;accel_init_ops_interfaces-&gt;cpus_register_accel
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> AccelOpsClass *cpus_accel;
+
+<span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">cpus_register_accel</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">AccelOpsClass</span> *<span style="color: #DFAF8F;">ops</span>)
+{
+        cpus_accel = ops;
+}
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">accel_init_ops_interfaces</span>(<span style="color: #7CB8BB;">AccelClass</span> *<span style="color: #DFAF8F;">ac</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">ac_name</span>;
+        <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">ops_name</span>;
+        <span style="color: #7CB8BB;">ObjectClass</span> *<span style="color: #DFAF8F;">oc</span>;
+        <span style="color: #7CB8BB;">AccelOpsClass</span> *<span style="color: #DFAF8F;">ops</span>;
+        ac_name = object_class_get_name(OBJECT_CLASS(ac));
+        ops_name = g_strdup_printf(<span style="color: #CC9393;">"%s"</span> ACCEL_OPS_SUFFIX, ac_name);
+        oc = module_object_class_by_name(ops_name);
+        ops = ACCEL_OPS_CLASS(oc);
+        cpus_register_accel(ops);
+}
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">machine_run_board_init</span>(<span style="color: #7CB8BB;">MachineState</span> *<span style="color: #DFAF8F;">machine</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">mem_path</span>, <span style="color: #7CB8BB;">Error</span> **<span style="color: #DFAF8F;">errp</span>)
+{
+        accel_init_interfaces(ACCEL_GET_CLASS(machine-&gt;accelerator));
+}
+</pre>
+</div>
+<p>
+可以看到，在machine有了accelerator之后，就可以从里面取出ops交给全局静态变量cpus_accel了。
+</p>
+
+<p>
+但这些还不涉及到把create_vcpu_thread设置为kvm_start_vcpu_thread。可以想见这是在object_class_foreach_tramp-&gt;type_initialize里调用class_init完成的：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">DECLARE_CLASS_CHECKERS</span>(AccelOpsClass, ACCEL_OPS, TYPE_ACCEL_OPS)
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">kvm_accel_ops_class_init</span>(<span style="color: #7CB8BB;">ObjectClass</span> *<span style="color: #DFAF8F;">oc</span>, <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">data</span>)
+{
+        <span style="color: #7CB8BB;">AccelOpsClass</span> *<span style="color: #DFAF8F;">ops</span> = ACCEL_OPS_CLASS(oc);
+        ops-&gt;create_vcpu_thread = kvm_start_vcpu_thread;
+}
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">kvm_accel_ops_type</span> = {
+        .name = ACCEL_OPS_NAME(<span style="color: #CC9393;">"kvm"</span>),
+        .parent = TYPE_ACCEL_OPS,
+        .class_init = kvm_accel_ops_class_init,
+        .abstract = <span style="color: #BFEBBF;">true</span>,
+};
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">kvm_accel_ops_register_types</span>(<span style="color: #7CB8BB;">void</span>)
+{
+        type_register_static(&amp;kvm_accel_ops_type);
+}
+<span style="color: #93E0E3;">type_init</span>(kvm_accel_ops_register_types);
+</pre>
+</div>
+<p>
+看到type_init一切就明晰了。
+</p>
 
 <p>
 到目前为止，本文花了很多篇幅去阐述QOM，还较少涉及虚拟化本身，笔者认为这是必要的，从某种角度来说，QOM就代表了QEMU代码的组织，并且弄清楚这种组织或调用关系有可能比虚拟化本身更费劲。但对QOM的清晰，会有助于对QEMU代码的全局把握。当然虚拟化本身后面肯定还会深入的。
 </p>
+
+<p>
+以上着重对QOM进行了介绍， <b>从现在开始，会更多的偏向于虚拟化本身了</b> ，在本节也就是QEMU里对于CPU的创建到底做了哪些事情。
+</p>
+
+<p>
+TODO
+</p>
 </div>
+</div>
+<div id="outline-container-org4144ae9" class="outline-2">
+<h2 id="org4144ae9"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-orgdea1d5f" class="outline-2">
-<h2 id="orgdea1d5f"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+<div id="outline-container-orgca47c36" class="outline-2">
+<h2 id="orgca47c36"><span class="section-number-2">4.</span> VCPU的运行</h2>
 </div>
 
-<div id="outline-container-org6b11279" class="outline-2">
-<h2 id="org6b11279"><span class="section-number-2">4.</span> VCPU的运行</h2>
-</div>
-
-<div id="outline-container-org9da4f2b" class="outline-2">
-<h2 id="org9da4f2b"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org2a65c15" class="outline-2">
+<h2 id="org2a65c15"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-09-08 Fri 17:54</p>
+<p class="date">Created: 2023-09-12 Tue 11:11</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

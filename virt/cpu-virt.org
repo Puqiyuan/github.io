@@ -5,6 +5,8 @@
 #+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
 本文主要分析下KVM/QEMU对CPU的虚拟化。KVM/QEMU还完成了许多的功能，比如内存虚拟化，中断虚拟化等，但这些功能不是本文的主题。
 
+本文的硬件平台是AMD Ryzen 7 4800U。
+
 本文分五个方面来分析CPU的虚拟化，依次展开。
 
 * 虚拟机的创建
@@ -196,16 +198,27 @@ static void __attribute__((constructor)) do_qemu_init_ ## function(void)    \
 
 总之到目前，总算是有了一台虚拟机，对比真实硬件机器来说，可以理解为主板以及上面的插槽这些都做好了，就等后面插上CPU（创建VCPU），插上需要的外设等。
 * QEMU CPU创建
-TODO
-
-而kvm_start_vcpu_thread被如下调用链调用：
-: main->qemu_init->qmp_x_exit_preconfig->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set->
+QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代
+表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
+: main->qemu_init->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set->
 : property_set_bool->device_set_realized->x86_cpu_realizefn->qemu_init_vcpu->kvm_start_vcpu_thread
-以上其实就是主板的初始化流程，就这个调用链而言，最后关心的是CPU具现化。以下分析这个调用链
+以上其实就是主板的初始化流程，就这个调用链而言，最后的函数才关心的是CPU具现化。以下分析这个调用链本身是怎么被调用起来的，分析这点更多的是涉及到QOM，也就是QEMU代码的组织，而关于在QEMU代码里VCPU创建本身在本节偏后部分会介绍到。
 
+首先看machine_run_board_init是如何调用起pc_init1的，在machine_run_board_init函数里：
+#+begin_src c
+  void machine_run_board_init(MachineState *machine, const char *mem_path, Error **errp)
+  {
+          MachineClass *machine_class = MACHINE_GET_CLASS(machine);
+          machine_class->init(machine);
+  }
+#+end_src
+这里init函数在我的硬件平台就是pc_init1。这个回调是怎么设置的呢？
 
+QEMU里x86平台的虚拟主板分为两类，一是i440fx，二是q35。i440fx是一个用于模拟Intel 440fx芯片组的虚拟平台。Intel i440fx芯片组是20世纪90年代早期的一个常见的PC主板芯片组，用于支持Intel的Pentium和Pentium Pro处理器。在虚拟化环境中，i440fx主板模拟了这个旧型号的主板，以便运行旧的操作系统或应用程序，或者为测试和开发目的。而q35模拟了更现代的主板和硬件特性，以便更好地支持现代操作系统和应用程序。
 
-在object_property_set里有个set回调，它主要是看一个对象（这里是CPU）是否具有realized属性，
+不论是i440fx还是q35，都是通过DEFINE_PC_MACHINE宏来注册一个具体的pc machine实例。而DEFINE_PC_MACHINE里就会设置好init函数，init本身是pc_init_##suffix，但这个函数里面会调用pc_init1。对于i440fx来说，就是DEFINE_I440FX_MACHINE里调用DEFINE_PC_MACHINE。
+
+继续往后看object_property_set函数，在object_property_set里有个set回调，它主要是看一个对象（这里是CPU）是否具有realized属性，
 若有的话， *那么object_property_set里怎么就能按如下方式调用set函数呢？*
 #+begin_src c
   bool object_property_set(Object *obj, const char *name, Visitor *v,
@@ -338,12 +351,139 @@ OBJECT_DECLARE_TYPE(DeviceState, DeviceClass, DEVICE)
 #+end_src
 可以看到，OBJ_NAME被替换为OBJECT_DECLARE_TYPE宏的第三个参数为DEVICE，这样就有了device_set_realized函数里可以用DEVICE_GET_CLASS了。再往下跟OBJECT_GET_CLASS->object_get_class的话会知道，最后实际获取的就是obj->class，这里就不再贴代码了。
 
-回到device_set_realized函数，里面最主要的就是通过dc调用了realize函数了。这又是一个回调，那么这个回调在哪里设置的呢，分析这个问题，又要引出QOM的另一方面了：object的继承。下面分析这个问题。
+回到device_set_realized函数，里面最主要的就是通过dc调用了realize函数（就是x86_cpu_realizefn）了。这又是一个回调，那么这个回调在哪里设置的呢，分析这个问题，又要引出QOM的另一方面了： *object的继承* 。下面分析这个问题。
 
 先看几个结构体：
+#+begin_src c
+  static const TypeInfo x86_cpu_type_info = {
+          name = TYPE_X86_CPU,
+          .parent = TYPE_CPU,
+          .class_init = x86_cpu_common_class_init,
+  };
+#+end_src
+#+begin_src c
+  static const TypeInfo cpu_type_info = {
+          .name = TYPE_CPU,
+          .parent = TYPE_DEVICE,
+          .class_init = cpu_class_init,
+  };
+#+end_src
+#+begin_src c
+  static const TypeInfo device_type_info = {
+          .name = TYPE_DEVICE,
+          .parent = TYPE_OBJECT,
+          .class_init = device_class_init,
+  };
+#+end_src
+#+begin_src c
+  static const TypeInfo object_info = {
+          .name = TYPE_OBJECT,
+          .class_init = object_class_init,
+  };
+#+end_src
+观察以上TypeInfo定义，可以很清楚的看到，它们构成了父子继承关系，这就是QOM对各种虚拟计算机对象的一种抽象，在类型的初始化阶段时，会递归调用type_initialize函数，就是如果一个TypeInfo如果有parent，会先对parent这个TypeImpl调用type_initialize，然后到递归的最底层时，会调用class_init（如果有的话）：
+#+begin_src c
+  static void type_initialize(TypeImpl *ti)
+  {
+          parent = type_get_parent(ti);
+          if (parent) {
+                  type_initialize(parent);
+          }
+          if (ti->class_init) {
+                  ti->class_init(ti->class, ti->class_data);
+          }
+  }
+#+end_src
+而对于x86_cpu_type_info的class_init来说（x86_cpu_common_class_init），就会调用device_class_set_parent_realize来设置realize回调函数：
+#+begin_src c
+  static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
+  {
+          X86CPUClass *xcc = X86_CPU_CLASS(oc);
+          DeviceClass *dc = DEVICE_CLASS(oc);
+          device_class_set_parent_realize(dc, x86_cpu_realizefn,
+                                          &xcc->parent_realize);
+  }
+#+end_src
+#+begin_src c
+  void device_class_set_parent_realize(DeviceClass *dc,
+                                       DeviceRealize dev_realize,
+                                       DeviceRealize *parent_realize)
+  {
+          *parent_realize = dc->realize;
+          dc->realize = dev_realize;
+  }
+#+end_src
+这样设置好以后，在device_set_realized中就可以以dc->realize这样的方式调用了。至于上面具有继承关系的各个TypeInfo，它们是如何注册的，这点不再赘述，前面已经有多个例子分析到。
+
+再往后看调用链，来到qemu_init_vcpu，里面有：
+#+begin_src c
+  void qemu_init_vcpu(CPUState *cpu)
+  {
+          cpus_accel->create_vcpu_thread(cpu);
+  }
+#+end_src
+create_vcpu_thread（就是kvm_start_vcpu_thread）是一开始kvm_start_vcpu_thread调用链里的最后一个回调了，对于它笔者不打算详细分析了，因为到这里对于QOM的套路已经驾轻就熟了，这里只是简单列下代码并简单解释下，以验证或加深理解。以后的QEMU+KVM关于QOM的主题分析也不会这么详细了，在那些文档里，涉及到QOM的分析，都会请移步至此。
+
+关于如何调用起create_vcpu_thread，如下一些代码所示：
+#+begin_src c
+main->qemu_init->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->accel_init_interfaces->accel_init_ops_interfaces->cpus_register_accel
+
+static const AccelOpsClass *cpus_accel;
+
+void cpus_register_accel(const AccelOpsClass *ops)
+{
+        cpus_accel = ops;
+}
+#+end_src
+#+begin_src c
+  void accel_init_ops_interfaces(AccelClass *ac)
+  {
+          const char *ac_name;
+          char *ops_name;
+          ObjectClass *oc;
+          AccelOpsClass *ops;
+          ac_name = object_class_get_name(OBJECT_CLASS(ac));
+          ops_name = g_strdup_printf("%s" ACCEL_OPS_SUFFIX, ac_name);
+          oc = module_object_class_by_name(ops_name);
+          ops = ACCEL_OPS_CLASS(oc);
+          cpus_register_accel(ops);
+  }
+#+end_src
+#+begin_src c
+  void machine_run_board_init(MachineState *machine, const char *mem_path, Error **errp)
+  {
+          accel_init_interfaces(ACCEL_GET_CLASS(machine->accelerator));
+  }
+#+end_src
+可以看到，在machine有了accelerator之后，就可以从里面取出ops交给全局静态变量cpus_accel了。
+
+但这些还不涉及到把create_vcpu_thread设置为kvm_start_vcpu_thread。可以想见这是在object_class_foreach_tramp->type_initialize里调用class_init完成的：
+#+begin_src c
+  DECLARE_CLASS_CHECKERS(AccelOpsClass, ACCEL_OPS, TYPE_ACCEL_OPS)
+  static void kvm_accel_ops_class_init(ObjectClass *oc, void *data)
+  {
+          AccelOpsClass *ops = ACCEL_OPS_CLASS(oc);
+          ops->create_vcpu_thread = kvm_start_vcpu_thread;
+  }
+  static const TypeInfo kvm_accel_ops_type = {
+          .name = ACCEL_OPS_NAME("kvm"),
+          .parent = TYPE_ACCEL_OPS,
+          .class_init = kvm_accel_ops_class_init,
+          .abstract = true,
+  };
+  static void kvm_accel_ops_register_types(void)
+  {
+          type_register_static(&kvm_accel_ops_type);
+  }
+  type_init(kvm_accel_ops_register_types);
+#+end_src
+看到type_init一切就明晰了。
 
 到目前为止，本文花了很多篇幅去阐述QOM，还较少涉及虚拟化本身，笔者认为这是必要的，从某种角度来说，QOM就代表了QEMU代码的组织，并且弄清楚这种组织或调用关系有可能比虚拟化本身更费劲。但对QOM的清晰，会有助于对QEMU代码的全局把握。当然虚拟化本身后面肯定还会深入的。
 
+以上着重对QOM进行了介绍， *从现在开始，会更多的偏向于虚拟化本身了* ，在本节也就是QEMU里对于CPU的创建到底做了哪些事情。
+
+TODO
 * KVM CPU创建
 
 * VCPU的运行
