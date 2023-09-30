@@ -5,3 +5,4 @@
 5，以prepare_namespace->mount_root->mount_block_root为链
 分析挂载及启动流程．
 6，e820.c，x86架构下的e820表．
+7，以memblock为例，使用do_early_param配置启动参数．
