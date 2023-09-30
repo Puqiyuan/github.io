@@ -4,3 +4,4 @@
 4，关于init section这个section到底什么样子，有哪些函数．
 5，以prepare_namespace->mount_root->mount_block_root为链
 分析挂载及启动流程．
+6，e820.c，x86架构下的e820表．

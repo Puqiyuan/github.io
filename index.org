@@ -12,6 +12,8 @@
 有任何想法请联系作者Cauchy(Qiyuan Pu)：pqy7172@gmail.com。
 #+END_CENTER
 * net
-- [[./kernel/net/ipfrag_high_thresh.html][ipfrag_high_thresh参数作用]]。
+- [[./kernel/net/ipfrag_high_thresh.html][ipfrag_high_thresh参数作用]].
 * virt
-- [[./virt/cpu-virt.html][CPU计算虚拟化：kvm与qemu]]。
+- [[./virt/cpu-virt.html][CPU计算虚拟化：kvm与qemu]].
+* mm
+- [[./kernel/mm/memblock/memblock.html][memblock代码分析]].
