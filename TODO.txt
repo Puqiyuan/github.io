@@ -6,3 +6,4 @@
 分析挂载及启动流程．
 6，e820.c，x86架构下的e820表．
 7，以memblock为例，使用do_early_param配置启动参数．
+8，x86 kaslr.c实现机制．
