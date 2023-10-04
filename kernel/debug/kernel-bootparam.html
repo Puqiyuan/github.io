@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2023-10-04 Wed 21:56 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>内核启动参数之memblock</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<script type="text/javascript">
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+<!--/*--><![CDATA[/*><!--*/
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">内核启动参数之memblock</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgb101e94">1. 设置memblock调试选项</a></li>
+<li><a href="#org598340f">2. 解析memblock调试选项</a></li>
+</ul>
+</div>
+</div>
+<p>
+内核启动时可以传递参数，比如修改grub.cfg里配置，而在系统启动之后/proc/cmdline里可以看到启动参数．某些模块提供了通过启动参数来开启debug打印的功能，比如memblock，本文主要分析下memblock=debug这个启动参数的设置及使用过程．
+</p>
+
+<p>
+在memblock.c的代码中，很多地方都会调用memblock_dbg来输出memblock模块的debug打印信息．memblock_dbg代码是否打印输出，主要是看int类型的memblock_debug量是否设置．memblock_dbg代码如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">memblock_dbg</span>(<span style="color: #DFAF8F;">fmt</span>, ...)                                          \
+        <span style="color: #F0DFAF; font-weight: bold;">do</span> {                                                            \
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (memblock_debug)                                     \
+                        pr_info(fmt, ##__VA_ARGS__);                    \
+        } <span style="color: #F0DFAF; font-weight: bold;">while</span> (0)
+</pre>
+</div>
+
+<div id="outline-container-orgb101e94" class="outline-2">
+<h2 id="orgb101e94"><span class="section-number-2">1.</span> 设置memblock调试选项</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+Linux内核有一个obs_kernel_param结构体用于记录内核启动参数的一些信息，当然obs打头的结构体是废弃不应该使用的，更新的代码应该使用kernel_param结构体．但是memblock调试信息的开启依然使用的是obs_kernel_param结构体，原理流程上二者都是类似的．所以本文依旧以obs_kernel_param为例．
+obs_kernel_param的定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">obs_kernel_param</span> {
+        <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">str</span>;
+        <span style="color: #7CB8BB;">int</span> (*<span style="color: #93E0E3;">setup_func</span>)(<span style="color: #7CB8BB;">char</span> *);
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">early</span>;
+}
+</pre>
+</div>
+<p>
+其中str表示选项，比如memblock串，而setup_func对应这个选项的处理函数．对于memblock的注册使用的是一个名为early_param的宏：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">early_param(<span style="color: #CC9393;">"memblock"</span>, early_memblock);
+</pre>
+</div>
+<p>
+early_param的定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">early_param</span>(<span style="color: #DFAF8F;">str</span>, <span style="color: #DFAF8F;">fn</span>)                                            \
+        __setup_param(str, fn, fn, 1)
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">__setup_param</span>(<span style="color: #DFAF8F;">str</span>, <span style="color: #DFAF8F;">unique_id</span>, <span style="color: #DFAF8F;">fn</span>, <span style="color: #DFAF8F;">early</span>)                        \
+        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">__setup_str_</span>##unique_id[] __initconst         \
+                __aligned(1) = str;                                     \
+        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">obs_kernel_param</span> <span style="color: #DFAF8F;">__setup_</span>##unique_id              \
+                __used __section(<span style="color: #CC9393;">".init.setup"</span>)                         \
+                __aligned(__alignof__(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">obs_kernel_param</span>))         \
+                = { __setup_str_##unique_id, fn, early }
+</pre>
+</div>
+<p>
+从这里可以比较清楚的看到，__setup_param宏里会定义一个obs_kernel_param类型的变量：__setup_##unique_id．对于memblock来说这里的unique_id就是处理函数的名字：early_memblock．这个量会被放到.init.setup节里，设置obs_kernel_param里三个成员．这样就算注册好了一个启动参数．
+</p>
+</div>
+</div>
+<div id="outline-container-org598340f" class="outline-2">
+<h2 id="org598340f"><span class="section-number-2">2.</span> 解析memblock调试选项</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+在arch/x86/kernel/vmlinux.lds文件中定义了两个符号__setup_start和__setup_end．这样在include/linux/init.h里就可以引用并使用这两个符号了．
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">extern</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">obs_kernel_param</span> <span style="color: #DFAF8F;">__setup_start</span>[], <span style="color: #DFAF8F;">__setup_end</span>[];
+</pre>
+</div>
+<p>
+对于x86来说通过以下调用链，会解析到memblock选项．
+</p>
+<pre class="example">
+start_kernel-&gt;setup_arch-&gt;parse_early_param-&gt;parse_early_options-&gt;parse_args-&gt;do_early_param
+</pre>
+
+<p>
+在parse_early_param函数中，拷贝了grub传入的启动命令参数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #DFAF8F;">__init</span> parse_early_param(<span style="color: #7CB8BB;">void</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">done</span> __initdata;
+        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">char</span> <span style="color: #DFAF8F;">tmp_cmdline</span>[COMMAND_LINE_SIZE] __initdata;
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (done)
+                <span style="color: #F0DFAF; font-weight: bold;">return</span>;
+
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">All fall through to do_early_param.</span><span style="color: #5F7F5F;"> */</span>
+        strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+        parse_early_options(tmp_cmdline);
+        done = 1;
+}
+</pre>
+</div>
+<p>
+可以看到传入给parse_early_options的tmp_cmdline来自boot_command_line，这个串里面就是内核的启动参数，而对于x86来说boot_command_line是通过copy_bootdata函数设置，这个初始化流程是另外一个主题了，会在另外的文章分析．现在就假设已经拿到了启动参数．
+</p>
+
+<p>
+parse_early_options中会调用parse_args解析启动参数，因为参数可能会以key=value这样的键值对出现多对，所以parse_args中会一个一个的解析出来并调用回调函数do_early_param去处理，以下是parse_early_options的代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #DFAF8F;">__init</span> parse_early_options(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">cmdline</span>)
+{
+        parse_args(<span style="color: #CC9393;">"early options"</span>, cmdline, <span style="color: #BFEBBF;">NULL</span>, 0, 0, 0, <span style="color: #BFEBBF;">NULL</span>,
+                   do_early_param);
+}
+</pre>
+</div>
+<p>
+至于parse_args里面解析命令行参数的细节就暂时不分析了，里面不过是一些字符串格式解析代码．下面直接看do_early_param函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__init</span> do_early_param(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">param</span>, <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">val</span>,
+                                 <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">unused</span>, <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">arg</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">obs_kernel_param</span> *<span style="color: #DFAF8F;">p</span>;
+
+        <span style="color: #F0DFAF; font-weight: bold;">for</span> (p = __setup_start; p &lt; __setup_end; p++) {
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> ((p-&gt;early &amp;&amp; parameq(param, p-&gt;str)) ||
+                    (strcmp(param, <span style="color: #CC9393;">"console"</span>) == 0 &amp;&amp;
+                     strcmp(p-&gt;str, <span style="color: #CC9393;">"earlycon"</span>) == 0)
+                ) {
+                        <span style="color: #F0DFAF; font-weight: bold;">if</span> (p-&gt;setup_func(val) != 0)
+                                pr_warn(<span style="color: #CC9393;">"Malformed early option '%s'\n"</span>, param);
+                }
+        }
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">We accept everything at this stage.</span><span style="color: #5F7F5F;"> */</span>
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+<p>
+这里就看得比较清楚了，从__setup_start开始到__setup_end都是存的obs_kernel_param的启动参数结构体．对于从命令行解析出来的一个param=val这样的值对，需要检查其是否在__setup_start到__setup_end之间的obs_kernel_param命中，其检查标准就是obs_kernel_param里存放的str是否和当期解析出来的param字符串选项相等．如果相等，并且设置了early成员，就调用obs_kernel_param里的回调函数setup_func，并且setup_func的参数就是解析出来的param=val后面的值val．对于memblock选项来说，可以是debug，这样在memblock选项的setup_func函数early_memblock中就可以有这样的逻辑：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__init</span> early_memblock(<span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">p</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (p &amp;&amp; strstr(p, <span style="color: #CC9393;">"debug"</span>))
+                memblock_debug = 1;
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+<p>
+就是当param=val中的val为debug就可以设置memblock_debug量，这样memblock_dbg就可以输出信息了．
+</p>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2023-10-04 Wed 21:56</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

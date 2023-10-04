@@ -1,0 +1,108 @@
+#+TITLE: 内核启动参数之memblock
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+内核启动时可以传递参数，比如修改grub.cfg里配置，而在系统启动之后/proc/cmdline里可以看到启动参数．某些模块提供了通过启动参数来开启debug打印的功能，比如memblock，本文主要分析下memblock=debug这个启动参数的设置及使用过程．
+
+在memblock.c的代码中，很多地方都会调用memblock_dbg来输出memblock模块的debug打印信息．memblock_dbg代码是否打印输出，主要是看int类型的memblock_debug量是否设置．memblock_dbg代码如下：
+#+begin_src c
+#define memblock_dbg(fmt, ...)						\
+	do {								\
+		if (memblock_debug)					\
+			pr_info(fmt, ##__VA_ARGS__);			\
+	} while (0)
+#+end_src
+
+* 设置memblock调试选项
+Linux内核有一个obs_kernel_param结构体用于记录内核启动参数的一些信息，当然obs打头的结构体是废弃不应该使用的，更新的代码应该使用kernel_param结构体．但是memblock调试信息的开启依然使用的是obs_kernel_param结构体，原理流程上二者都是类似的．所以本文依旧以obs_kernel_param为例．
+obs_kernel_param的定义如下：
+#+begin_src c
+struct obs_kernel_param {
+	const char *str;
+	int (*setup_func)(char *);
+	int early;
+}
+#+end_src
+其中str表示选项，比如memblock串，而setup_func对应这个选项的处理函数．对于memblock的注册使用的是一个名为early_param的宏：
+#+begin_src c
+early_param("memblock", early_memblock);
+#+end_src
+early_param的定义如下：
+#+begin_src c
+#define early_param(str, fn)						\
+	__setup_param(str, fn, fn, 1)
+#+end_src
+#+begin_src c
+#define __setup_param(str, unique_id, fn, early)			\
+	static const char __setup_str_##unique_id[] __initconst		\
+		__aligned(1) = str; 					\
+	static struct obs_kernel_param __setup_##unique_id		\
+		__used __section(".init.setup")				\
+		__aligned(__alignof__(struct obs_kernel_param))		\
+		= { __setup_str_##unique_id, fn, early }
+#+end_src
+从这里可以比较清楚的看到，__setup_param宏里会定义一个obs_kernel_param类型的变量：__setup_##unique_id．对于memblock来说这里的unique_id就是处理函数的名字：early_memblock．这个量会被放到.init.setup节里，设置obs_kernel_param里三个成员．这样就算注册好了一个启动参数．
+* 解析memblock调试选项
+在arch/x86/kernel/vmlinux.lds文件中定义了两个符号__setup_start和__setup_end．这样在include/linux/init.h里就可以引用并使用这两个符号了．
+#+begin_src c
+extern const struct obs_kernel_param __setup_start[], __setup_end[];
+#+end_src
+对于x86来说通过以下调用链，会解析到memblock选项．
+: start_kernel->setup_arch->parse_early_param->parse_early_options->parse_args->do_early_param
+在parse_early_param函数中，拷贝了grub传入的启动命令参数：
+#+begin_src c
+void __init parse_early_param(void)
+{
+	static int done __initdata;
+	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
+
+	if (done)
+		return;
+
+	/* All fall through to do_early_param. */
+	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+	parse_early_options(tmp_cmdline);
+	done = 1;
+}
+#+end_src
+可以看到传入给parse_early_options的tmp_cmdline来自boot_command_line，这个串里面就是内核的启动参数，而对于x86来说boot_command_line是通过copy_bootdata函数设置，这个初始化流程是另外一个主题了，会在另外的文章分析．现在就假设已经拿到了启动参数．
+
+parse_early_options中会调用parse_args解析启动参数，因为参数可能会以key=value这样的键值对出现多对，所以parse_args中会一个一个的解析出来并调用回调函数do_early_param去处理，以下是parse_early_options的代码：
+#+begin_src c
+void __init parse_early_options(char *cmdline)
+{
+	parse_args("early options", cmdline, NULL, 0, 0, 0, NULL,
+		   do_early_param);
+}
+#+end_src
+至于parse_args里面解析命令行参数的细节就暂时不分析了，里面不过是一些字符串格式解析代码．下面直接看do_early_param函数：
+#+begin_src c
+static int __init do_early_param(char *param, char *val,
+				 const char *unused, void *arg)
+{
+	const struct obs_kernel_param *p;
+
+	for (p = __setup_start; p < __setup_end; p++) {
+		if ((p->early && parameq(param, p->str)) ||
+		    (strcmp(param, "console") == 0 &&
+		     strcmp(p->str, "earlycon") == 0)
+		) {
+			if (p->setup_func(val) != 0)
+				pr_warn("Malformed early option '%s'\n", param);
+		}
+	}
+	/* We accept everything at this stage. */
+	return 0;
+}
+#+end_src
+这里就看得比较清楚了，从__setup_start开始到__setup_end都是存的obs_kernel_param的启动参数结构体．对于从命令行解析出来的一个param=val这样的值对，需要检查其是否在__setup_start到__setup_end之间的obs_kernel_param命中，其检查标准就是obs_kernel_param里存放的str是否和当期解析出来的param字符串选项相等．如果相等，并且设置了early成员，就调用obs_kernel_param里的回调函数setup_func，并且setup_func的参数就是解析出来的param=val后面的值val．对于memblock选项来说，可以是debug，这样在memblock选项的setup_func函数early_memblock中就可以有这样的逻辑：
+#+begin_src c
+static int __init early_memblock(char *p)
+{
+	if (p && strstr(p, "debug"))
+		memblock_debug = 1;
+	return 0;
+}
+#+end_src
+就是当param=val中的val为debug就可以设置memblock_debug量，这样memblock_dbg就可以输出信息了．

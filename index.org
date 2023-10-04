@@ -17,3 +17,5 @@
 - [[./virt/cpu-virt.html][CPU计算虚拟化：kvm与qemu]].
 * mm
 - [[./kernel/mm/memblock/memblock.html][memblock代码分析]].
+* debug
+- [[./kernel/debug/kernel-bootparam.html][内核启动参数之memblock]].
