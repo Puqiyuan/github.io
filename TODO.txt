@@ -10,3 +10,4 @@
 9，arch/x86/kernel/head64.c里的copy_bootdata函数通过
 memcpy函数来设置boot_command_line，那么这个初始化设
 置的流程，设置了哪些，怎么传入的．
+10，pxe启动的实验以及内核的代码流程，包括挂载根文件系统
