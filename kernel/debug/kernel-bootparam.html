@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-10-04 Wed 21:56 -->
+<!-- 2023-10-08 Sun 21:20 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>内核启动参数之memblock</title>
@@ -38,8 +38,8 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb101e94">1. 设置memblock调试选项</a></li>
-<li><a href="#org598340f">2. 解析memblock调试选项</a></li>
+<li><a href="#orgacd6b5c">1. 设置memblock调试选项</a></li>
+<li><a href="#orgc6b240d">2. 解析memblock调试选项</a></li>
 </ul>
 </div>
 </div>
@@ -59,8 +59,31 @@
 </pre>
 </div>
 
-<div id="outline-container-orgb101e94" class="outline-2">
-<h2 id="orgb101e94"><span class="section-number-2">1.</span> 设置memblock调试选项</h2>
+<p>
+而使用memblock_dbg的地方，比如memblock_add函数在向memblock.memory添加memblock_region时，这样使用memblock_dbg输出调试信息：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">memblock_dbg(<span style="color: #CC9393;">"%s: [%pa-%pa] %pS\n"</span>, __func__,
+             &amp;base, &amp;end, (<span style="color: #7CB8BB;">void</span> *)_RET_IP_);
+</pre>
+</div>
+<p>
+<b>注意这里有个重要的调试技巧，_RET_IP可以返回当前函数的父函数．</b>
+</p>
+
+<p>
+查看_RET_IP的定义知道：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">_RET_IP_</span>                (<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>)__builtin_return_address(0)
+</pre>
+</div>
+<p>
+这里可以看到参数0可以返回直接父函数的地址，而可以传其它级别就是更高级别的父函数了．
+</p>
+
+<div id="outline-container-orgacd6b5c" class="outline-2">
+<h2 id="orgacd6b5c"><span class="section-number-2">1.</span> 设置memblock调试选项</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 Linux内核有一个obs_kernel_param结构体用于记录内核启动参数的一些信息，当然obs打头的结构体是废弃不应该使用的，更新的代码应该使用kernel_param结构体．但是memblock调试信息的开启依然使用的是obs_kernel_param结构体，原理流程上二者都是类似的．所以本文依旧以obs_kernel_param为例．
@@ -104,8 +127,8 @@ early_param的定义如下：
 </p>
 </div>
 </div>
-<div id="outline-container-org598340f" class="outline-2">
-<h2 id="org598340f"><span class="section-number-2">2.</span> 解析memblock调试选项</h2>
+<div id="outline-container-orgc6b240d" class="outline-2">
+<h2 id="orgc6b240d"><span class="section-number-2">2.</span> 解析memblock调试选项</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 在arch/x86/kernel/vmlinux.lds文件中定义了两个符号__setup_start和__setup_end．这样在include/linux/init.h里就可以引用并使用这两个符号了．
@@ -198,7 +221,7 @@ parse_early_options中会调用parse_args解析启动参数，因为参数可能
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-10-04 Wed 21:56</p>
+<p class="date">Created: 2023-10-08 Sun 21:20</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

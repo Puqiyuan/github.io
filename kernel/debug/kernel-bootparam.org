@@ -14,6 +14,19 @@
 	} while (0)
 #+end_src
 
+而使用memblock_dbg的地方，比如memblock_add函数在向memblock.memory添加memblock_region时，这样使用memblock_dbg输出调试信息：
+#+begin_src c
+  memblock_dbg("%s: [%pa-%pa] %pS\n", __func__,
+               &base, &end, (void *)_RET_IP_);
+#+end_src
+*注意这里有个重要的调试技巧，_RET_IP可以返回当前函数的父函数．*
+
+查看_RET_IP的定义知道：
+#+begin_src c
+#define _RET_IP_                (unsigned long)__builtin_return_address(0)
+#+end_src
+这里可以看到参数0可以返回直接父函数的地址，而可以传其它级别就是更高级别的父函数了．
+
 * 设置memblock调试选项
 Linux内核有一个obs_kernel_param结构体用于记录内核启动参数的一些信息，当然obs打头的结构体是废弃不应该使用的，更新的代码应该使用kernel_param结构体．但是memblock调试信息的开启依然使用的是obs_kernel_param结构体，原理流程上二者都是类似的．所以本文依旧以obs_kernel_param为例．
 obs_kernel_param的定义如下：
