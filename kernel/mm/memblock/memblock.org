@@ -3,3 +3,393 @@
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+在伙伴系统还未就绪前，通过memblock提供一个简单的内存分配功能，本文的分析对象就是memblock．
+
+* 结构体介绍
+先引入几个结构体，这些结构体是由上到下的关系．
+
+首先是memblock_type：
+#+begin_src c
+struct memblock {
+	bool bottom_up;  /* is bottom up direction? */
+	phys_addr_t current_limit;
+	struct memblock_type memory;
+	struct memblock_type reserved;
+};
+#+end_src
+bottom_up控制着分配方向，地址是从小到大，还是从大到小．current_limit控制着可以分配的最大地址．而memblock_type是下一级结构体：
+#+begin_src c
+struct memblock_type {
+	unsigned long cnt;
+	unsigned long max;
+	phys_addr_t total_size;
+	struct memblock_region *regions;
+	char *name;
+};
+#+end_src
+各成员解释如下：
++ cnt：针对regions数组，当前里面有多少个memblock_region．
++ max：针对regions数组，其最大的容量．
++ total_size：对于regions里的所有memblock_region，其size的和大小．
++ name：memblock_tye的字符串名字，比如memory或者reserved．
+
+最后一层的结构体就是memblock_region：
+#+begin_src c
+struct memblock_region {
+	phys_addr_t base;
+	phys_addr_t size;
+	enum memblock_flags flags;
+#ifdef CONFIG_NUMA
+	int nid;
+#endif
+};
+#+end_src
+各成员意义如下：
++ base：该region所管理地址范围的起始地址．
++ size：该region所管理地址范围的大小．
++ flags：该region的属性，比如没有特别属性，热插拔等．
++ nid：该region的内存所属哪个NUMA结点．
+
+在memblock.c文件中，全局的定义了memblock类型的实例，其也叫memblock：
+#+begin_src c
+struct memblock memblock __initdata_memblock = {
+	.memory.regions		= memblock_memory_init_regions,
+	.memory.cnt		= 1,	/* empty dummy entry */
+	.memory.max		= INIT_MEMBLOCK_MEMORY_REGIONS,
+	.memory.name		= "memory",
+
+	.reserved.regions	= memblock_reserved_init_regions,
+	.reserved.cnt		= 1,	/* empty dummy entry */
+	.reserved.max		= INIT_MEMBLOCK_RESERVED_REGIONS,
+	.reserved.name		= "reserved",
+
+	.bottom_up		= false,
+	.current_limit		= MEMBLOCK_ALLOC_ANYWHERE,
+};
+#+end_src
+可以看到，memory和reserved里的regions分别为memblock_memory_init_regions和memblock_reserved_init_regions，这两个数组是提前定义好的：
+#+begin_src c
+static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_MEMORY_REGIONS] __initdata_memblock;
+static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_RESERVED_REGIONS] __initdata_memblock;
+#+end_src
+而INIT_MEMBLOCK_MEMORY_REGIONS和INIT_MEMBLOCK_RESERVED_REGIONS的大小都为128．
+__initdata_memblock修饰符号根据是否定义了CONFIG_ARCH_KEEP_MEMBLOCK，来决定是否将这些数据结构放入.meminit.data节中，从而在memblock将控制权转交给伙伴系统后释放这些结构体．
+
+后续的添加region和分配内存主要就是操作regions．
+* 添加region
+以memblock_add函数为例，来分析一个region添加到memblock.memory.regions的过程：
+#+begin_src c
+int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
+{
+	phys_addr_t end = base + size - 1;
+
+	memblock_dbg("%s: [%pa-%pa] %pS\n", __func__,
+		     &base, &end, (void *)_RET_IP_);
+
+	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
+}
+#+end_src
+这个函数比较简单，就是计算了end位置在哪，然后根据配置，memblock_dbg会决定是否打印调试信息，关于这点在[[../../debug/kernel-bootparam.html][这篇文章]]有详细介绍．随后以&memblock.memory参数调用了memblock_add_range函数，就是说这段region要添加到memory这个memblock_type的regions中去，下面继续分析memblock_add_range，以下分几种情况来说明添加过程：
+1. regions数组为空：
+   
+   这种情况没有什么特别的处理，直接往regions里的第一个成员赋值就行：
+   #+begin_src c
+     static int __init_memblock memblock_add_range(struct memblock_type *type,
+                                                   phys_addr_t base, phys_addr_t size,
+                                                   int nid, enum memblock_flags flags)
+     {
+             bool insert = false;
+             phys_addr_t obase = base;
+             phys_addr_t end = base + memblock_cap_size(base, &size);
+             int idx, nr_new, start_rgn = -1, end_rgn;
+             struct memblock_region *rgn;
+     
+             if (!size)
+                     return 0;
+     
+             /* special case for empty array */
+             if (type->regions[0].size == 0) {
+                     WARN_ON(type->cnt != 1 || type->total_size);
+                     type->regions[0].base = base;
+                     type->regions[0].size = size;
+                     type->regions[0].flags = flags;
+                     memblock_set_region_node(&type->regions[0], nid);
+                     type->total_size = size;
+                     return 0;
+             }
+     }
+   #+end_src
+ 可以看到，判断regions的第一个region的size为0，就代表还没有任何region被添加到regions里，这时直接添加就行．用0可以判断是因为前面定义memblock_region时都是static类型的．
+
+2. 该类情况就是regions里先前已经有region了，这下面又分为三类，分别分析．首先按下图将这三种情况区分出来：
+   : base      end   base      end         base      end
+   :  |--case1--|     |--case2--|           |--case3--|
+   :   ---------       ---------             ---------
+   : -----------------------------------------------------
+   :                     |                |
+   :                   rbase             rend
+   解释下此图的意义，首先base-end之间是一个要插入的region，叫做new-rgn，而rbase-rend是原来regions中的一个region的范围，叫做old-rgn．那么new-rgn和old-rgn如图所示有三种位置关系，case1是new-rgn完全小于old-rgn，也就是rbase >= end．case3是new-rgn完全大于old-rgn，也就是rend <= base．case2就是new-rgn卡在rbase之间．下面分析代码：
+
+   #+begin_src c
+     for_each_memblock_type(idx, type, rgn) {
+             phys_addr_t rbase = rgn->base;
+             phys_addr_t rend = rbase + rgn->size;
+     
+             if (rbase >= end)
+                     break;
+             if (rend <= base)
+                     continue;
+             /*
+              ,* @rgn overlaps.  If it separates the lower part of new
+              ,* area, insert that portion.
+              ,*/
+             if (rbase > base) {
+     #ifdef CONFIG_NUMA
+                     WARN_ON(nid != memblock_get_region_node(rgn));
+     #endif
+                     WARN_ON(flags != rgn->flags);
+                     nr_new++;
+                     if (insert) {
+                             if (start_rgn == -1)
+                                     start_rgn = idx;
+                             end_rgn = idx + 1;
+                             memblock_insert_region(type, idx++, base,
+                                                    rbase - base, nid,
+                                                    flags);
+                     }
+             }
+             /* area below @rend is dealt with, forget about it */
+             base = min(rend, end);
+     }
+     /* insert the remaining portion */
+     if (base < end) {
+             nr_new++;
+             if (insert) {
+                     if (start_rgn == -1)
+                             start_rgn = idx;
+                     end_rgn = idx + 1;
+                     memblock_insert_region(type, idx, base, end - base,
+                                            nid, flags);
+             }
+      }
+   #+end_src
+   对于case1，直接跳出循环了，跳出循环后的代码会调用memblock_insert_region插入region，这里遇到了memblock_insert_region，就先分析下这个函数然后再继续分析剩余的两个case，因为不论哪种case，都是通过memblock_insert_region来真正的插入region．
+   
+   #+begin_src c
+     static void __init_memblock memblock_insert_region(struct memblock_type *type,
+                                                        int idx, phys_addr_t base,
+                                                        phys_addr_t size,
+                                                        int nid,
+                                                        enum memblock_flags flags)
+     {
+             struct memblock_region *rgn = &type->regions[idx];
+     
+             BUG_ON(type->cnt >= type->max);
+             memmove(rgn + 1, rgn, (type->cnt - idx) * sizeof(*rgn));
+             rgn->base = base;
+             rgn->size = size;
+             rgn->flags = flags;
+             memblock_set_region_node(rgn, nid);
+             type->cnt++;
+             type->total_size += size;
+     }
+   #+end_src
+   参数idx就是这个新region要插入的位置，从regions数组里取出这个memblock_region为rgn．首先使用memove将自rgn起始的memblock_region都往后挪一个位置，以给新的要插入的rgn在idx处腾开位置．后面的几条语句就是执行插入动作了，作用都简单明了．
+   
+   回过头来继续分析剩下的两种case，先看case 3，当要插入的region完全大于当前循环遍历的region，也即rend
+   <= base为case 3时，则继续循环遍历下一个rgn，查看for_each_memblock_type的定义知道：
+   #+begin_src c
+     #define for_each_memblock_type(i, memblock_type, rgn)	\
+             for (i = 0, rgn = &memblock_type->regions[0];	\
+                  i < memblock_type->cnt;			\
+                  i++, rgn = &memblock_type->regions[i])
+   #+end_src
+   会更新rgn为下一个，并且idx作为新region的插入位置，也会自增，如果所有已有的region都比新的要插入的region小，那么就意味着在regions数组的末尾插入这个新的region．
+
+   最后就是rbase > base的case 2，这种情况稍微复杂，通过调用memblock_insert_region的参数知道，该情况下，也会新插入一个region，但是它和传进来的base到base+size范围略有不同，而是从base到rbase．而若end在rbase到rend之间的话，那么rbase到end之间的范围就依旧含在当前遍历的old-rgn里，但是还有另外一种情况，那就是end跨过了rend，也就是end >= rend，如下图：
+   :               base                           end
+   :                |------------case2-------------|
+   :                 ------------------------------
+   : -----------------------------------------------------
+   :                     |                |
+   :                   rbase             rend
+   该情况除了base到rbase之间新插入一个region，而在rend到end之间还会诞生一个region，这就是注释insert the remaining portion所表达的情况，只是注意下，这时的base已经在for_each_memblock_type的最后被取为rend和end的最小者．
+
+除了通过memblock_add向memblock.memory添加region，另有一个接口memblock_reserve，会向memblock.reserved添加region，与memblock_add唯一的不同就是其第一个参数是memblock.reserved，后续分配内存以及伙伴系统里都会避开添加到memblock.reserved中的内存范围．
+   
+最后，何时memblock_add会被调用呢？以x86架构为例，在e820__memblock_setup函数中会遍历e820_table，然后逐个对里面的e820_entry调用memblock_add以添加region．关于这部分的细节请参考文档[[../phy-mem.html][物理内存信息获取及初始化]]，里面分x86和arm64分别作了分析．
+* 分配内存
+前面介绍了memblock相关的初始化，主要是添加region，这些region归根结底就是一个内存范围，这些范围划定了起始地址，大小以及哪些范围不能用（memblock.reversed）．本节将介绍使用memblock分配内存的一个主要接口memblock_alloc．
+
+memblock_alloc本身较为简单，就是调用了memblock_alloc_try_nid：
+#+begin_src c
+static __always_inline void *memblock_alloc(phys_addr_t size, phys_addr_t align)
+{
+	return memblock_alloc_try_nid(size, align, MEMBLOCK_LOW_LIMIT,
+				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
+}
+#+end_src
+可以看到提供给用户的接口只有大小和对齐的位置，而memblock_alloc_try_nid本身也很简单，主要是通过memblock_alloc_internal获取起始的地址并且返回这个地址前通过memset将这段空间清零．memblock_alloc_internal自身逻辑也比较简单，一是检查下slab准备好了的话，直接通过kzalloc_node接口获取虚拟地址，如果slab并没有初始化好，就调用memblock_alloc_range_nid获取虚拟地址，也就是通过memblock机制而不是slab的机制，通过memblock_alloc_range_nid获得的地址，还要通过memblock_reserve接口添加到memblock.reserved中，代表该段内存已经分配出去了，后面的分配不能再使用这段内存了，最后通过phys_to_virt转换为虚拟地址并返回．
+
+memblock_alloc_range_nid会调用memblock_find_in_range_node获得一个可用的物理地址，后者函数如下：
+#+begin_src c
+static phys_addr_t __init_memblock memblock_find_in_range_node(phys_addr_t size,
+					phys_addr_t align, phys_addr_t start,
+					phys_addr_t end, int nid,
+					enum memblock_flags flags)
+{
+	/* pump up @end */
+	if (end == MEMBLOCK_ALLOC_ACCESSIBLE ||
+	    end == MEMBLOCK_ALLOC_NOLEAKTRACE)
+		end = memblock.current_limit;
+
+	/* avoid allocating the first page */
+	start = max_t(phys_addr_t, start, PAGE_SIZE);
+	end = max(start, end);
+
+	if (memblock_bottom_up())
+		return __memblock_find_range_bottom_up(start, end, size, align,
+						       nid, flags);
+	else
+		return __memblock_find_range_top_down(start, end, size, align,
+						      nid, flags);
+}
+#+end_src
+就是确定了分配的上限地址end，下限地址start，然后根据增长方向调用不同的函数，以__memblock_find_range_bottom_up为例继续分析：
+#+begin_src c
+static phys_addr_t __init_memblock
+__memblock_find_range_bottom_up(phys_addr_t start, phys_addr_t end,
+				phys_addr_t size, phys_addr_t align, int nid,
+				enum memblock_flags flags)
+{
+	phys_addr_t this_start, this_end, cand;
+	u64 i;
+
+	for_each_free_mem_range(i, nid, flags, &this_start, &this_end, NULL) {
+		this_start = clamp(this_start, start, end);
+		this_end = clamp(this_end, start, end);
+
+		cand = round_up(this_start, align);
+		if (cand < this_end && this_end - cand >= size)
+			return cand;
+	}
+
+	return 0;
+}
+#+end_src
+可以看到，for循环里会确定当前遍历时得到的起始地址this_start和结束地址this_end，并且this_sart和this_end要钳入到start到end之间．最后的起始地址还要通过round_up以参数align对齐得到cand，cand才是真正作为候选的可以返回的物理地址，这个物理地址要小于当前循环的this_end，并且this_end到cand之间有足够大小的size，满足这些条件最后才能返回这个cand．那么for_each_free_mem_range就很关键了：
+#+begin_src c
+  #define for_each_free_mem_range(i, nid, flags, p_start, p_end, p_nid)	\
+          __for_each_mem_range(i, &memblock.memory, &memblock.reserved,	\
+                               nid, flags, p_start, p_end, p_nid)
+#+end_src
+这里的memblock.memory是指要从这里面的region分配内存，并且排除在memblock.reserved里出现的内存范围，p_start是分配出来的起始地址，而p_end是可以用的截至到结束的位置．继续看__for_each_mem_range：
+#+begin_src c
+  #define __for_each_mem_range(i, type_a, type_b, nid, flags,		\
+                               p_start, p_end, p_nid)			\
+          for (i = 0, __next_mem_range(&i, nid, flags, type_a, type_b,	\
+                                       p_start, p_end, p_nid);		\
+               i != (u64)ULLONG_MAX;					\
+               __next_mem_range(&i, nid, flags, type_a, type_b,		\
+                                p_start, p_end, p_nid))
+#+end_src
+从这里可以看到，p_start和p_end随每次调用__next_mem_range而更新，i会一直增大到ULLONG_MAX．那么__next_mem_range又比较关键了：
+#+begin_src c
+void __next_mem_range(u64 *idx, int nid, enum memblock_flags flags,
+		      struct memblock_type *type_a,
+		      struct memblock_type *type_b, phys_addr_t *out_start,
+		      phys_addr_t *out_end, int *out_nid)
+{
+	int idx_a = *idx & 0xffffffff;
+	int idx_b = *idx >> 32;
+
+	if (WARN_ONCE(nid == MAX_NUMNODES,
+	"Usage of MAX_NUMNODES is deprecated. Use NUMA_NO_NODE instead\n"))
+		nid = NUMA_NO_NODE;
+
+	for (; idx_a < type_a->cnt; idx_a++) {
+		struct memblock_region *m = &type_a->regions[idx_a];
+
+		phys_addr_t m_start = m->base;
+		phys_addr_t m_end = m->base + m->size;
+		int	    m_nid = memblock_get_region_node(m);
+
+		if (should_skip_region(type_a, m, nid, flags))
+			continue;
+
+		if (!type_b) {
+			if (out_start)
+				*out_start = m_start;
+			if (out_end)
+				*out_end = m_end;
+			if (out_nid)
+				*out_nid = m_nid;
+			idx_a++;
+			*idx = (u32)idx_a | (u64)idx_b << 32;
+			return;
+		}
+
+		/* scan areas before each reservation */
+		for (; idx_b < type_b->cnt + 1; idx_b++) {
+			struct memblock_region *r;
+			phys_addr_t r_start;
+			phys_addr_t r_end;
+
+			r = &type_b->regions[idx_b];
+			r_start = idx_b ? r[-1].base + r[-1].size : 0;
+			r_end = idx_b < type_b->cnt ?
+				r->base : PHYS_ADDR_MAX;
+
+			/*
+			 * if idx_b advanced past idx_a,
+			 * break out to advance idx_a
+			 */
+			if (r_start >= m_end)
+				break;
+			/* if the two regions intersect, we're done */
+			if (m_start < r_end) {
+				if (out_start)
+					*out_start =
+						max(m_start, r_start);
+				if (out_end)
+					*out_end = min(m_end, r_end);
+				if (out_nid)
+					*out_nid = m_nid;
+				/*
+				 * The region which ends first is
+				 * advanced for the next iteration.
+				 */
+				if (m_end <= r_end)
+					idx_a++;
+				else
+					idx_b++;
+				*idx = (u32)idx_a | (u64)idx_b << 32;
+				return;
+			}
+		}
+	}
+
+	/* signal end of iteration */
+	*idx = ULLONG_MAX;
+}
+#+end_src
+
+分析这段代码，idx是64位的，高32位idx_b用于索引type_b里regions的补集，这个补集和数学上的补集有点不一样，举例说明，假设原始的regions分布如下：
+: 0:[0-16), 1:[32-48), 2:[128-130)
+那么所谓补集就是：
+: 0:[0-0), 1:[16-32), 2:[48-128), 3:[130-MAX)
+
+idx的低32位idx_a用于索引type_a里的regions．
+
+最后，像memblock_phys_alloc这样带phys的接口，返回的是物理地址，而memblock_alloc这样不带phys的接口返回的是虚拟地址，但这点区别微不足道，它们最后都会调用memblock_alloc_range_nid．
+
+函数首先从循环变量i中取出idx_a和idx_b，有了这两个索引就可以去type_a和type_b里取region了，如果没有给出type_b，就是type_b为NULL的话就很简单了，把从type_a里取出的region的base和(base+end)的值放到out_start和out_end输出并返回即可，当然在返回前还得更新idx_a，进行自增，至于返回的out_start和out_end到底合适不能用不，在返回后的逻辑里有体现，这个之前分析过了．这种没有给出type_b的是最简单的情况．
+
+下面分析给出type_b的情况，也就是type_b不为NULL．这意味着从type_a的region里拿到的范围还要在里面排除有type_b里的region的范围．这里的做法是先求type_b里region的补集，然后用这个补集去和type_a里的region进行相交，得出的范围再交给out_start和out_end进行返回．那么如何先求type_b里region的补集呢？这里有个c语言的技巧，某数组元素的指针为r，那么r[-1]就是r前一个元素，但是除开第一个元素不适用这条技巧．利用这个技巧，求解指向type_b里的一个region的指针r，其补集可以写为代码：
+#+begin_src c
+  r_start = idx_b ? r[-1].base + r[-1].size : 0;
+  r_end = idx_b < type_b->cnt ?
+          r->base : PHYS_ADDR_MAX;
+#+end_src
+这样就可以循环遍历type_b里的region了，采用上面的代码对每个region都求出补集，然后求这个补集和type_a里region的交集．求交集就是out_start采用m_start和r_start的较大者，而out_end取m_end和r_end的较小者，就是两个集合都有的部分．最后会更新idx的值，通过比较type_a里region的结束位置m_end和补集的结束位置r_end，看哪个较小，就需要增加一个索引值，最后通过移位和相或组成到idx．当然，如果m_end都小于r_start，也就是二者没有交集，意味着当前来自type_a里的region太小，需要自增idx_a索引去找到下一个来自type_a里的region，以使这个新的region更有可能和补集交上，也就是r_start >= m_end的情况，直接break出循环了．
+* 交接给伙伴系统

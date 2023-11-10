@@ -1,13 +1,31 @@
-1，过去工作中遇到的case相关的内核代码分析要整理放到这里。
-2，mmap syscall的内核代码分析。
-3，物理内存大小的确定．
-4，关于init section这个section到底什么样子，有哪些函数．
-5，以prepare_namespace->mount_root->mount_block_root为链
+   1，过去工作中遇到的case相关的内核代码分析要整理放到这里。
+   2，mmap syscall的内核代码分析。
+   3，物理内存大小的确定．
+   4，关于init section这个section到底什么样子，有哪些函数．
+   5，以prepare_namespace->mount_root->mount_block_root为链
 分析挂载及启动流程．
-6，e820.c，x86架构下的e820表．
-7，以memblock为例，使用do_early_param配置启动参数．
-8，x86 kaslr.c实现机制．
-9，arch/x86/kernel/head64.c里的copy_bootdata函数通过
+   6，e820.c，x86架构下的e820表．
+   7，以memblock为例，使用do_early_param配置启动参数．
+   8，x86 kaslr.c实现机制．
+   9，arch/x86/kernel/head64.c里的copy_bootdata函数通过
 memcpy函数来设置boot_command_line，那么这个初始化设
 置的流程，设置了哪些，怎么传入的．
-10，pxe启动的实验以及内核的代码流程，包括挂载根文件系统
+   10，pxe启动的实验以及内核的代码流程，包括挂载根文件系统
+   11，依据arm64的一个系统调用el0_ia->do_el0_ia_bp_hardening
+->do_mem_abort->do_translation_fault->do_page_fault->
+handle_mm_fault->__handle_mm_fault->do_fault->__do_fault
+->xfs_filemap_fault->__xfs_filemap_fault->filemap_fault
+->add_to_page_cache_lru->__add_to_page_cache_locked->
+mem_cgroup_try_charge->try_charge->mem_cgroup_out_of_memory
+->out_of_memory->oom_kill_process，按调用顺序依次研究以下主题：
+       1，开始时的arm64的汇编以及arm64架构的知识．
+       2，page fault的处理过程及知识．
+       3，xfs读取文件内容的过程．
+       4，page cache的管理及使用．
+       5，mem cgroup的知识．
+       6，oom的知识．
+   12，notifier机制，其中之一的例子是out_of_memory->
+blocking_notifier_call_chain
+   13，通过write和read系统调用，一次完整的bio读写流程．
+   14，coredump的流程及代码分析
+   15，rcu的原理及代码
