@@ -393,3 +393,37 @@ idx的低32位idx_a用于索引type_a里的regions．
 #+end_src
 这样就可以循环遍历type_b里的region了，采用上面的代码对每个region都求出补集，然后求这个补集和type_a里region的交集．求交集就是out_start采用m_start和r_start的较大者，而out_end取m_end和r_end的较小者，就是两个集合都有的部分．最后会更新idx的值，通过比较type_a里region的结束位置m_end和补集的结束位置r_end，看哪个较小，就需要增加一个索引值，最后通过移位和相或组成到idx．当然，如果m_end都小于r_start，也就是二者没有交集，意味着当前来自type_a里的region太小，需要自增idx_a索引去找到下一个来自type_a里的region，以使这个新的region更有可能和补集交上，也就是r_start >= m_end的情况，直接break出循环了．
 * 交接给伙伴系统
+在本文一开始提到过，memblock主要是提供给启动早期伙伴系统没有准备就绪时，内核的一些流程需要内存．其初始化以x86 e820为例，主要是
+: start_kernel->setup_arch->e820__memblock_setup->memblock_add
+进行初始化，而释放memblock的内存到伙伴系统主要是通过
+: start_kernel->mm_core_init->mem_init->memblock_free_all
+可以很清楚的看到，memblock主要就是使用在start_kernel里调用的setup_arch之后到start_kernel里调用的mm_core_init之前．本节主要简单介绍memblock.c提供的函数memblock_free_all释放内存到伙伴系统．
+
+memblock_free_all主要是调用free_low_memory_core_early，后者主要的逻辑是通过for_each_free_mem_range去循环每个在memblock.memory里而又不在memblock.reserved的region地址范围，并给到start和end两个值中，这个for宏之前介绍过，这里就不再重复了．针对每个start-end的范围，均调用_free_memory_core函数，_free_memory_core里主要的逻辑是调用函数__free_pages_memory，__free_pages_memory函数如下：
+#+begin_src c
+static void __init __free_pages_memory(unsigned long start, unsigned long end)
+{
+	int order;
+
+	while (start < end) {
+		/*
+		 * Free the pages in the largest chunks alignment allows.
+		 *
+		 * __ffs() behaviour is undefined for 0. start == 0 is
+		 * MAX_ORDER-aligned, set order to MAX_ORDER for the case.
+		 */
+		if (start)
+			order = min_t(int, MAX_ORDER, __ffs(start));
+		else
+			order = MAX_ORDER;
+
+		while (start + (1UL << order) > end)
+			order--;
+
+		memblock_free_pages(pfn_to_page(start), start, order);
+
+		start += (1UL << order);
+	}
+}
+#+end_src
+可以看到逻辑比较简单，主要是确定order，然后作为参数调用memblock_free_pages，order的确定分两种情况，主要是__ffs无法处理参数为0的情况，__ffs的作用是找寻参数第一个设置为1的bit位置．后面的while循环，就是针对order较大时，要减小order的值，2的order次方代表多少个页面，所以发现自start起始加上2的order次方大于本次end位置时，证明order太大，需要减小．memblock_free_pages里会调用__free_pages_core释放到伙伴系统，关于这个函数的分析留到伙伴系统了，参见[[../buddy.html][这篇文章]]．
