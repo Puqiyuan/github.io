@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-09-12 Tue 11:11 -->
+<!-- 2023-12-09 Sat 18:26 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org257605c">1. 虚拟机的创建</a></li>
-<li><a href="#org14e736b">2. QEMU CPU创建</a></li>
-<li><a href="#org4144ae9">3. KVM CPU创建</a></li>
-<li><a href="#orgca47c36">4. VCPU的运行</a></li>
-<li><a href="#org2a65c15">5. VCPU的调度</a></li>
+<li><a href="#orgf9db541">1. 虚拟机的创建</a></li>
+<li><a href="#org16f5364">2. QEMU CPU创建</a></li>
+<li><a href="#org673d27e">3. KVM CPU创建</a></li>
+<li><a href="#org89ac8e0">4. VCPU的运行</a></li>
+<li><a href="#orgdbd5202">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -58,8 +58,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-org257605c" class="outline-2">
-<h2 id="org257605c"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-orgf9db541" class="outline-2">
+<h2 id="orgf9db541"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -351,12 +351,11 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org14e736b" class="outline-2">
-<h2 id="org14e736b"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org16f5364" class="outline-2">
+<h2 id="org16f5364"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
-QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代
-表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
+QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
 </p>
 <pre class="example">
 main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt;
@@ -745,25 +744,29 @@ create_vcpu_thread（就是kvm_start_vcpu_thread）是一开始kvm_start_vcpu_th
 </p>
 
 <p>
-TODO
+在本节一开始，列出了创建VCPU的函数流程，只是到目前都只关注了这个调用流程是怎么调用起来的（在哪里设置回调，在哪里调用回调）．下面再贴下这个函数流程，后续就是主要关注这些流程上函数的逻辑了：
 </p>
+<pre class="example">
+main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt; property_set_bool-&gt;device_set_realized-&gt;x86_cpu_realizefn-&gt;qemu_init_vcpu-&gt;kvm_start_vcpu_thread
+</pre>
 </div>
-</div>
-<div id="outline-container-org4144ae9" class="outline-2">
-<h2 id="org4144ae9"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-orgca47c36" class="outline-2">
-<h2 id="orgca47c36"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<div id="outline-container-org673d27e" class="outline-2">
+<h2 id="org673d27e"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-org2a65c15" class="outline-2">
-<h2 id="org2a65c15"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org89ac8e0" class="outline-2">
+<h2 id="org89ac8e0"><span class="section-number-2">4.</span> VCPU的运行</h2>
+</div>
+
+<div id="outline-container-orgdbd5202" class="outline-2">
+<h2 id="orgdbd5202"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-09-12 Tue 11:11</p>
+<p class="date">Created: 2023-12-09 Sat 18:26</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

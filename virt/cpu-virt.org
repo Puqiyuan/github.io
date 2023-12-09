@@ -198,8 +198,7 @@ static void __attribute__((constructor)) do_qemu_init_ ## function(void)    \
 
 总之到目前，总算是有了一台虚拟机，对比真实硬件机器来说，可以理解为主板以及上面的插槽这些都做好了，就等后面插上CPU（创建VCPU），插上需要的外设等。
 * QEMU CPU创建
-QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代
-表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
+QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
 : main->qemu_init->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set->
 : property_set_bool->device_set_realized->x86_cpu_realizefn->qemu_init_vcpu->kvm_start_vcpu_thread
 以上其实就是主板的初始化流程，就这个调用链而言，最后的函数才关心的是CPU具现化。以下分析这个调用链本身是怎么被调用起来的，分析这点更多的是涉及到QOM，也就是QEMU代码的组织，而关于在QEMU代码里VCPU创建本身在本节偏后部分会介绍到。
@@ -483,7 +482,9 @@ void cpus_register_accel(const AccelOpsClass *ops)
 
 以上着重对QOM进行了介绍， *从现在开始，会更多的偏向于虚拟化本身了* ，在本节也就是QEMU里对于CPU的创建到底做了哪些事情。
 
-TODO
+在本节一开始，列出了创建VCPU的函数流程，只是到目前都只关注了这个调用流程是怎么调用起来的（在哪里设置回调，在哪里调用回调）．下面再贴下这个函数流程，后续就是主要关注这些流程上函数的逻辑了：
+: main->qemu_init->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set-> property_set_bool->device_set_realized->x86_cpu_realizefn->qemu_init_vcpu->kvm_start_vcpu_thread
+
 * KVM CPU创建
 
 * VCPU的运行
