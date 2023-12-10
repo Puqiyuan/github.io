@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-12-09 Sat 18:26 -->
+<!-- 2023-12-10 Sun 12:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf9db541">1. 虚拟机的创建</a></li>
-<li><a href="#org16f5364">2. QEMU CPU创建</a></li>
-<li><a href="#org673d27e">3. KVM CPU创建</a></li>
-<li><a href="#org89ac8e0">4. VCPU的运行</a></li>
-<li><a href="#orgdbd5202">5. VCPU的调度</a></li>
+<li><a href="#orgb5feb83">1. 虚拟机的创建</a></li>
+<li><a href="#orgbe097ea">2. QEMU CPU创建</a></li>
+<li><a href="#orgf745996">3. KVM CPU创建</a></li>
+<li><a href="#orgf7111b0">4. VCPU的运行</a></li>
+<li><a href="#org4b085cf">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -58,8 +58,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-orgf9db541" class="outline-2">
-<h2 id="orgf9db541"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-orgb5feb83" class="outline-2">
+<h2 id="orgb5feb83"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -351,8 +351,8 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org16f5364" class="outline-2">
-<h2 id="org16f5364"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-orgbe097ea" class="outline-2">
+<h2 id="orgbe097ea"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
@@ -747,26 +747,74 @@ create_vcpu_thread（就是kvm_start_vcpu_thread）是一开始kvm_start_vcpu_th
 在本节一开始，列出了创建VCPU的函数流程，只是到目前都只关注了这个调用流程是怎么调用起来的（在哪里设置回调，在哪里调用回调）．下面再贴下这个函数流程，后续就是主要关注这些流程上函数的逻辑了：
 </p>
 <pre class="example">
-main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt; property_set_bool-&gt;device_set_realized-&gt;x86_cpu_realizefn-&gt;qemu_init_vcpu-&gt;kvm_start_vcpu_thread
+main-&gt;qemu_init-&gt;qmp_x_exit_preconfig-&gt;qemu_init_board-&gt;machine_run_board_init-&gt;pc_init1-&gt;x86_cpus_init-&gt;x86_cpu_new-&gt;qdev_realize-&gt;object_property_set_bool-&gt;object_property_set_qobject-&gt;object_property_set-&gt;
+property_set_bool-&gt;device_set_realized-&gt;x86_cpu_realizefn-&gt;qemu_init_vcpu-&gt;kvm_start_vcpu_thread
+</pre>
+
+
+<p>
+从machine_run_board_init调用pc_init1说起。QEMU中，主板模型有两种，一是i440fx，另外一个是q35，本文主要基于前者研究。不论是i440fx还是q35，都要通过DEFINE_PC_MACHINE去定义MachineClass的init函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">DEFINE_I440FX_MACHINE</span>(<span style="color: #DFAF8F;">suffix</span>, <span style="color: #DFAF8F;">name</span>, <span style="color: #DFAF8F;">compatfn</span>, <span style="color: #DFAF8F;">optionfn</span>) \
+    <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #DFAF8F;">pc_init_</span>##suffix(<span style="color: #7CB8BB;">MachineState</span> *<span style="color: #DFAF8F;">machine</span>) \
+    { \
+        <span style="color: #7CB8BB;">void</span> (*<span style="color: #93E0E3;">compat</span>)(<span style="color: #7CB8BB;">MachineState</span> *<span style="color: #DFAF8F;">m</span>) = (compatfn); \
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (compat) { \
+            compat(machine); \
+        } \
+        pc_init1(machine, TYPE_I440FX_PCI_HOST_BRIDGE, \
+                 TYPE_I440FX_PCI_DEVICE); \
+    } \
+    DEFINE_PC_MACHINE(suffix, name, pc_init_##suffix, optionfn)
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">DEFINE_PC_MACHINE</span>(<span style="color: #DFAF8F;">suffix</span>, <span style="color: #DFAF8F;">namestr</span>, <span style="color: #DFAF8F;">initfn</span>, <span style="color: #DFAF8F;">optsfn</span>) \
+    <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #DFAF8F;">pc_machine_</span>##suffix##_class_init(<span style="color: #7CB8BB;">ObjectClass</span> *<span style="color: #DFAF8F;">oc</span>, <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">data</span>) \
+    { \
+        <span style="color: #7CB8BB;">MachineClass</span> *<span style="color: #DFAF8F;">mc</span> = MACHINE_CLASS(oc); \
+        optsfn(mc); \
+        mc-&gt;init = initfn; \
+        mc-&gt;kvm_type = pc_machine_kvm_type; \
+    } \
+    <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">pc_machine_type_</span>##suffix = { \
+        .name       = namestr TYPE_MACHINE_SUFFIX, \
+        .parent     = TYPE_PC_MACHINE, \
+        .class_init = pc_machine_##suffix##_class_init, \
+    }; \
+    <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #DFAF8F;">pc_machine_init_</span>##suffix(<span style="color: #7CB8BB;">void</span>) \
+    { \
+        type_register(&amp;pc_machine_type_##suffix); \
+    } \
+    type_init(pc_machine_init_##suffix)
+</pre>
+</div>
+<p>
+对于q35的话就是宏DEFINE_Q35_MACHINE。这里suffix其实就是i440fx主板的版本，比如v8_2、v8_1等。可以看到initfn其实主要就是调用了pc_init1，而initfn又是作为MachineClass的init回调，所以在machine_run_board_init的最后可以这样调用：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">machine_class-&gt;init(machine);
 </pre>
 </div>
 </div>
-
-<div id="outline-container-org673d27e" class="outline-2">
-<h2 id="org673d27e"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-org89ac8e0" class="outline-2">
-<h2 id="org89ac8e0"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<div id="outline-container-orgf745996" class="outline-2">
+<h2 id="orgf745996"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-orgdbd5202" class="outline-2">
-<h2 id="orgdbd5202"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-orgf7111b0" class="outline-2">
+<h2 id="orgf7111b0"><span class="section-number-2">4.</span> VCPU的运行</h2>
+</div>
+
+<div id="outline-container-org4b085cf" class="outline-2">
+<h2 id="org4b085cf"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-12-09 Sat 18:26</p>
+<p class="date">Created: 2023-12-10 Sun 12:00</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

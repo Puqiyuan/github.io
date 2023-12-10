@@ -483,7 +483,47 @@ void cpus_register_accel(const AccelOpsClass *ops)
 以上着重对QOM进行了介绍， *从现在开始，会更多的偏向于虚拟化本身了* ，在本节也就是QEMU里对于CPU的创建到底做了哪些事情。
 
 在本节一开始，列出了创建VCPU的函数流程，只是到目前都只关注了这个调用流程是怎么调用起来的（在哪里设置回调，在哪里调用回调）．下面再贴下这个函数流程，后续就是主要关注这些流程上函数的逻辑了：
-: main->qemu_init->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set-> property_set_bool->device_set_realized->x86_cpu_realizefn->qemu_init_vcpu->kvm_start_vcpu_thread
+: main->qemu_init->qmp_x_exit_preconfig->qemu_init_board->machine_run_board_init->pc_init1->x86_cpus_init->x86_cpu_new->qdev_realize->object_property_set_bool->object_property_set_qobject->object_property_set->
+: property_set_bool->device_set_realized->x86_cpu_realizefn->qemu_init_vcpu->kvm_start_vcpu_thread
+
+从machine_run_board_init调用pc_init1说起。QEMU中，主板模型有两种，一是i440fx，另外一个是q35，本文主要基于前者研究。不论是i440fx还是q35，都要通过DEFINE_PC_MACHINE去定义MachineClass的init函数：
+#+begin_src c
+#define DEFINE_I440FX_MACHINE(suffix, name, compatfn, optionfn) \
+    static void pc_init_##suffix(MachineState *machine) \
+    { \
+        void (*compat)(MachineState *m) = (compatfn); \
+        if (compat) { \
+            compat(machine); \
+        } \
+        pc_init1(machine, TYPE_I440FX_PCI_HOST_BRIDGE, \
+                 TYPE_I440FX_PCI_DEVICE); \
+    } \
+    DEFINE_PC_MACHINE(suffix, name, pc_init_##suffix, optionfn)
+#+end_src
+#+begin_src c
+#define DEFINE_PC_MACHINE(suffix, namestr, initfn, optsfn) \
+    static void pc_machine_##suffix##_class_init(ObjectClass *oc, void *data) \
+    { \
+        MachineClass *mc = MACHINE_CLASS(oc); \
+        optsfn(mc); \
+        mc->init = initfn; \
+        mc->kvm_type = pc_machine_kvm_type; \
+    } \
+    static const TypeInfo pc_machine_type_##suffix = { \
+        .name       = namestr TYPE_MACHINE_SUFFIX, \
+        .parent     = TYPE_PC_MACHINE, \
+        .class_init = pc_machine_##suffix##_class_init, \
+    }; \
+    static void pc_machine_init_##suffix(void) \
+    { \
+        type_register(&pc_machine_type_##suffix); \
+    } \
+    type_init(pc_machine_init_##suffix)
+#+end_src
+对于q35的话就是宏DEFINE_Q35_MACHINE。这里suffix其实就是i440fx主板的版本，比如v8_2、v8_1等。可以看到initfn其实主要就是调用了pc_init1，而initfn又是作为MachineClass的init回调，所以在machine_run_board_init的最后可以这样调用：
+#+begin_src c
+machine_class->init(machine);
+#+end_src
 
 * KVM CPU创建
 
