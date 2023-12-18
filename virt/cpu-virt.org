@@ -525,6 +525,37 @@ void cpus_register_accel(const AccelOpsClass *ops)
 machine_class->init(machine);
 #+end_src
 
+下面继续分析pc_init1调用的x86_cpus_init函数，该函数的最后会调用x86_cpu_new：
+#+begin_src c
+    possible_cpus = mc->possible_cpu_arch_ids(ms);
+    for (i = 0; i < ms->smp.cpus; i++) {
+        x86_cpu_new(x86ms, possible_cpus->cpus[i].arch_id, &error_fatal);
+    }
+#+end_src
+可以看到这里先调用了possible_cpu_arch_ids函数去返回一个CPUArchIDList类型的指针，该类型里主要是存放了当前所有可用CPU的arch_id以及其它一些信息。possible_cpu_arch_ids函数对于x86架构就是x86_possible_cpu_arch_ids函数，这是在x86_machine_class_init函数中设置的回调。在x86_possible_cpu_arch_ids中可以看到，返回的CPUArchIdList实际就来自ms->possible_cpus成员，第一次调用x86_possible_cpu_arch_ids时，possible_cpus指针是没有空间的，x86_possible_cpu_arch_ids第一次被调用时，会使用g_malloc0给ms->possible_cpus分配空间。同时在这个函数里还会使用ms->smp.max_cpus获取当前的最大可用cpu数目，这个smp.max_cpus在machine_parse_smp_config函数中通过用户配置获得，比如-smp参数设置为16，那么
+x86_possible_cpu_arch_ids中看到的smp.max_cpus可能就是这个16。x86_possible_cpu_arch_ids中最重要的逻辑就是为每个cpu构建arch_id，这个arch_id其实就是个uint32_t类型，32位的数值，里面按比特位存放了pkg_id、die_id、core_id以及smt_id。这里有必要简单的介绍下cpu的拓扑结构，看两个结构体就明白了：
+#+begin_src c
+typedef uint32_t apic_id_t;
+
+typedef struct X86CPUTopoIDs {
+    unsigned pkg_id;
+    unsigned die_id;
+    unsigned core_id;
+    unsigned smt_id;
+} X86CPUTopoIDs;
+
+typedef struct X86CPUTopoInfo {
+    unsigned dies_per_pkg;
+    unsigned cores_per_die;
+    unsigned threads_per_core;
+} X86CPUTopoInfo;
+#+end_src
+可以很清楚的看到处理器的拓扑结构，首先处理器有若干个package，一个package下有若干个dies，而每个die下又有若干个cores，core下又有若干个threads，最下层又分是否是否支持超线程（SMT，Simultaneous Multi-threading）从而有smt_id，每个id成员其实就是指明自己在哪个层级的id号。
+
+现在回到x86_possible_cpu_arch_ids函数，继续研究arch_id是如何构建的：
+#+begin_src c
+
+#+end_src
 * KVM CPU创建
 
 * VCPU的运行

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-12-10 Sun 15:41 -->
+<!-- 2023-12-17 Sun 12:22 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org12f7a8d">1. 虚拟机的创建</a></li>
-<li><a href="#org3fab414">2. QEMU CPU创建</a></li>
-<li><a href="#orgbb3b517">3. KVM CPU创建</a></li>
-<li><a href="#org8b8f03d">4. VCPU的运行</a></li>
-<li><a href="#org246615d">5. VCPU的调度</a></li>
+<li><a href="#org076794c">1. 虚拟机的创建</a></li>
+<li><a href="#org910aeb6">2. QEMU CPU创建</a></li>
+<li><a href="#org7b0ca60">3. KVM CPU创建</a></li>
+<li><a href="#orgc8e6753">4. VCPU的运行</a></li>
+<li><a href="#org050ed21">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -58,8 +58,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-org12f7a8d" class="outline-2">
-<h2 id="org12f7a8d"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-org076794c" class="outline-2">
+<h2 id="org076794c"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -351,8 +351,8 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org3fab414" class="outline-2">
-<h2 id="org3fab414"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org910aeb6" class="outline-2">
+<h2 id="org910aeb6"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
@@ -797,24 +797,55 @@ property_set_bool-&gt;device_set_realized-&gt;x86_cpu_realizefn-&gt;qemu_init_vc
 <pre class="src src-c">machine_class-&gt;init(machine);
 </pre>
 </div>
+
+<p>
+下面继续分析pc_init1调用的x86_cpus_init函数，该函数的最后会调用x86_cpu_new：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">possible_cpus = mc-&gt;possible_cpu_arch_ids(ms);
+<span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; ms-&gt;smp.cpus; i++) {
+    x86_cpu_new(x86ms, possible_cpus-&gt;cpus[i].arch_id, &amp;error_fatal);
+}
+</pre>
 </div>
+<p>
+可以看到这里先调用了possible_cpu_arch_ids函数去返回一个CPUArchIDList类型的指针，该类型里主要是存放了当前所有可用CPU的arch_id以及其它一些信息。possible_cpu_arch_ids函数对于x86架构就是x86_possible_cpu_arch_ids函数，这是在x86_machine_class_init函数中设置的回调。在x86_possible_cpu_arch_ids中可以看到，返回的CPUArchIdList实际就来自ms-&gt;possible_cpus成员，第一次调用x86_possible_cpu_arch_ids时，possible_cpus指针是没有空间的，x86_possible_cpu_arch_ids第一次被调用时，会使用g_malloc0给ms-&gt;possible_cpus分配空间。同时在这个函数里还会使用ms-&gt;smp.max_cpus获取当前的最大可用cpu数目，这个smp.max_cpus在machine_parse_smp_config函数中通过用户配置获得，比如-smp参数设置为16，那么
+x86_possible_cpu_arch_ids中看到的smp.max_cpus可能就是这个16。x86_possible_cpu_arch_ids中最重要的逻辑就是为每个cpu构建arch_id，这个arch_id其实就是个uint32_t类型，32位的数值，里面按比特位存放了pkg_id、die_id、core_id以及smt_id。这里有必要简单的介绍下cpu的拓扑结构，看两个结构体就明白了：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #7CB8BB;">uint32_t</span> <span style="color: #7CB8BB;">apic_id_t</span>;
+
+<span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">X86CPUTopoIDs</span> {
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">pkg_id</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">die_id</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">core_id</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">smt_id</span>;
+} <span style="color: #7CB8BB;">X86CPUTopoIDs</span>;
+
+<span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">X86CPUTopoInfo</span> {
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">dies_per_pkg</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">cores_per_die</span>;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">threads_per_core</span>;
+} <span style="color: #7CB8BB;">X86CPUTopoInfo</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-org7b0ca60" class="outline-2">
+<h2 id="org7b0ca60"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-orgbb3b517" class="outline-2">
-<h2 id="orgbb3b517"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+<div id="outline-container-orgc8e6753" class="outline-2">
+<h2 id="orgc8e6753"><span class="section-number-2">4.</span> VCPU的运行</h2>
 </div>
 
-<div id="outline-container-org8b8f03d" class="outline-2">
-<h2 id="org8b8f03d"><span class="section-number-2">4.</span> VCPU的运行</h2>
-</div>
-
-<div id="outline-container-org246615d" class="outline-2">
-<h2 id="org246615d"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org050ed21" class="outline-2">
+<h2 id="org050ed21"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-12-10 Sun 15:41</p>
+<p class="date">Created: 2023-12-17 Sun 12:22</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
