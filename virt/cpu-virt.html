@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-12-17 Sun 12:22 -->
+<!-- 2023-12-28 Thu 12:36 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org076794c">1. 虚拟机的创建</a></li>
-<li><a href="#org910aeb6">2. QEMU CPU创建</a></li>
-<li><a href="#org7b0ca60">3. KVM CPU创建</a></li>
-<li><a href="#orgc8e6753">4. VCPU的运行</a></li>
-<li><a href="#org050ed21">5. VCPU的调度</a></li>
+<li><a href="#org0498ccc">1. 虚拟机的创建</a></li>
+<li><a href="#org6de64dd">2. QEMU CPU创建</a></li>
+<li><a href="#org8a1e3b9">3. KVM CPU创建</a></li>
+<li><a href="#org7d06592">4. VCPU的运行</a></li>
+<li><a href="#org9dcb5d1">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -58,8 +58,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-org076794c" class="outline-2">
-<h2 id="org076794c"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-org0498ccc" class="outline-2">
+<h2 id="org0498ccc"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -351,8 +351,8 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org910aeb6" class="outline-2">
-<h2 id="org910aeb6"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org6de64dd" class="outline-2">
+<h2 id="org6de64dd"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
@@ -829,23 +829,214 @@ x86_possible_cpu_arch_ids中看到的smp.max_cpus可能就是这个16。x86_poss
 } <span style="color: #7CB8BB;">X86CPUTopoInfo</span>;
 </pre>
 </div>
+<p>
+可以很清楚的看到处理器的拓扑结构，首先处理器有若干个package，一个package下有若干个dies，而每个die下又有若干个cores，core下又有若干个threads，最下层又分是否是否支持超线程（SMT，Simultaneous Multi-threading）从而有smt_id，每个id成员其实就是指明自己在哪个层级的id号。
+</p>
+
+<p>
+现在回到x86_possible_cpu_arch_ids函数，继续研究arch_id是如何构建的：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; ms-&gt;possible_cpus-&gt;len; i++) {
+        ms-&gt;possible_cpus-&gt;cpus[i].arch_id =
+                x86_cpu_apic_id_from_index(x86ms, i);
+ }
+
+<span style="color: #7CB8BB;">uint32_t</span> <span style="color: #93E0E3;">x86_cpu_apic_id_from_index</span>(<span style="color: #7CB8BB;">X86MachineState</span> *<span style="color: #DFAF8F;">x86ms</span>,
+                                    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">cpu_index</span>)
+{
+        <span style="color: #7CB8BB;">X86CPUTopoInfo</span> <span style="color: #DFAF8F;">topo_info</span>;
+
+        init_topo_info(&amp;topo_info, x86ms);
+
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> x86_apicid_from_cpu_idx(&amp;topo_info, cpu_index);
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">init_topo_info</span>(<span style="color: #7CB8BB;">X86CPUTopoInfo</span> *<span style="color: #DFAF8F;">topo_info</span>,
+                           <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">X86MachineState</span> *<span style="color: #DFAF8F;">x86ms</span>)
+{
+        <span style="color: #7CB8BB;">MachineState</span> *<span style="color: #DFAF8F;">ms</span> = MACHINE(x86ms);
+
+        topo_info-&gt;dies_per_pkg = ms-&gt;smp.dies;
+        topo_info-&gt;cores_per_die = ms-&gt;smp.cores;
+        topo_info-&gt;threads_per_core = ms-&gt;smp.threads;
+}
+</pre>
 </div>
-</div>
-<div id="outline-container-org7b0ca60" class="outline-2">
-<h2 id="org7b0ca60"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+<p>
+可以看到，函数x86_cpu_apic_id_from_index用于构造arch_id，该函数首先使用init_topo_info初始化一个topo_info结构体，这个结构体里有一些成员，会记录每个pkg有多少die，每个die又有多少个core，每个core又有多少个thread，这些成员的值都来自machine_parse_smp_config函数，这个函数前面提到过，都是依据用户的配置填充便是。
+</p>
+
+<p>
+继续看x86_apicid_from_cpu_idx函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">apic_id_t</span> <span style="color: #93E0E3;">x86_apicid_from_cpu_idx</span>(<span style="color: #7CB8BB;">X86CPUTopoInfo</span> *<span style="color: #DFAF8F;">topo_info</span>,
+                                                <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">cpu_index</span>)
+{
+    <span style="color: #7CB8BB;">X86CPUTopoIDs</span> <span style="color: #DFAF8F;">topo_ids</span>;
+    x86_topo_ids_from_idx(topo_info, cpu_index, &amp;topo_ids);
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> x86_apicid_from_topo_ids(topo_info, &amp;topo_ids);
+}
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">x86_topo_ids_from_idx</span>(<span style="color: #7CB8BB;">X86CPUTopoInfo</span> *<span style="color: #DFAF8F;">topo_info</span>,
+                                         <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">cpu_index</span>,
+                                         <span style="color: #7CB8BB;">X86CPUTopoIDs</span> *<span style="color: #DFAF8F;">topo_ids</span>)
+{
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">nr_dies</span> = topo_info-&gt;dies_per_pkg;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">nr_cores</span> = topo_info-&gt;cores_per_die;
+    <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">nr_threads</span> = topo_info-&gt;threads_per_core;
+
+    topo_ids-&gt;pkg_id = cpu_index / (nr_dies * nr_cores * nr_threads);
+    topo_ids-&gt;die_id = cpu_index / (nr_cores * nr_threads) % nr_dies;
+    topo_ids-&gt;core_id = cpu_index / nr_threads % nr_cores;
+    topo_ids-&gt;smt_id = cpu_index % nr_threads;
+}
+</pre>
 </div>
 
-<div id="outline-container-orgc8e6753" class="outline-2">
-<h2 id="orgc8e6753"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<p>
+x86_apicid_from_cpu_idx调用了x86_topo_ids_from_idx初始化一个topo_ids结构体，该结构体记录了针对现在传进来的cpu_index（实际就是for循环里的循环变量），其对应的pkg_id、die_id、core_id以及smt_id各是多少，注意这些id在x86_topo_ids_from_idx函数里是如何计算的，针对每级id，要计算其下的级别共能容纳多少，然后除以这个数字得到的值再对本级能容纳多少取余得到了本级的id。
+</p>
+
+<p>
+有了各级别的id存于topo_ids里就可以调用x86_apicid_from_topo_ids了：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">apic_id_t</span> <span style="color: #93E0E3;">x86_apicid_from_topo_ids</span>(<span style="color: #7CB8BB;">X86CPUTopoInfo</span> *<span style="color: #DFAF8F;">topo_info</span>,
+                                                 <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">X86CPUTopoIDs</span> *<span style="color: #DFAF8F;">topo_ids</span>)
+{
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> (topo_ids-&gt;pkg_id  &lt;&lt; apicid_pkg_offset(topo_info)) |
+           (topo_ids-&gt;die_id  &lt;&lt; apicid_die_offset(topo_info)) |
+           (topo_ids-&gt;core_id &lt;&lt; apicid_core_offset(topo_info)) |
+           topo_ids-&gt;smt_id;
+}
+
+
+</pre>
+</div>
+<p>
+在这里就可以看到各级id左移拼接在一起形成一个apic_id，至于apicid_xxx_offset的代码细节就不分析了，原理就是左移出来下级所有id需要的bit位就可以了。
+</p>
+
+<p>
+x86_possible_cpu_arch_ids再后面的逻辑就是填充possible_cpus里各个cpu属性（props）的各级id了，就不详细分析了。
+</p>
+
+<p>
+介绍完了x86_possible_cpu_arch_ids，得到了possible_cpus，现在回到x86_cpus_init，这时就可以使用possible_cpus-&gt;cpus[i].arch_id去调用x86_cpu_new函数了，x86_cpu_new函数定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">x86_cpu_new</span>(<span style="color: #7CB8BB;">X86MachineState</span> *<span style="color: #DFAF8F;">x86ms</span>, <span style="color: #7CB8BB;">int64_t</span> <span style="color: #DFAF8F;">apic_id</span>, <span style="color: #7CB8BB;">Error</span> **<span style="color: #DFAF8F;">errp</span>)
+{
+    <span style="color: #7CB8BB;">Object</span> *<span style="color: #DFAF8F;">cpu</span> = object_new(MACHINE(x86ms)-&gt;cpu_type);
+
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>object_property_set_uint(cpu, <span style="color: #CC9393;">"apic-id"</span>, apic_id, errp)) {
+        <span style="color: #F0DFAF; font-weight: bold;">goto</span> <span style="color: #BFEBBF;">out</span>;
+    }
+    qdev_realize(DEVICE(cpu), <span style="color: #BFEBBF;">NULL</span>, errp);
+
+<span style="color: #BFEBBF;">out</span>:
+    object_unref(cpu);
+}
+</pre>
+</div>
+<p>
+object_new函数定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">Object</span> *<span style="color: #93E0E3;">object_new</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">typename</span>)
+{
+    <span style="color: #7CB8BB;">TypeImpl</span> *<span style="color: #DFAF8F;">ti</span> = type_get_by_name(typename);
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> object_new_with_type(ti);
+}
+</pre>
+</div>
+<p>
+从object_new函数定义可以看到，type_get_by_name里根据传入的字符串名（cpu_type或typename，在x86-64平台这个串就是qemu64-x86_64-cpu）找到TypeImpl，那么可以想见对应typename的TypeImpl先前就已经放入到type_table哈希表里了，这个流程如下：
+</p>
+<pre class="example">
+main-&gt;qemu_init-&gt;qemu_init_subsystems-&gt;module_call_init-&gt;x86_cpu_register_types-&gt;x86_register_cpudef_types-&gt;x86_register_cpu_model_type-&gt;type_register-&gt;type_register_internal-&gt;type_table_add
+</pre>
+<p>
+注意用于注册到type_table哈希表的TypeInfo在x86_register_cpu_model_type里初始化：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">x86_register_cpu_model_type</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">name</span>, <span style="color: #7CB8BB;">X86CPUModel</span> *<span style="color: #DFAF8F;">model</span>)
+{
+    g_autofree <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">typename</span> = x86_cpu_type_name(name);
+    <span style="color: #7CB8BB;">TypeInfo</span> <span style="color: #DFAF8F;">ti</span> = {
+        .name = typename,
+        .parent = TYPE_X86_CPU,
+        .class_init = x86_cpu_cpudef_class_init,
+        .class_data = model,
+    };
+
+    type_register(&amp;ti);
+}
+</pre>
+</div>
+<p>
+注意这里ti是个局部变量，插入到type_table的当然不可能就是这个ti，因为局部变量在x86_register_cpu_model_type函数返回时就会销毁，真正插入到type_table的TypeInfo在type_register_internal中调用type_new里会使用malloc函数申请内存，而这里定义的局部ti会在type_new里作为一个构建插入到type_table中ti的信息来源。
+</p>
+
+<p>
+查看这个局部ti的定义，可以看到被初始化的成员很有限，尤其是在object_new函数里调用object_new_with_type时，要使用instance_size成员作为参数调用g_malloc申请内存，该成员在定义TypeInfo类型的ti变量时没有被初始化，这个成员的初始化流程如下：
+</p>
+<pre class="example">
+main-&gt;qemu_init-&gt;qemu_create_machine-&gt;select_machine-&gt;object_class_get_list-&gt;object_class_foreach-&gt;g_hash_table_foreach-&gt;object_class_foreach_tramp-&gt;type_initialize
+</pre>
+<p>
+type_initialize里有如下代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">ti-&gt;instance_size = type_object_get_size(ti);
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">size_t</span> <span style="color: #93E0E3;">type_object_get_size</span>(<span style="color: #7CB8BB;">TypeImpl</span> *<span style="color: #DFAF8F;">ti</span>)
+{
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (ti-&gt;instance_size) {
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> ti-&gt;instance_size;
+    }
+
+    <span style="color: #F0DFAF; font-weight: bold;">if</span> (type_has_parent(ti)) {
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> type_object_get_size(type_get_parent(ti));
+    }
+
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> 0;
+}
+</pre>
+</div>
+<p>
+可以看到是在类型初始化时设置instance_size成员，其实际是父TypeImpl的大小，还有很多成员都来自父TypeImpl。在前面x86_register_cpu_model_type函数中定义局部变量ti时，就有parent了，其为TYPE_X86_CPU，就是串x86_64-cpu，这对应的TypeImpl其实就是x86_cpu_type_info，具体定义这里就不展开了。
+</p>
+
+<p>
+回到object_new函数，现在终于搞清楚了这个函数的第一行变量ti的来龙去脉，在object_new就可以继续调用object_new_with_type，在这里面可以使用得到的ti里的信息去malloc出cpu Object，并返回到x86_cpu_new函数里。
+</p>
+
+<p>
+回到x86_cpu_new继续分析
+</p>
+</div>
+</div>
+<div id="outline-container-org8a1e3b9" class="outline-2">
+<h2 id="org8a1e3b9"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-org050ed21" class="outline-2">
-<h2 id="org050ed21"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org7d06592" class="outline-2">
+<h2 id="org7d06592"><span class="section-number-2">4.</span> VCPU的运行</h2>
+</div>
+
+<div id="outline-container-org9dcb5d1" class="outline-2">
+<h2 id="org9dcb5d1"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-12-17 Sun 12:22</p>
+<p class="date">Created: 2023-12-28 Thu 12:36</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

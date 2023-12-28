@@ -554,8 +554,149 @@ typedef struct X86CPUTopoInfo {
 
 现在回到x86_possible_cpu_arch_ids函数，继续研究arch_id是如何构建的：
 #+begin_src c
+  for (i = 0; i < ms->possible_cpus->len; i++) {
+          ms->possible_cpus->cpus[i].arch_id =
+                  x86_cpu_apic_id_from_index(x86ms, i);
+   }
+
+  uint32_t x86_cpu_apic_id_from_index(X86MachineState *x86ms,
+                                      unsigned int cpu_index)
+  {
+          X86CPUTopoInfo topo_info;
+
+          init_topo_info(&topo_info, x86ms);
+
+          return x86_apicid_from_cpu_idx(&topo_info, cpu_index);
+  }
+
+  static void init_topo_info(X86CPUTopoInfo *topo_info,
+                             const X86MachineState *x86ms)
+  {
+          MachineState *ms = MACHINE(x86ms);
+
+          topo_info->dies_per_pkg = ms->smp.dies;
+          topo_info->cores_per_die = ms->smp.cores;
+          topo_info->threads_per_core = ms->smp.threads;
+  }
+#+end_src
+可以看到，函数x86_cpu_apic_id_from_index用于构造arch_id，该函数首先使用init_topo_info初始化一个topo_info结构体，这个结构体里有一些成员，会记录每个pkg有多少die，每个die又有多少个core，每个core又有多少个thread，这些成员的值都来自machine_parse_smp_config函数，这个函数前面提到过，都是依据用户的配置填充便是。
+
+继续看x86_apicid_from_cpu_idx函数：
+#+begin_src c
+static inline apic_id_t x86_apicid_from_cpu_idx(X86CPUTopoInfo *topo_info,
+                                                unsigned cpu_index)
+{
+    X86CPUTopoIDs topo_ids;
+    x86_topo_ids_from_idx(topo_info, cpu_index, &topo_ids);
+    return x86_apicid_from_topo_ids(topo_info, &topo_ids);
+}
+
+static inline void x86_topo_ids_from_idx(X86CPUTopoInfo *topo_info,
+                                         unsigned cpu_index,
+                                         X86CPUTopoIDs *topo_ids)
+{
+    unsigned nr_dies = topo_info->dies_per_pkg;
+    unsigned nr_cores = topo_info->cores_per_die;
+    unsigned nr_threads = topo_info->threads_per_core;
+
+    topo_ids->pkg_id = cpu_index / (nr_dies * nr_cores * nr_threads);
+    topo_ids->die_id = cpu_index / (nr_cores * nr_threads) % nr_dies;
+    topo_ids->core_id = cpu_index / nr_threads % nr_cores;
+    topo_ids->smt_id = cpu_index % nr_threads;
+}
+#+end_src
+
+x86_apicid_from_cpu_idx调用了x86_topo_ids_from_idx初始化一个topo_ids结构体，该结构体记录了针对现在传进来的cpu_index（实际就是for循环里的循环变量），其对应的pkg_id、die_id、core_id以及smt_id各是多少，注意这些id在x86_topo_ids_from_idx函数里是如何计算的，针对每级id，要计算其下的级别共能容纳多少，然后除以这个数字得到的值再对本级能容纳多少取余得到了本级的id。
+
+有了各级别的id存于topo_ids里就可以调用x86_apicid_from_topo_ids了：
+#+begin_src c
+static inline apic_id_t x86_apicid_from_topo_ids(X86CPUTopoInfo *topo_info,
+                                                 const X86CPUTopoIDs *topo_ids)
+{
+    return (topo_ids->pkg_id  << apicid_pkg_offset(topo_info)) |
+           (topo_ids->die_id  << apicid_die_offset(topo_info)) |
+           (topo_ids->core_id << apicid_core_offset(topo_info)) |
+           topo_ids->smt_id;
+}
+
 
 #+end_src
+在这里就可以看到各级id左移拼接在一起形成一个apic_id，至于apicid_xxx_offset的代码细节就不分析了，原理就是左移出来下级所有id需要的bit位就可以了。
+
+x86_possible_cpu_arch_ids再后面的逻辑就是填充possible_cpus里各个cpu属性（props）的各级id了，就不详细分析了。
+
+介绍完了x86_possible_cpu_arch_ids，得到了possible_cpus，现在回到x86_cpus_init，这时就可以使用possible_cpus->cpus[i].arch_id去调用x86_cpu_new函数了，x86_cpu_new函数定义如下：
+#+begin_src c
+void x86_cpu_new(X86MachineState *x86ms, int64_t apic_id, Error **errp)
+{
+    Object *cpu = object_new(MACHINE(x86ms)->cpu_type);
+
+    if (!object_property_set_uint(cpu, "apic-id", apic_id, errp)) {
+        goto out;
+    }
+    qdev_realize(DEVICE(cpu), NULL, errp);
+
+out:
+    object_unref(cpu);
+}
+#+end_src
+object_new函数定义如下：
+#+begin_src c
+Object *object_new(const char *typename)
+{
+    TypeImpl *ti = type_get_by_name(typename);
+
+    return object_new_with_type(ti);
+}
+#+end_src
+从object_new函数定义可以看到，type_get_by_name里根据传入的字符串名（cpu_type或typename，在x86-64平台这个串就是qemu64-x86_64-cpu）找到TypeImpl，那么可以想见对应typename的TypeImpl先前就已经放入到type_table哈希表里了，这个流程如下：
+#+begin_src
+main->qemu_init->qemu_init_subsystems->module_call_init->x86_cpu_register_types->x86_register_cpudef_types->x86_register_cpu_model_type->type_register->type_register_internal->type_table_add
+#+end_src
+注意用于注册到type_table哈希表的TypeInfo在x86_register_cpu_model_type里初始化：
+#+begin_src c
+static void x86_register_cpu_model_type(const char *name, X86CPUModel *model)
+{
+    g_autofree char *typename = x86_cpu_type_name(name);
+    TypeInfo ti = {
+        .name = typename,
+        .parent = TYPE_X86_CPU,
+        .class_init = x86_cpu_cpudef_class_init,
+        .class_data = model,
+    };
+
+    type_register(&ti);
+}
+#+end_src
+注意这里ti是个局部变量，插入到type_table的当然不可能就是这个ti，因为局部变量在x86_register_cpu_model_type函数返回时就会销毁，真正插入到type_table的TypeInfo在type_register_internal中调用type_new里会使用malloc函数申请内存，而这里定义的局部ti会在type_new里作为一个构建插入到type_table中ti的信息来源。
+
+查看这个局部ti的定义，可以看到被初始化的成员很有限，尤其是在object_new函数里调用object_new_with_type时，要使用instance_size成员作为参数调用g_malloc申请内存，该成员在定义TypeInfo类型的ti变量时没有被初始化，这个成员的初始化流程如下：
+#+begin_src
+main->qemu_init->qemu_create_machine->select_machine->object_class_get_list->object_class_foreach->g_hash_table_foreach->object_class_foreach_tramp->type_initialize
+#+end_src
+type_initialize里有如下代码：
+#+begin_src c
+ti->instance_size = type_object_get_size(ti);
+#+end_src
+#+begin_src c
+static size_t type_object_get_size(TypeImpl *ti)
+{
+    if (ti->instance_size) {
+        return ti->instance_size;
+    }
+
+    if (type_has_parent(ti)) {
+        return type_object_get_size(type_get_parent(ti));
+    }
+
+    return 0;
+}
+#+end_src
+可以看到是在类型初始化时设置instance_size成员，其实际是父TypeImpl的大小，还有很多成员都来自父TypeImpl。在前面x86_register_cpu_model_type函数中定义局部变量ti时，就有parent了，其为TYPE_X86_CPU，就是串x86_64-cpu，这对应的TypeImpl其实就是x86_cpu_type_info，具体定义这里就不展开了。
+
+回到object_new函数，现在终于搞清楚了这个函数的第一行变量ti的来龙去脉，在object_new就可以继续调用object_new_with_type，在这里面可以使用得到的ti里的信息去malloc出cpu Object，并返回到x86_cpu_new函数里。
+
+回到x86_cpu_new继续分析
 * KVM CPU创建
 
 * VCPU的运行
