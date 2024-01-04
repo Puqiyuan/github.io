@@ -5,8 +5,6 @@
 #+HTML_HEAD: <link rel="stylesheet" href="../org-manual.css" type="text/css">
 本文主要分析下KVM/QEMU对CPU的虚拟化。KVM/QEMU还完成了许多的功能，比如内存虚拟化，中断虚拟化等，但这些功能不是本文的主题。
 
-本文的硬件平台是AMD Ryzen 7 4800U。
-
 本文分五个方面来分析CPU的虚拟化，依次展开。
 
 * 虚拟机的创建
@@ -696,7 +694,20 @@ static size_t type_object_get_size(TypeImpl *ti)
 
 回到object_new函数，现在终于搞清楚了这个函数的第一行变量ti的来龙去脉，在object_new就可以继续调用object_new_with_type，在这里面可以使用得到的ti里的信息去malloc出cpu Object，并返回到x86_cpu_new函数里。
 
-回到x86_cpu_new继续分析
+回到x86_cpu_new继续分析，随后调用了object_property_set_uint来设置cpu的apic-id属性为刚生成的apic_id。
+
+现在详细分析object_property_set_uint函数，按照上面说的它的作用，对它的分析从两个方面来进行，一是apic-id这个属性的设置流程，二是对这个设的值本身进行的操作。
+
+先看第一个方面，有一个下面调用的流程：
+: x86_cpu_new->object_property_set_uint->object_property_set_qobject->object_property_set
+
+最后的object_property_set里面有下面的代码：
+#+begin_src c
+prop->set(obj, v, name, prop->opaque, errp);
+#+end_src
+
+所谓第一个方面，就是研究上面的set函数是怎么被设置，进而在这里可以调用起来。x86架构有个Property数组叫x86_cpu_properties，里面定义了所有X86 cpu可能有的Property，针对apic-id属性使用DEFINE_PROP_UINT32宏定义一个类型为Property数组元素：
+
 * KVM CPU创建
 
 * VCPU的运行

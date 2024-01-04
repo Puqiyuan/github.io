@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-12-28 Thu 12:36 -->
+<!-- 2024-01-04 Thu 23:30 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org0498ccc">1. 虚拟机的创建</a></li>
-<li><a href="#org6de64dd">2. QEMU CPU创建</a></li>
-<li><a href="#org8a1e3b9">3. KVM CPU创建</a></li>
-<li><a href="#org7d06592">4. VCPU的运行</a></li>
-<li><a href="#org9dcb5d1">5. VCPU的调度</a></li>
+<li><a href="#orgaf3cf8e">1. 虚拟机的创建</a></li>
+<li><a href="#org8d73ffe">2. QEMU CPU创建</a></li>
+<li><a href="#orgd711611">3. KVM CPU创建</a></li>
+<li><a href="#org7fd4616">4. VCPU的运行</a></li>
+<li><a href="#org2a8ddad">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -51,15 +51,11 @@
 </p>
 
 <p>
-本文的硬件平台是AMD Ryzen 7 4800U。
-</p>
-
-<p>
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-org0498ccc" class="outline-2">
-<h2 id="org0498ccc"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-orgaf3cf8e" class="outline-2">
+<h2 id="orgaf3cf8e"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -351,8 +347,8 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org6de64dd" class="outline-2">
-<h2 id="org6de64dd"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org8d73ffe" class="outline-2">
+<h2 id="org8d73ffe"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
@@ -1018,25 +1014,50 @@ type_initialize里有如下代码：
 </p>
 
 <p>
-回到x86_cpu_new继续分析
+回到x86_cpu_new继续分析，随后调用了object_property_set_uint来设置cpu的apic-id属性为刚生成的apic_id。
+</p>
+
+<p>
+现在详细分析object_property_set_uint函数，按照上面说的它的作用，对它的分析从两个方面来进行，一是apic-id这个属性的设置流程，二是对这个设的值本身进行的操作。
+</p>
+
+<p>
+先看第一个方面，有一个下面调用的流程：
+</p>
+<pre class="example">
+x86_cpu_new-&gt;object_property_set_uint-&gt;object_property_set_qobject-&gt;object_property_set
+</pre>
+
+
+<p>
+最后的object_property_set里面有下面的代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">prop-&gt;set(obj, v, name, prop-&gt;opaque, errp);
+</pre>
+</div>
+
+<p>
+所谓第一个方面，就是研究上面的set函数是怎么被设置，进而在这里可以调用起来。x86架构有个Property数组叫x86_cpu_properties，里面定义了所有X86 cpu可能有的Property，针对apic-id属性使用DEFINE_PROP_UINT32宏定义一个类型为Property数组元素：
 </p>
 </div>
 </div>
-<div id="outline-container-org8a1e3b9" class="outline-2">
-<h2 id="org8a1e3b9"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+
+<div id="outline-container-orgd711611" class="outline-2">
+<h2 id="orgd711611"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-org7d06592" class="outline-2">
-<h2 id="org7d06592"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<div id="outline-container-org7fd4616" class="outline-2">
+<h2 id="org7fd4616"><span class="section-number-2">4.</span> VCPU的运行</h2>
 </div>
 
-<div id="outline-container-org9dcb5d1" class="outline-2">
-<h2 id="org9dcb5d1"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org2a8ddad" class="outline-2">
+<h2 id="org2a8ddad"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-12-28 Thu 12:36</p>
+<p class="date">Created: 2024-01-04 Thu 23:30</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
