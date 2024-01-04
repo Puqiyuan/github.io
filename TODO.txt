@@ -34,3 +34,4 @@ blocking_notifier_call_chain
    18，radix tree在内核中的原理及使用。
    19，compund page的原理与代码。
    20，研究vhost/net.c。
+   21，build_sched_domains，numa架构的cpu拓扑关系构建。
