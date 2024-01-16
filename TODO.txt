@@ -35,3 +35,4 @@ blocking_notifier_call_chain
    19，compund page的原理与代码。
    20，研究vhost/net.c。
    21，build_sched_domains，numa架构的cpu拓扑关系构建。
+   22，linux内核的mempool机制。
