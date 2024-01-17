@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-01-06 Sat 16:27 -->
+<!-- 2024-01-08 Mon 22:22 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orga120a1b">1. 虚拟机的创建</a></li>
-<li><a href="#org72bf381">2. QEMU CPU创建</a></li>
-<li><a href="#org66425b7">3. KVM CPU创建</a></li>
-<li><a href="#orgba5a182">4. VCPU的运行</a></li>
-<li><a href="#org0bfe6fe">5. VCPU的调度</a></li>
+<li><a href="#org29b834d">1. 虚拟机的创建</a></li>
+<li><a href="#orgd35dbea">2. QEMU CPU创建</a></li>
+<li><a href="#orgb8b5928">3. KVM CPU创建</a></li>
+<li><a href="#orga0ed8d3">4. VCPU的运行</a></li>
+<li><a href="#org5fca17b">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -54,8 +54,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-orga120a1b" class="outline-2">
-<h2 id="orga120a1b"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-org29b834d" class="outline-2">
+<h2 id="org29b834d"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -347,8 +347,8 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-org72bf381" class="outline-2">
-<h2 id="org72bf381"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-orgd35dbea" class="outline-2">
+<h2 id="orgd35dbea"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
@@ -1036,7 +1036,7 @@ x86_cpu_new-&gt;object_property_set_uint-&gt;object_property_set_qobject-&gt;obj
 <pre class="src src-c">...
 ObjectProperty *prop = object_property_find_err(obj, name, errp);
 prop-&gt;set(obj, v, name, prop-&gt;opaque, errp);
-...l
+...
 </pre>
 </div>
 
@@ -1177,24 +1177,77 @@ main-&gt;qemu_init-&gt;qemu_create_machine-&gt;select_machine-&gt;object_class_g
 <p>
 这里的info就是之前定义好的qdev_prop_uint32，其是有set函数的，所以field_prop_setter返回的是field_prop_set函数，也就是说在object_class_property_add里给到prop-&gt;set的就是field_prop_set函数，另外要注意的是prop-&gt;opaque其实就是qdev_prop_uint32，这个在后面调用field_prop_set时会使用到这个指针。object_class_property_add里是真正申请一个ObjectProperty结构体的地方，并且插入的数据结构是properties这个结构体。
 </p>
+
+<p>
+前面分析了设置属性值的回调函数是在什么地方初始化以及怎么调用起来。接下来的就是要关注要设置的值本身，关于这点又可以分为两个小的方面，一是将值设置到什么地方，二是这个值本身是怎么构造的。
+</p>
+
+<p>
+下面先看第一个小的方面，要把属性值设置到什么地方：
+</p>
+<pre class="example">
+x86_cpu_new-&gt;object_property_set_uint-&gt;object_property_set_qobject-&gt;object_property_set-&gt;field_prop_set(prop-&gt;set)-&gt;set_uint32(prop-&gt;info-&gt;set)-&gt;object_field_prop_ptr
+</pre>
+
+
+<p>
+上面括号中的两个回调此处就不再赘述了，这正是前面第一个方面要解决的问题。
+</p>
+
+<p>
+在object_field_prop_ptr函数中有：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">void</span> *<span style="color: #93E0E3;">object_field_prop_ptr</span>(<span style="color: #7CB8BB;">Object</span> *<span style="color: #DFAF8F;">obj</span>, <span style="color: #7CB8BB;">Property</span> *<span style="color: #DFAF8F;">prop</span>)
+{
+    <span style="color: #7CB8BB;">void</span> *<span style="color: #DFAF8F;">ptr</span> = obj;
+    ptr += prop-&gt;offset;
+    <span style="color: #F0DFAF; font-weight: bold;">return</span> ptr;
+}
+</pre>
+</div>
+<p>
+分析上面几行代码，首先obj是靠前的父函数传进来的cpu这个Object，前面介绍过它来自object_new，
+根据前面的分析，这个cpu obj其大小其实就是父object的大小，类型为TYPE_X86_CPU，所以上面的
+object_field_prop_ptr的obj参数，其类型其实就是X86CPU，注意qemu代码里没有看到直接的X86CPU的
+定义，而是通过如下的宏定义了X86CPU类型：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">OBJECT_DECLARE_CPU_TYPE</span>(X86CPU, X86CPUClass, X86_CPU)
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">OBJECT_DECLARE_CPU_TYPE</span>(<span style="color: #DFAF8F;">CpuInstanceType</span>, <span style="color: #DFAF8F;">CpuClassType</span>, <span style="color: #DFAF8F;">CPU_MODULE_OBJ_NAME</span>) \
+    <span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">ArchCPU</span> <span style="color: #7CB8BB;">CpuInstanceType</span>; \
+    OBJECT_DECLARE_TYPE(ArchCPU, CpuClassType, CPU_MODULE_OBJ_NAME);
+</pre>
+</div>
+<p>
+可以知道X86CPU实际是ArchCPU的另一个名字，而ArchCPU是每个架构都会定义的，比如i386架构的ArchCPU就是定义在target/i386/cpu.h，里面就会有apic_id成员，在前面定义apic-id属性时，offset就设置为X86CPU里apic_id成员的偏移，所以前面object_field_prop_ptr函数最后返回的指针实际就指向了apic_id成员的地址，换言之设置的属性值就会设置到这个成员上。
+</p>
+
+<p>
+关于要设置的值本身怎么构造的，就不细节分析了，最终设置上apic_id的值就是object_property_set_uint的第三个参数value，只是这个值要经过QNum以及Visitor包装，但这些包装不重要，只是抽象出一套统一的访问方法，最终的值肯定是value。
+</p>
 </div>
 </div>
 
-<div id="outline-container-org66425b7" class="outline-2">
-<h2 id="org66425b7"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+
+<div id="outline-container-orgb8b5928" class="outline-2">
+<h2 id="orgb8b5928"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-orgba5a182" class="outline-2">
-<h2 id="orgba5a182"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<div id="outline-container-orga0ed8d3" class="outline-2">
+<h2 id="orga0ed8d3"><span class="section-number-2">4.</span> VCPU的运行</h2>
 </div>
 
-<div id="outline-container-org0bfe6fe" class="outline-2">
-<h2 id="org0bfe6fe"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org5fca17b" class="outline-2">
+<h2 id="org5fca17b"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-01-06 Sat 16:27</p>
+<p class="date">Created: 2024-01-08 Mon 22:22</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
