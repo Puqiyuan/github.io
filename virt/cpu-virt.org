@@ -840,10 +840,7 @@ void *object_field_prop_ptr(Object *obj, Property *prop)
     return ptr;
 }
 #+end_src
-分析上面几行代码，首先obj是靠前的父函数传进来的cpu这个Object，前面介绍过它来自object_new，
-根据前面的分析，这个cpu obj其大小其实就是父object的大小，类型为TYPE_X86_CPU，所以上面的
-object_field_prop_ptr的obj参数，其类型其实就是X86CPU，注意qemu代码里没有看到直接的X86CPU的
-定义，而是通过如下的宏定义了X86CPU类型：
+分析上面几行代码，首先obj是靠前的父函数传进来的cpu这个Object，前面介绍过它来自object_new，根据前面的分析，这个cpu obj其大小其实就是父object的大小，类型为TYPE_X86_CPU，所以上面的object_field_prop_ptr的obj参数，其类型其实就是X86CPU，注意qemu代码里没有看到直接的X86CPU的定义，而是通过如下的宏定义了X86CPU类型：
 #+begin_src c
 OBJECT_DECLARE_CPU_TYPE(X86CPU, X86CPUClass, X86_CPU)
 #+end_src
@@ -855,6 +852,39 @@ OBJECT_DECLARE_CPU_TYPE(X86CPU, X86CPUClass, X86_CPU)
 可以知道X86CPU实际是ArchCPU的另一个名字，而ArchCPU是每个架构都会定义的，比如i386架构的ArchCPU就是定义在target/i386/cpu.h，里面就会有apic_id成员，在前面定义apic-id属性时，offset就设置为X86CPU里apic_id成员的偏移，所以前面object_field_prop_ptr函数最后返回的指针实际就指向了apic_id成员的地址，换言之设置的属性值就会设置到这个成员上。
 
 关于要设置的值本身怎么构造的，就不细节分析了，最终设置上apic_id的值就是object_property_set_uint的第三个参数value，只是这个值要经过QNum以及Visitor包装，但这些包装不重要，只是抽象出一套统一的访问方法，最终的值肯定是value。
+
+接下来可以介绍x86_cpu_new调用的第二个重要的函数了：qdev_realize。
+
+qdev_realize里最重要的代码就是如下：
+#+begin_src c
+  return object_property_set_bool(OBJECT(dev), "realized", true, errp);
+#+end_src
+
+object_property_set_bool一路向下来到object_property_set函数：
+#+begin_src c
+  prop->set(obj, v, name, prop->opaque, errp);
+#+end_src
+set函数是什么，这是前面的节一直在解释的，这里就不赘述了，其实就是property_set_bool函数，而property_set_bool里又有：
+#+begin_src c
+  prop->set(obj, value, errp);
+#+end_src
+这里的set又是函数：device_set_realized，关于这两个函数如何设置，参考device_class_init里的代码：
+#+begin_src c
+  object_class_property_add_bool(class, "realized",
+                                 device_get_realized, device_set_realized);
+#+end_src
+此处不再详细描述，前文都有介绍。
+
+device_set_realized里最重要的代码就是下面这一行回调：
+#+begin_src c
+if (dc->realize) {
+            dc->realize(dev, &local_err);
+            if (local_err != NULL) {
+                goto fail;
+            }
+        }
+#+end_src
+realize又是哪个函数呢？它是通过x86_cpu_common_class_init->device_class_set_parent_realize设置为x86_cpu_realizefn，具体细节前文也有描述，此处也不再详细介绍，直接分析x86_cpu_realizefn：
 
 
 * KVM CPU创建

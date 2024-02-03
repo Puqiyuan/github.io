@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-01-08 Mon 22:22 -->
+<!-- 2024-02-03 Sat 20:20 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPU计算虚拟化：KVM与QEMU</title>
@@ -38,11 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org29b834d">1. 虚拟机的创建</a></li>
-<li><a href="#orgd35dbea">2. QEMU CPU创建</a></li>
-<li><a href="#orgb8b5928">3. KVM CPU创建</a></li>
-<li><a href="#orga0ed8d3">4. VCPU的运行</a></li>
-<li><a href="#org5fca17b">5. VCPU的调度</a></li>
+<li><a href="#orgaaef6d2">1. 虚拟机的创建</a></li>
+<li><a href="#org57bb76e">2. QEMU CPU创建</a></li>
+<li><a href="#orgeeafe6f">3. KVM CPU创建</a></li>
+<li><a href="#orgd09f9ec">4. VCPU的运行</a></li>
+<li><a href="#org76ec4cc">5. VCPU的调度</a></li>
 </ul>
 </div>
 </div>
@@ -54,8 +54,8 @@
 本文分五个方面来分析CPU的虚拟化，依次展开。
 </p>
 
-<div id="outline-container-org29b834d" class="outline-2">
-<h2 id="org29b834d"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
+<div id="outline-container-orgaaef6d2" class="outline-2">
+<h2 id="orgaaef6d2"><span class="section-number-2">1.</span> 虚拟机的创建</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 QEMU在初始化阶段，通过如下调用链到kvm_init函数：
@@ -347,8 +347,8 @@ file = anon_inode_getfile(<span style="color: #CC9393;">"kvm-vm"</span>, &amp;kv
 </p>
 </div>
 </div>
-<div id="outline-container-orgd35dbea" class="outline-2">
-<h2 id="orgd35dbea"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
+<div id="outline-container-org57bb76e" class="outline-2">
+<h2 id="org57bb76e"><span class="section-number-2">2.</span> QEMU CPU创建</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 QEMU里虚拟CPU的创建主要是通过kvm_start_vcpu_thread，新起一个线程去创建的，并且这个线程就代表了VCPU去运行。以下是kvm_start_vcpu_thread被如下调用链调用：
@@ -1207,10 +1207,7 @@ x86_cpu_new-&gt;object_property_set_uint-&gt;object_property_set_qobject-&gt;obj
 </pre>
 </div>
 <p>
-分析上面几行代码，首先obj是靠前的父函数传进来的cpu这个Object，前面介绍过它来自object_new，
-根据前面的分析，这个cpu obj其大小其实就是父object的大小，类型为TYPE_X86_CPU，所以上面的
-object_field_prop_ptr的obj参数，其类型其实就是X86CPU，注意qemu代码里没有看到直接的X86CPU的
-定义，而是通过如下的宏定义了X86CPU类型：
+分析上面几行代码，首先obj是靠前的父函数传进来的cpu这个Object，前面介绍过它来自object_new，根据前面的分析，这个cpu obj其大小其实就是父object的大小，类型为TYPE_X86_CPU，所以上面的object_field_prop_ptr的obj参数，其类型其实就是X86CPU，注意qemu代码里没有看到直接的X86CPU的定义，而是通过如下的宏定义了X86CPU类型：
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #93E0E3;">OBJECT_DECLARE_CPU_TYPE</span>(X86CPU, X86CPUClass, X86_CPU)
@@ -1229,25 +1226,79 @@ object_field_prop_ptr的obj参数，其类型其实就是X86CPU，注意qemu代�
 <p>
 关于要设置的值本身怎么构造的，就不细节分析了，最终设置上apic_id的值就是object_property_set_uint的第三个参数value，只是这个值要经过QNum以及Visitor包装，但这些包装不重要，只是抽象出一套统一的访问方法，最终的值肯定是value。
 </p>
+
+<p>
+接下来可以介绍x86_cpu_new调用的第二个重要的函数了：qdev_realize。
+</p>
+
+<p>
+qdev_realize里最重要的代码就是如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">return</span> object_property_set_bool(OBJECT(dev), <span style="color: #CC9393;">"realized"</span>, <span style="color: #BFEBBF;">true</span>, errp);
+</pre>
+</div>
+
+<p>
+object_property_set_bool一路向下来到object_property_set函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">prop-&gt;set(obj, v, name, prop-&gt;opaque, errp);
+</pre>
+</div>
+<p>
+set函数是什么，这是前面的节一直在解释的，这里就不赘述了，其实就是property_set_bool函数，而property_set_bool里又有：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">prop-&gt;set(obj, value, errp);
+</pre>
+</div>
+<p>
+这里的set又是函数：device_set_realized，关于这两个函数如何设置，参考device_class_init里的代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">object_class_property_add_bool</span>(class, <span style="color: #CC9393;">"realized"</span>,
+                               device_get_realized, device_set_realized);
+</pre>
+</div>
+<p>
+此处不再详细描述，前文都有介绍。
+</p>
+
+<p>
+device_set_realized里最重要的代码就是下面这一行回调：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (dc-&gt;realize) {
+            dc-&gt;realize(dev, &amp;local_err);
+            <span style="color: #F0DFAF; font-weight: bold;">if</span> (local_err != <span style="color: #BFEBBF;">NULL</span>) {
+                <span style="color: #F0DFAF; font-weight: bold;">goto</span> <span style="color: #BFEBBF;">fail</span>;
+            }
+        }
+</pre>
+</div>
+<p>
+realize又是哪个函数呢？它是通过x86_cpu_common_class_init-&gt;device_class_set_parent_realize设置为x86_cpu_realizefn，具体细节前文也有描述，此处也不再详细介绍，直接分析x86_cpu_realizefn：
+</p>
 </div>
 </div>
 
 
-<div id="outline-container-orgb8b5928" class="outline-2">
-<h2 id="orgb8b5928"><span class="section-number-2">3.</span> KVM CPU创建</h2>
+<div id="outline-container-orgeeafe6f" class="outline-2">
+<h2 id="orgeeafe6f"><span class="section-number-2">3.</span> KVM CPU创建</h2>
 </div>
 
-<div id="outline-container-orga0ed8d3" class="outline-2">
-<h2 id="orga0ed8d3"><span class="section-number-2">4.</span> VCPU的运行</h2>
+<div id="outline-container-orgd09f9ec" class="outline-2">
+<h2 id="orgd09f9ec"><span class="section-number-2">4.</span> VCPU的运行</h2>
 </div>
 
-<div id="outline-container-org5fca17b" class="outline-2">
-<h2 id="org5fca17b"><span class="section-number-2">5.</span> VCPU的调度</h2>
+<div id="outline-container-org76ec4cc" class="outline-2">
+<h2 id="org76ec4cc"><span class="section-number-2">5.</span> VCPU的调度</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-01-08 Mon 22:22</p>
+<p class="date">Created: 2024-02-03 Sat 20:20</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
