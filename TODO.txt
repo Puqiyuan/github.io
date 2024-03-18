@@ -37,3 +37,4 @@ blocking_notifier_call_chain
    21，build_sched_domains，numa架构的cpu拓扑关系构建。
    22，linux内核的mempool机制。
    23，load average(top命令)的计算来由。
+   24，static call的原理。
