@@ -1,0 +1,2 @@
+2.png：重点关注起始的三个栈ret_from_fork->kthread->worker_thread->process_one_work
+	的来龙去脉．
