@@ -1,0 +1,11 @@
+0, buddy system获取一个空闲页面：
+alloc_pages->alloc_pages_noprof->alloc_pages_mpol_noprof->__alloc_pages_noprof->get_page_from_freelist->rmqueue->rmqueue_pcplist->__rmqueue_pcplist->rmqueue_bulk->__rmqueue->__rmqueue_smallest->list_first_entry_or_null
+
+1, 研究memblock释放页面到buddy system的流程：
+memblock_free_late->memblock_free_pages->__free_pages_core->__free_pages_ok->free_one_page->split_large_buddy->__free_one_page->__add_to_free_list:
+list_add_tail(&page->buddy_list, &area->free_list[migratetype]);
+
+2, vmemmap_base的值由kaslr.c支持地址随机化进行初始：
+.base   = &vmemmap_base,
+*kaslr_regions[i].base = vaddr;
+研究kaslr地址随机化主题。
