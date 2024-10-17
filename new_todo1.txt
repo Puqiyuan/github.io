@@ -10,4 +10,4 @@ list_add_tail(&page->buddy_list, &area->free_list[migratetype]);
 *kaslr_regions[i].base = vaddr;
 研究kaslr地址随机化主题。
 
-3, mem section的概念与代码研究。一(多)个mem section的添加在函数sparse_add_section->sparse_index_init以及sparse_add_section->sparse_index_init->sparse_index_alloc中完成。其一个主要目的就是填充并初始化mem_sction全局变量。
+3, mem section的概念与代码研究。一(多)个mem section的添加在函数sparse_add_section->sparse_index_init以及sparse_add_section->sparse_index_init->sparse_index_alloc中完成。其一个主要目的就是填充并初始化mem_sction全局变量，而mm_section本身的空间在memblocks_present中分配。
