@@ -11,3 +11,11 @@ list_add_tail(&page->buddy_list, &area->free_list[migratetype]);
 研究kaslr地址随机化主题。
 
 3, mem section的概念与代码研究。一(多)个mem section的添加在函数sparse_add_section->sparse_index_init以及sparse_add_section->sparse_index_init->sparse_index_alloc中完成。其一个主要目的就是填充并初始化mem_sction全局变量，而mm_section本身的空间在memblocks_present中分配，包括设置与获取pageblock的migratetype函数：get_pageblock_migratetype，set_pageblock_migratetype。
+
+4, 关于free page的报告机制，配置为CONFIG_PAGE_REPORTING。涉及page结构体的PG_reported标志位，操作这个标志位的包括__ClearPageReported和__SetPageReported小接口，这些类似的小接口由宏：
+__PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
+定义。
+
+5, 关于ALLOC_CMA，CMA内存分配的主题。
+
+6, __alloc_pages_noprof->__memcg_kmem_charge_page->obj_cgroup_charge_pages->try_charge_memcg，研究memcg主题。
