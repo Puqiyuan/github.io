@@ -97,3 +97,43 @@ static __always_inline int preempt_count(void)
 #define NMI_MASK	(__IRQ_MASK(NMI_BITS)     << NMI_SHIFT)
 #+end_src
 
+所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。
+
+__GFP_THISNODE标志主要作用是表明从指定的节点上分配内存，禁止分配回退或使用其它策略，如果请求的节点没有足够的内存资源，那么分配将会失败，这种情况自然不需要考虑NUMA内存分配策略了。除了这个标志还有如下的一些移动和放置策略：
+
+- __GFP_MOVABLE \\
+  表示页面是可移动的。这个标志通常用于那些可以在内存整理（compaction）过程中通过页面迁移移动的页面，或是可以被回收的页面。在内存管理中，标记为__GFP_MOVABLE的页面将被放置在特定的pageblocks中，这些pageblocks一般只包含可移动页面，以尽量减少外部碎片的问题。
+
+- __GFP_RECLAIMABLE \\
+  主要用于slab分配。指定了SLAB_RECLAIM_ACCOUNT的slab分配使用该标志，这些页面可以通过shrinker机制回收。这使得slab分配的内存可以在系统需要时被回收，以便释放更多的内存资源。
+
+- __GFP_WRITE \\
+  表示调用者打算修改页面内容，即页面将被“写脏”（dirty）。内核在分配这些页面时，会尽量将这些页面在本地节点之间进行分散分配，以避免所有脏页集中在同一个内存区域或节点，帮助实现公平的内存分配策略（fair zone allocation policy）。
+
+- __GFP_HARDWALL \\
+  强制执行cpuset的内存分配策略。如果系统中存在cpuset配置（用于控制和隔离不同任务的内存使用），这个标志确保页面分配遵循cpuset的内存限制和隔离策略。
+
+- __GFP_ACCOUNT \\
+  该标志表示分配的内存将被记账到kmemcg（Kernel Memory Control Group），即为分配的内存计入内核内存控制组。它用于限制和跟踪控制组（cgroup）中分配的内核内存资源。
+
+当既不在中断上下文gfp参数也没有设置__GFP_THISNODE时，就会调用get_task_policy函数：
+#+begin_src c
+struct mempolicy *get_task_policy(struct task_struct *p)
+{
+	struct mempolicy *pol = p->mempolicy;
+	int node;
+
+	if (pol)
+		return pol;
+
+	node = numa_node_id();
+	if (node != NUMA_NO_NODE) {
+		pol = &preferred_node_policy[node];
+		/* preferred_node_policy is not initialised early in boot */
+		if (pol->mode)
+			return pol;
+	}
+
+	return &default_policy;
+}
+#+end_src
