@@ -426,4 +426,4 @@ static void __init __free_pages_memory(unsigned long start, unsigned long end)
 	}
 }
 #+end_src
-可以看到逻辑比较简单，主要是确定order，然后作为参数调用memblock_free_pages，order的确定分两种情况，主要是__ffs无法处理参数为0的情况，__ffs的作用是找寻参数第一个设置为1的bit位置．后面的while循环，就是针对order较大时，要减小order的值，2的order次方代表多少个页面，所以发现自start起始加上2的order次方大于本次end位置时，证明order太大，需要减小．memblock_free_pages里会调用__free_pages_core释放到伙伴系统，关于这个函数的分析留到伙伴系统了，参见[[../buddy.html][这篇文章]]．
+可以看到逻辑比较简单，主要是确定order，然后作为参数调用memblock_free_pages，order的确定分两种情况，主要是__ffs无法处理参数为0的情况，__ffs的作用是找寻参数第一个设置为1的bit位置．后面的while循环，就是针对order较大时，要减小order的值，2的order次方代表多少个页面，所以发现自start起始加上2的order次方大于本次end位置时，证明order太大，需要减小．memblock_free_pages里会调用__free_pages_core释放到伙伴系统，关于这个函数的分析留到伙伴系统了，参见[[../free_page/free_page.html][这篇文章]].

@@ -1,0 +1,99 @@
+#+TITLE: 物理页面分配之快速路径
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
+
+* alloc_pages_noprof
+*原型：*
+#+begin_src c
+struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
+#+end_src
+*作用：*
+
+分配2^order个连续页面，第一个物理页面自然对齐，所谓自然对齐，举个例子假如order为3，那么就会对齐到2^3*PAGE_SIZE的字节处。当在进程上下文时，会遵循NUMA分配策略。分配失败时返回NULL。
+
+*详细分析：*
+
+参数gfp的类型是gfp_t：
+#+begin_src c
+typedef unsigned int __bitwise gfp_t;
+#+end_src
+__bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和int类型的量进行运算和直接赋值（除非进行了类型强制转换），否则开启了Wall的编译选项时，编译器会报警告，它是编译器支持的一
+个attribute。GFP标志主要用来指明内存应该如何分配，比如典型的由GFP推出内存应该在哪个zone中去分配。GFP这个缩写其实是get_free_pages，__开头这样的GFP标志比较底层，一般的用户应该使用GFP_KERNEL这样的由__开头的标志形成的组合。
+
+该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，定义如下：
+#+begin_src c
+struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
+{
+	struct mempolicy *pol = &default_policy;
+
+	/*
+	 * No reference counting needed for current->mempolicy
+	 * nor system default_policy
+	 */
+	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
+		pol = get_task_policy(current);
+
+	return alloc_pages_mpol_noprof(gfp, order, pol, NO_INTERLEAVE_INDEX,
+				       numa_node_id());
+}
+#+end_src
+在不处于中断上下文并且传入的GFP标志位没有__GFP_THISNODE时，内存的NUMA分配策略才会生效。那么如何判定是不是在中断上下文呢，__GFP_THISNODE究竟是什么意思呢，还有其它的NUMA策略标志吗？
+
+判断是否在中断上下文中使用in_interrupt：
+#+begin_src c
+#define in_interrupt()		(irq_count())
+#+end_src
+在没有定义CONFIG_PREEMPT_RT的情况下，irq_count被如下定义：
+#+begin_src c
+# define irq_count()		(preempt_count() & (NMI_MASK | HARDIRQ_MASK | SOFTIRQ_MASK))
+#+end_src
+
+preempt_count在通用头文件include/asm-generic/preempt.h与架构头文件arch/x86/include/asm/preempt.h中均有定义，但是一般是架构头文件优先使用，这种优先特性体现在Makefile中对头文件使用-I选项包含头文件的先后上，preempt_count在上述两个头文件中均有实现，但是-I选项只要找到第一个有实现的头文件即停止搜索：
+#+begin_src makefile
+LINUXINCLUDE    := \
+		-I$(srctree)/arch/$(SRCARCH)/include \
+		-I$(objtree)/arch/$(SRCARCH)/include/generated \
+		$(if $(building_out_of_srctree),-I$(srctree)/include) \
+		-I$(objtree)/include \
+		$(USERINCLUDE)
+export KBUILD_CPPFLAGS NOSTDINC_FLAGS LINUXINCLUDE OBJCOPYFLAGS KBUILD_LDFLAGS
+#+end_src
+
+X86架构下，preempt_count被如下定义：
+#+begin_src c
+static __always_inline int preempt_count(void)
+{
+	return raw_cpu_read_4(pcpu_hot.preempt_count) & ~PREEMPT_NEED_RESCHED;
+}
+#+end_src
+也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
+#+begin_example
+         PREEMPT_MASK:	0x000000ff
+         SOFTIRQ_MASK:	0x0000ff00
+         HARDIRQ_MASK:	0x000f0000
+             NMI_MASK:	0x00f00000
+ PREEMPT_NEED_RESCHED:	0x80000000
+#+end_example
+也就是说最低8个bit（最低1个字节）用来计数抢占，低第二个字节用来表示软中断的计数，依次类推，那么NMI_MASK、HARDIRQ_MASK以及SOFTIRQ_MASK等各种MASK宏用来取出对应字段计数的，就可以按如下代码定出：
+#+begin_src c
+#define PREEMPT_BITS	8
+#define SOFTIRQ_BITS	8
+#define HARDIRQ_BITS	4
+#define NMI_BITS	4
+
+#define PREEMPT_SHIFT	0
+#define SOFTIRQ_SHIFT	(PREEMPT_SHIFT + PREEMPT_BITS)
+#define HARDIRQ_SHIFT	(SOFTIRQ_SHIFT + SOFTIRQ_BITS)
+#define NMI_SHIFT	(HARDIRQ_SHIFT + HARDIRQ_BITS)
+
+#define __IRQ_MASK(x)	((1UL << (x))-1)
+
+#define PREEMPT_MASK	(__IRQ_MASK(PREEMPT_BITS) << PREEMPT_SHIFT)
+#define SOFTIRQ_MASK	(__IRQ_MASK(SOFTIRQ_BITS) << SOFTIRQ_SHIFT)
+#define HARDIRQ_MASK	(__IRQ_MASK(HARDIRQ_BITS) << HARDIRQ_SHIFT)
+#define NMI_MASK	(__IRQ_MASK(NMI_BITS)     << NMI_SHIFT)
+#+end_src
+

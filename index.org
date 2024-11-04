@@ -18,6 +18,7 @@
 * mm
 - [[./kernel/mm/phy-mem.html][物理内存信息获取及初始化]].
 - [[./kernel/mm/memblock/memblock.html][memblock代码分析]].
-- [[./kernel/mm/buddy.html][伙伴系统原理及代码]]
+- [[./kernel/mm/free_page/free_page.html][页面释放]].
+- [[./kernel/mm/fast_alloc_page/fast_alloc_page.html][物理页面分配之快速路径]].
 * debug
 - [[./kernel/debug/kernel-bootparam.html][内核启动参数之memblock]].

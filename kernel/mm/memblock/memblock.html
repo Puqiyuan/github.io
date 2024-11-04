@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2023-11-11 Sat 23:30 -->
+<!-- 2024-11-02 Sat 21:10 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>memblock代码分析</title>
@@ -38,10 +38,10 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3c72b47">1. 结构体介绍</a></li>
-<li><a href="#orgb42d5d5">2. 添加region</a></li>
-<li><a href="#org1a7d90d">3. 分配内存</a></li>
-<li><a href="#orgdf169e3">4. 交接给伙伴系统</a></li>
+<li><a href="#orgd034543">1. 结构体介绍</a></li>
+<li><a href="#orgb16d7ec">2. 添加region</a></li>
+<li><a href="#orgf0aaee2">3. 分配内存</a></li>
+<li><a href="#org830a1da">4. 交接给伙伴系统</a></li>
 </ul>
 </div>
 </div>
@@ -49,8 +49,8 @@
 在伙伴系统还未就绪前，通过memblock提供一个简单的内存分配功能，本文的分析对象就是memblock．
 </p>
 
-<div id="outline-container-org3c72b47" class="outline-2">
-<h2 id="org3c72b47"><span class="section-number-2">1.</span> 结构体介绍</h2>
+<div id="outline-container-orgd034543" class="outline-2">
+<h2 id="orgd034543"><span class="section-number-2">1.</span> 结构体介绍</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 先引入几个结构体，这些结构体是由上到下的关系．
@@ -153,8 +153,8 @@ __initdata_memblock修饰符号根据是否定义了CONFIG_ARCH_KEEP_MEMBLOCK，
 </p>
 </div>
 </div>
-<div id="outline-container-orgb42d5d5" class="outline-2">
-<h2 id="orgb42d5d5"><span class="section-number-2">2.</span> 添加region</h2>
+<div id="outline-container-orgb16d7ec" class="outline-2">
+<h2 id="orgb16d7ec"><span class="section-number-2">2.</span> 添加region</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 以memblock_add函数为例，来分析一个region添加到memblock.memory.regions的过程：
@@ -342,8 +342,8 @@ base      end   base      end         base      end
 </p>
 </div>
 </div>
-<div id="outline-container-org1a7d90d" class="outline-2">
-<h2 id="org1a7d90d"><span class="section-number-2">3.</span> 分配内存</h2>
+<div id="outline-container-orgf0aaee2" class="outline-2">
+<h2 id="orgf0aaee2"><span class="section-number-2">3.</span> 分配内存</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 前面介绍了memblock相关的初始化，主要是添加region，这些region归根结底就是一个内存范围，这些范围划定了起始地址，大小以及哪些范围不能用（memblock.reversed）．本节将介绍使用memblock分配内存的一个主要接口memblock_alloc．
@@ -563,8 +563,8 @@ r_end = idx_b &lt; type_b-&gt;cnt ?
 </p>
 </div>
 </div>
-<div id="outline-container-orgdf169e3" class="outline-2">
-<h2 id="orgdf169e3"><span class="section-number-2">4.</span> 交接给伙伴系统</h2>
+<div id="outline-container-org830a1da" class="outline-2">
+<h2 id="org830a1da"><span class="section-number-2">4.</span> 交接给伙伴系统</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 在本文一开始提到过，memblock主要是提供给启动早期伙伴系统没有准备就绪时，内核的一些流程需要内存．其初始化以x86 e820为例，主要是
@@ -615,14 +615,14 @@ memblock_free_all主要是调用free_low_memory_core_early，后者主要的逻�
 </pre>
 </div>
 <p>
-可以看到逻辑比较简单，主要是确定order，然后作为参数调用memblock_free_pages，order的确定分两种情况，主要是__ffs无法处理参数为0的情况，__ffs的作用是找寻参数第一个设置为1的bit位置．后面的while循环，就是针对order较大时，要减小order的值，2的order次方代表多少个页面，所以发现自start起始加上2的order次方大于本次end位置时，证明order太大，需要减小．memblock_free_pages里会调用__free_pages_core释放到伙伴系统，关于这个函数的分析留到伙伴系统了，参见<a href="../buddy.html">这篇文章</a>．
+可以看到逻辑比较简单，主要是确定order，然后作为参数调用memblock_free_pages，order的确定分两种情况，主要是__ffs无法处理参数为0的情况，__ffs的作用是找寻参数第一个设置为1的bit位置．后面的while循环，就是针对order较大时，要减小order的值，2的order次方代表多少个页面，所以发现自start起始加上2的order次方大于本次end位置时，证明order太大，需要减小．memblock_free_pages里会调用__free_pages_core释放到伙伴系统，关于这个函数的分析留到伙伴系统了，参见<a href="../free_page/free_page.html">这篇文章</a>.
 </p>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2023-11-11 Sat 23:30</p>
+<p class="date">Created: 2024-11-02 Sat 21:10</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
