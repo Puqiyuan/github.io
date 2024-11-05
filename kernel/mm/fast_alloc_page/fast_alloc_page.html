@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-04 Mon 22:24 -->
+<!-- 2024-11-05 Tue 22:32 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,7 +38,7 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb7581bd">1. alloc_pages_noprof</a></li>
+<li><a href="#org109461e">1. alloc_pages_noprof</a></li>
 </ul>
 </div>
 </div>
@@ -46,8 +46,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-orgb7581bd" class="outline-2">
-<h2 id="orgb7581bd"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org109461e" class="outline-2">
+<h2 id="org109461e"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -81,7 +81,7 @@ __bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和
 </p>
 
 <p>
-该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，定义如下：
+该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，alloc_pages_noprof定义如下：
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">alloc_pages_noprof</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>)
@@ -146,7 +146,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org98d8ec2">
+<pre class="example" id="orgf6818a9">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -177,8 +177,11 @@ PREEMPT_NEED_RESCHED:	0x80000000
 </div>
 
 <p>
-所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。
+所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
+<pre class="example" id="org374ce0a">
+__irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
+</pre>
 
 <p>
 __GFP_THISNODE标志主要作用是表明从指定的节点上分配内存，禁止分配回退或使用其它策略，如果请求的节点没有足够的内存资源，那么分配将会失败，这种情况自然不需要考虑NUMA内存分配策略了。除了这个标志还有如下的一些移动和放置策略：
@@ -225,12 +228,113 @@ __GFP_THISNODE标志主要作用是表明从指定的节点上分配内存，禁
 }
 </pre>
 </div>
+<p>
+该函数首先获取当前进程的内存分配策略mempolicy，mempolicy可以被关联到一个进程，也可以而关联到一个VMA。对于VMA关联的，优先考虑，然后才是进程关联。根据上面get_task_policy函数的定义，内核有一个默认的mempolicy叫default_policy，其定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> <span style="color: #DFAF8F;">default_policy</span> = {
+        .refcnt = ATOMIC_INIT(1), <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">never free it</span><span style="color: #5F7F5F;"> */</span>
+        .mode = MPOL_LOCAL,
+};
+</pre>
+</div>
+<p>
+MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允许用户指定在特定节点上进行内存分配的优先级和方式适用于不同的进程或VMA（虚拟内存区域）。这些策略可以用于优化多节点系统上的内存访问效率。具体有以下方式：
+</p>
+
+<ul class="org-ul">
+<li>interleave（交错方式）<br>
+内存分配在指定的一组节点上交错进行，如果分配失败则会采用常规的回退策略。对于VMA分配，这种交错策略基于对象的偏移量（或匿名内存的映射偏移量）；对于进程策略，则基于一个进程计数器进行分配。</li>
+
+<li>weighted interleave（加权交错）<br>
+类似于interleave，但允许根据每个节点的权重分配内存。例如，nodeset(0,1)与权重(2,1)表示每在节点0上分配两页内存后，再在节点1上分配一页内存。</li>
+
+<li>bind（绑定）<br>
+只在指定的节点集合上分配内存，不采用回退策略。</li>
+
+<li>preferred（优先）<br>
+首先尝试在指定节点上分配内存，若失败则使用常规回退策略。如果节点设置为NUMA_NO_NODE，则优先在本地CPU上分配内存。通常这类似于默认策略，但在VMA上设置时可以覆盖非默认的进程策略。</li>
+
+<li>preferred many（多节点优先）<br>
+与preferred类似，但允许指定多个优先节点，然后再进行回退。</li>
+
+<li>default（默认）<br>
+优先在本地节点上分配内存，或者在VMA上使用进程策略。这是Linux内核在NUMA系统上一直采用的默认行为。</li>
+</ul>
+
+<p>
+另外，进程策略适用于该进程上下文中的大多数非中断内存分配，中断则不受策略影响，总是尝试在本地CPU上分配内存。VMA策略只适用于该VMA中的内存分配。策略应用于系统的高区内存，而不应用于低
+区和GFP_DMA内存分配。对于共享内存（shmem/tmpfs），策略在所有用户之间共享，即使没有用户映射时也会记住该策略。
+</p>
+
+<p>
+中断不会使用当前进程的内存策略，它们总是优先在本地CPU上分配内存。这种设计是为了在中断处理过程中尽可能减少延迟。
+</p>
+
+<p>
+对于交错策略来说，在进程上下文中，不需要锁定机制，因为进程只会访问自身的状态，因此没有并发冲突。对于VMA的操作，mmap_lock的读锁（down_read）在一定程度上保护了这些操作，以确保内存映射的一致性。
+</p>
+
+<p>
+内存策略mempolicy结构体的释放：内存策略对象通过引用计数来管理生命周期。mpol_put()函数会减少内存策略的引用计数，当引用计数降为零时，该内存策略对象会被释放。这种机制保证了对象只会在不再使用时被释放，避免了内存泄漏。
+</p>
+
+<p>
+内存策略mempolicy结构体的复制：mpol_dup()函数用于分配一个新的内存策略，并将指定的内存策略复制到新的内存空间。新创建的内存策略对象的引用计数被初始化为1，表示当前调用者持有该引用。这允许多个内存策略对象彼此独立，同时保证每个对象的生命周期被正确管理。
+</p>
+
+<p>
+回到get_task_policy函数，如果进程有内存分配策略mempolicy，则返回这个策略。如果进程没有内存策略，那么就会从系统的全局节点策略数组preferrred_node_policy中去获取内存策略，当然在系统启动早期preferred_node_policy里可能是没有数据的，所以需要判断pol-&gt;mode非零，因为preferred_node_policy的定义是static的（被初始化为0）：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> <span style="color: #DFAF8F;">preferred_node_policy</span>[MAX_NUMNODES];
+</pre>
+</div>
+
+<p>
+MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> CONFIG_NODES_SHIFT
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_SHIFT</span>     CONFIG_NODES_SHIFT
+<span style="color: #94BFF3;">#else</span>
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_SHIFT</span>     0
+<span style="color: #94BFF3;">#endif</span>
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">MAX_NUMNODES</span>    (1 &lt;&lt; NODES_SHIFT)
+</pre>
+</div>
+
+<p>
+而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-conf">config NODES_SHIFT
+        int <span style="color: #CC9393;">"Maximum NUMA Nodes (as a power of 2)"</span> if !MAXSMP
+        range 1 10
+        default <span style="color: #CC9393;">"10"</span> if MAXSMP
+        default <span style="color: #CC9393;">"6"</span> if X86_64
+        default <span style="color: #CC9393;">"3"</span>
+        depends on NUMA
+        help
+          Specify the maximum number of NUMA Nodes available on the target
+          system.  Increases memory reserved to accommodate various tables.
+</pre>
+</div>
+
+<p>
+这样在编译构建时会自动生成，比如CONFIG_NODES_SHIFT在自动生成的头文件include/generated/autoconf.h中被定义为10。
+</p>
+
+<p>
+get_task_policy中还使用了numa_node_id函数，
+</p>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-04 Mon 22:24</p>
+<p class="date">Created: 2024-11-05 Tue 22:32</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

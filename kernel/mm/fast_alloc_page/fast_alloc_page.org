@@ -3,6 +3,7 @@
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
+#+OPTIONS: htmlize:nil
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 
 * alloc_pages_noprof
@@ -23,7 +24,7 @@ typedef unsigned int __bitwise gfp_t;
 __bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和int类型的量进行运算和直接赋值（除非进行了类型强制转换），否则开启了Wall的编译选项时，编译器会报警告，它是编译器支持的一
 个attribute。GFP标志主要用来指明内存应该如何分配，比如典型的由GFP推出内存应该在哪个zone中去分配。GFP这个缩写其实是get_free_pages，__开头这样的GFP标志比较底层，一般的用户应该使用GFP_KERNEL这样的由__开头的标志形成的组合。
 
-该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，定义如下：
+该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，alloc_pages_noprof定义如下：
 #+begin_src c
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 {
@@ -97,7 +98,10 @@ static __always_inline int preempt_count(void)
 #define NMI_MASK	(__IRQ_MASK(NMI_BITS)     << NMI_SHIFT)
 #+end_src
 
-所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。
+所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
+#+begin_example
+__irq_enter->preempt_count_add->__preempt_count_add
+#+end_example
 
 __GFP_THISNODE标志主要作用是表明从指定的节点上分配内存，禁止分配回退或使用其它策略，如果请求的节点没有足够的内存资源，那么分配将会失败，这种情况自然不需要考虑NUMA内存分配策略了。除了这个标志还有如下的一些移动和放置策略：
 
@@ -137,3 +141,74 @@ struct mempolicy *get_task_policy(struct task_struct *p)
 	return &default_policy;
 }
 #+end_src
+该函数首先获取当前进程的内存分配策略mempolicy，mempolicy可以被关联到一个进程，也可以而关联到一个VMA。对于VMA关联的，优先考虑，然后才是进程关联。根据上面get_task_policy函数的定义，内核有一个默认的mempolicy叫default_policy，其定义如下：
+#+begin_src c
+static struct mempolicy default_policy = {
+	.refcnt = ATOMIC_INIT(1), /* never free it */
+	.mode = MPOL_LOCAL,
+};
+#+end_src
+MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允许用户指定在特定节点上进行内存分配的优先级和方式适用于不同的进程或VMA（虚拟内存区域）。这些策略可以用于优化多节点系统上的内存访问效率。具体有以下方式：
+
++ interleave（交错方式）\\
+  内存分配在指定的一组节点上交错进行，如果分配失败则会采用常规的回退策略。对于VMA分配，这种交错策略基于对象的偏移量（或匿名内存的映射偏移量）；对于进程策略，则基于一个进程计数器进行分配。
+
++ weighted interleave（加权交错）\\
+  类似于interleave，但允许根据每个节点的权重分配内存。例如，nodeset(0,1)与权重(2,1)表示每在节点0上分配两页内存后，再在节点1上分配一页内存。
+
++ bind（绑定）\\
+  只在指定的节点集合上分配内存，不采用回退策略。
+
++ preferred（优先）\\
+  首先尝试在指定节点上分配内存，若失败则使用常规回退策略。如果节点设置为NUMA_NO_NODE，则优先在本地CPU上分配内存。通常这类似于默认策略，但在VMA上设置时可以覆盖非默认的进程策略。
+
++ preferred many（多节点优先）\\
+  与preferred类似，但允许指定多个优先节点，然后再进行回退。
+
++ default（默认）\\
+  优先在本地节点上分配内存，或者在VMA上使用进程策略。这是Linux内核在NUMA系统上一直采用的默认行为。
+
+另外，进程策略适用于该进程上下文中的大多数非中断内存分配，中断则不受策略影响，总是尝试在本地CPU上分配内存。VMA策略只适用于该VMA中的内存分配。策略应用于系统的高区内存，而不应用于低
+区和GFP_DMA内存分配。对于共享内存（shmem/tmpfs），策略在所有用户之间共享，即使没有用户映射时也会记住该策略。
+
+中断不会使用当前进程的内存策略，它们总是优先在本地CPU上分配内存。这种设计是为了在中断处理过程中尽可能减少延迟。
+
+对于交错策略来说，在进程上下文中，不需要锁定机制，因为进程只会访问自身的状态，因此没有并发冲突。对于VMA的操作，mmap_lock的读锁（down_read）在一定程度上保护了这些操作，以确保内存映射的一致性。
+
+内存策略mempolicy结构体的释放：内存策略对象通过引用计数来管理生命周期。mpol_put()函数会减少内存策略的引用计数，当引用计数降为零时，该内存策略对象会被释放。这种机制保证了对象只会在不再使用时被释放，避免了内存泄漏。
+
+内存策略mempolicy结构体的复制：mpol_dup()函数用于分配一个新的内存策略，并将指定的内存策略复制到新的内存空间。新创建的内存策略对象的引用计数被初始化为1，表示当前调用者持有该引用。这允许多个内存策略对象彼此独立，同时保证每个对象的生命周期被正确管理。
+
+回到get_task_policy函数，如果进程有内存分配策略mempolicy，则返回这个策略。如果进程没有内存策略，那么就会从系统的全局节点策略数组preferrred_node_policy中去获取内存策略，当然在系统启动早期preferred_node_policy里可能是没有数据的，所以需要判断pol->mode非零，因为preferred_node_policy的定义是static的（被初始化为0）：
+
+#+begin_src c
+static struct mempolicy preferred_node_policy[MAX_NUMNODES];
+#+end_src
+
+MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
+#+begin_src c
+#ifdef CONFIG_NODES_SHIFT
+#define NODES_SHIFT     CONFIG_NODES_SHIFT
+#else
+#define NODES_SHIFT     0
+#endif
+#define MAX_NUMNODES    (1 << NODES_SHIFT)
+#+end_src
+
+而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
+#+begin_src conf
+config NODES_SHIFT
+	int "Maximum NUMA Nodes (as a power of 2)" if !MAXSMP
+	range 1 10
+	default "10" if MAXSMP
+	default "6" if X86_64
+	default "3"
+	depends on NUMA
+	help
+	  Specify the maximum number of NUMA Nodes available on the target
+	  system.  Increases memory reserved to accommodate various tables.
+#+end_src
+
+这样在编译构建时会自动生成，比如CONFIG_NODES_SHIFT在自动生成的头文件include/generated/autoconf.h中被定义为10。
+
+get_task_policy中还使用了numa_node_id函数，
