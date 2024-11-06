@@ -2,3 +2,4 @@ alloc_pages_noprof
 in_interrupt
 get_task_policy
 numa_node_id
+alloc_pages_mpol_noprof
