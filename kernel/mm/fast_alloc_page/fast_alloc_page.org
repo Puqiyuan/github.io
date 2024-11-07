@@ -208,7 +208,7 @@ config NODES_SHIFT
 	  system.  Increases memory reserved to accommodate various tables.
 #+end_src
 
-这样在编译构建时会自动生成，比如CONFIG_NODES_SHIFT在自动生成的头文件include/generated/autoconf.h中被定义为10。
+这样在编译构建时会自动生成，比如CONFIG_NODES_SHIFT在自动生成的头文件include/generated/autoconf.h中被定义为10，那么MAX_NUMNODES = 1 << 10 = 1024。
 
 get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU_NUMA_NODE_ID时该函数定义如下：
 #+begin_src c
@@ -245,5 +245,23 @@ struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文[[get_vma_policy生成ilx][附节: get_vma_policy生成ilx]]中有介绍。
 
 *详细分析：*\\
+alloc_pages_mpol_noprof主要分为三个部分来完成其功能，一是通过policy_nodemask函数获得在哪个（些）节点上分配内存，由nodemask_t类型的指针nodemask表示，并且返回在哪个目标节点上分配的节点号，由nid表示。
+
+第二部分是针对不同的情况调用不同的分配函数，一种是针对MPOL_PREFERRED_MANY内存策略，调用alloc_pages_preferred_many分配内存，而针对大页内存分配的情况会做一些特殊处理，然后再调用__alloc_pages_node_noprof完成内存分配，最后一种情况就是通过__alloc_pages_noprof完成除前面两种特殊情况的“正常”页面分配。
+
+第三部分是针对交错分配的方式，要更新一些统计信息。以下继续针对这三部分的代码详细分析。
+
+** 第一部分
+这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
+#+begin_src c
+nodemask_t *nodemask;
+nodemask = policy_nodemask(gfp, pol, ilx, &nid);
+#+end_src
+可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址。
+
+是对取模操作的一个优化，关于这个优化参见附节
+
+** 第二部分
+** 第三部分
 * 附节
 ** get_vma_policy生成ilx
