@@ -257,11 +257,13 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能，一是通过
 nodemask_t *nodemask;
 nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 #+end_src
-可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址。
+可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址，nid的值通过numa_node_id获得代表当前运行CPU所在的节点。返回的nodemask表示可以在哪些节点上分配内存，而返回的nid是首选的节点。
 
-是对取模操作的一个优化，关于这个优化参见附节
+是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。
+
 
 ** 第二部分
 ** 第三部分
 * 附节
 ** get_vma_policy生成ilx
+** 使用与操作优化取模
