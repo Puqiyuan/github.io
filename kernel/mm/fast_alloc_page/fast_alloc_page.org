@@ -150,19 +150,19 @@ static struct mempolicy default_policy = {
 #+end_src
 MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允许用户指定在特定节点上进行内存分配的优先级和方式，适用于不同的进程或VMA（虚拟内存区域）。这些策略可以用于优化多节点系统上的内存访问效率。具体有以下方式：
 
-+ interleave（交错方式）\\
++ interleave（交错方式MPOL_INTERLEAVE）\\
   内存分配在指定的一组节点上交错进行，如果分配失败则会采用常规的回退策略。对于VMA分配，这种交错策略基于对象的偏移量（或匿名内存的映射偏移量）；对于进程策略，则基于一个进程计数器进行分配。
 
-+ weighted interleave（加权交错）\\
++ weighted interleave（加权交错MPOL_WEIGHTED_INTERLEAVE）\\
   类似于interleave，但允许根据每个节点的权重分配内存。例如，nodeset(0,1)与权重(2,1)表示每在节点0上分配两页内存后，再在节点1上分配一页内存。
 
-+ bind（绑定）\\
++ bind（绑定MPOL_BIND）\\
   只在指定的节点集合上分配内存，不采用回退策略。
 
-+ preferred（优先）\\
++ preferred（优先某个节点MPOL_PREFERRED）\\
   首先尝试在指定节点上分配内存，若失败则使用常规回退策略。如果节点设置为NUMA_NO_NODE，则优先在本地CPU上分配内存。通常这类似于默认策略，但在VMA上设置时可以覆盖非默认的进程策略。
 
-+ preferred many（多节点优先）\\
++ preferred many（多个节点优先MPOL_PREFERRED_MANY）\\
   与preferred类似，但允许指定多个优先节点，然后再进行回退。
 
 + default（默认）\\
@@ -257,7 +257,63 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能，一是通过
 nodemask_t *nodemask;
 nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 #+end_src
-可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址，nid的值通过numa_node_id获得代表当前运行CPU所在的节点。返回的nodemask表示可以在哪些节点上分配内存，而返回的nid是首选的节点。
+可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址，nid的值通过numa_node_id获得代表当前运行CPU所在的节点，这里传入nid的地址，意味着policy_nodemask函数可能会修改nid的值。返回的nodemask表示可以在哪些节点上分配内存，而返回的nid是首选的节点。
+
+policy_nodemask根据前面介绍的NUMA内存策略分几种case来给nodemask和nid赋予不同的值，其原型如下：
+#+begin_src c
+static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
+				   pgoff_t ilx, int *nid)
+#+end_src
+
+第一种case MPOL_PREFERRED：
+#+begin_src c
+	nodemask_t *nodemask = NULL;
+
+	switch (pol->mode) {
+	case MPOL_PREFERRED:
+		/* Override input node id */
+		*nid = first_node(pol->nodes);
+		break;
+#+end_src
+这种情况只设置了优先使用分配内存的节点号，使用first_node去找到pol->nodes里第一个置位的bit的序号，从这里也可以看出pol->nodes这个成员表征了候选的可以用于分配的一些节点，只是说这些节点要按各种不同的策略去选择。
+
+第二种case MPOL_PREFERRED_MANY：
+#+begin_src c
+	case MPOL_PREFERRED_MANY:
+		nodemask = &pol->nodes;
+		if (pol->home_node != NUMA_NO_NODE)
+			*nid = pol->home_node;
+		break;
+#+end_src
+这种情况是有nodemask的，因为perferred many就是在一组优先的节点里分配，并且pol->home_node是有效值时，返回pol里的home_node号作为优先分配的节点。
+
+第三种case MPOL_BIND：
+#+begin_src c
+	case MPOL_BIND:
+		/* Restrict to nodemask (but not on lower zones) */
+		if (apply_policy_zone(pol, gfp_zone(gfp)) &&
+		    cpuset_nodemask_valid_mems_allowed(&pol->nodes))
+			nodemask = &pol->nodes;
+		if (pol->home_node != NUMA_NO_NODE)
+			*nid = pol->home_node;
+		/*
+		 * __GFP_THISNODE shouldn't even be used with the bind policy
+		 * because we might easily break the expectation to stay on the
+		 * requested node and not break the policy.
+		 */
+		WARN_ON_ONCE(gfp & __GFP_THISNODE);
+		break;
+#+end_src
+对于使用MPOL_BIND的内存策略，要限制内存策略不能应用到较低序号的zone，这个判断逻辑由apply_policy_zone函数实现，它的第二个参数，调用gfp_zone由gfp标志里去获得分配内存的目标zone号，也就是获得的目标zone号要大于apply_policy_zone里的一个特别的zone号，这时内存策略才生效。这里主要详细分析下gfp_zone的实现，它决定了内存从哪个zone去分配，较为关键。至于本case的代码较为简单。
+
+在分析gfp_zone前，先介绍内核内存管理涉及到的各种类型的zone，
+
+GFP_ZONE_TABLE这个宏类似于一个表，它将不同的GFP标志，可以使用的zone号码映射起来，具体的说，
+
+第四种case：
+
+第五种case：
+
 
 是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。
 

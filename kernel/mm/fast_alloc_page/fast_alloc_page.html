@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-08 Fri 22:51 -->
+<!-- 2024-11-09 Sat 22:52 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,18 +38,18 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9500ffe">1. alloc_pages_noprof</a></li>
-<li><a href="#org0adeba5">2. alloc_pages_mpol_noprof</a>
+<li><a href="#org90c1363">1. alloc_pages_noprof</a></li>
+<li><a href="#orge1c98fe">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#org085674e">2.1. 第一部分</a></li>
-<li><a href="#org4814088">2.2. 第二部分</a></li>
-<li><a href="#orgae0f865">2.3. 第三部分</a></li>
+<li><a href="#orgefae517">2.1. 第一部分</a></li>
+<li><a href="#org0515636">2.2. 第二部分</a></li>
+<li><a href="#org2067584">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org77f8e2b">3. 附节</a>
+<li><a href="#org9f2be5f">3. 附节</a>
 <ul>
-<li><a href="#org89044f8">3.1. get_vma_policy生成ilx</a></li>
-<li><a href="#org6485356">3.2. 使用与操作优化取模</a></li>
+<li><a href="#org5ab3e41">3.1. get_vma_policy生成ilx</a></li>
+<li><a href="#orga53720d">3.2. 使用与操作优化取模</a></li>
 </ul>
 </li>
 </ul>
@@ -59,8 +59,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-org9500ffe" class="outline-2">
-<h2 id="org9500ffe"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org90c1363" class="outline-2">
+<h2 id="org90c1363"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -159,7 +159,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org2229969">
+<pre class="example" id="orge330763">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -192,7 +192,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="orge15b401">
+<pre class="example" id="orge8454c4">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -256,19 +256,19 @@ MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允�
 </p>
 
 <ul class="org-ul">
-<li>interleave（交错方式）<br>
+<li>interleave（交错方式MPOL_INTERLEAVE）<br>
 内存分配在指定的一组节点上交错进行，如果分配失败则会采用常规的回退策略。对于VMA分配，这种交错策略基于对象的偏移量（或匿名内存的映射偏移量）；对于进程策略，则基于一个进程计数器进行分配。</li>
 
-<li>weighted interleave（加权交错）<br>
+<li>weighted interleave（加权交错MPOL_WEIGHTED_INTERLEAVE）<br>
 类似于interleave，但允许根据每个节点的权重分配内存。例如，nodeset(0,1)与权重(2,1)表示每在节点0上分配两页内存后，再在节点1上分配一页内存。</li>
 
-<li>bind（绑定）<br>
+<li>bind（绑定MPOL_BIND）<br>
 只在指定的节点集合上分配内存，不采用回退策略。</li>
 
-<li>preferred（优先）<br>
+<li>preferred（优先某个节点MPOL_PREFERRED）<br>
 首先尝试在指定节点上分配内存，若失败则使用常规回退策略。如果节点设置为NUMA_NO_NODE，则优先在本地CPU上分配内存。通常这类似于默认策略，但在VMA上设置时可以覆盖非默认的进程策略。</li>
 
-<li>preferred many（多节点优先）<br>
+<li>preferred many（多个节点优先MPOL_PREFERRED_MANY）<br>
 与preferred类似，但允许指定多个优先节点，然后再进行回退。</li>
 
 <li>default（默认）<br>
@@ -370,8 +370,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-org0adeba5" class="outline-2">
-<h2 id="org0adeba5"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-orge1c98fe" class="outline-2">
+<h2 id="orge1c98fe"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -384,7 +384,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org89044f8">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org5ab3e41">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -401,8 +401,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能，一是通过
 </p>
 </div>
 
-<div id="outline-container-org085674e" class="outline-3">
-<h3 id="org085674e"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-orgefae517" class="outline-3">
+<h3 id="orgefae517"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -413,38 +413,120 @@ nodemask = policy_nodemask(gfp, pol, ilx, &amp;nid);
 </pre>
 </div>
 <p>
-可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址，nid的值通过numa_node_id获得代表当前运行CPU所在的节点。返回的nodemask表示可以在哪些节点上分配内存，而返回的nid是首选的节点。
+可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址，nid的值通过numa_node_id获得代表当前运行CPU所在的节点，这里传入nid的地址，意味着policy_nodemask函数可能会修改nid的值。返回的nodemask表示可以在哪些节点上分配内存，而返回的nid是首选的节点。
 </p>
 
 <p>
-是对取模操作的一个优化，关于这个优化参见附节<a href="#org6485356">附节：使用与操作优化取模操作</a>。
+policy_nodemask根据前面介绍的NUMA内存策略分几种case来给nodemask和nid赋予不同的值，其原型如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #93E0E3;">policy_nodemask</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span>,
+                                   <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">ilx</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">nid</span>)
+</pre>
+</div>
+
+<p>
+第一种case MPOL_PREFERRED：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span> = <span style="color: #BFEBBF;">NULL</span>;
+
+<span style="color: #F0DFAF; font-weight: bold;">switch</span> (pol-&gt;mode) {
+<span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_PREFERRED:
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Override input node id</span><span style="color: #5F7F5F;"> */</span>
+        *nid = first_node(pol-&gt;nodes);
+        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+</pre>
+</div>
+<p>
+这种情况只设置了优先使用分配内存的节点号，使用first_node去找到pol-&gt;nodes里第一个置位的bit的序号，从这里也可以看出pol-&gt;nodes这个成员表征了候选的可以用于分配的一些节点，只是说这些节点要按各种不同的策略去选择。
+</p>
+
+<p>
+第二种case MPOL_PREFERRED_MANY：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_PREFERRED_MANY:
+        nodemask = &amp;pol-&gt;nodes;
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;home_node != NUMA_NO_NODE)
+                *nid = pol-&gt;home_node;
+        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+</pre>
+</div>
+<p>
+这种情况是有nodemask的，因为perferred many就是在一组优先的节点里分配，并且pol-&gt;home_node是有效值时，返回pol里的home_node号作为优先分配的节点。
+</p>
+
+<p>
+第三种case MPOL_BIND：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_BIND:
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Restrict to nodemask (but not on lower zones)</span><span style="color: #5F7F5F;"> */</span>
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (apply_policy_zone(pol, gfp_zone(gfp)) &amp;&amp;
+            cpuset_nodemask_valid_mems_allowed(&amp;pol-&gt;nodes))
+                nodemask = &amp;pol-&gt;nodes;
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;home_node != NUMA_NO_NODE)
+                *nid = pol-&gt;home_node;
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * __GFP_THISNODE shouldn't even be used with the bind policy</span>
+<span style="color: #7F9F7F;">         * because we might easily break the expectation to stay on the</span>
+<span style="color: #7F9F7F;">         * requested node and not break the policy.</span>
+<span style="color: #5F7F5F;">         */</span>
+        <span style="color: #93E0E3;">WARN_ON_ONCE</span>(gfp &amp; __GFP_THISNODE);
+        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+</pre>
+</div>
+<p>
+对于使用MPOL_BIND的内存策略，要限制内存策略不能应用到较低序号的zone，这个判断逻辑由apply_policy_zone函数实现，它的第二个参数，调用gfp_zone由gfp标志里去获得分配内存的目标zone号，也就是获得的目标zone号要大于apply_policy_zone里的一个特别的zone号，这时内存策略才生效。这里主要详细分析下gfp_zone的实现，它决定了内存从哪个zone去分配，较为关键。至于本case的代码较为简单。
+</p>
+
+<p>
+在分析gfp_zone前，先介绍内核内存管理涉及到的各种类型的zone，
+</p>
+
+<p>
+GFP_ZONE_TABLE这个宏类似于一个表，它将不同的GFP标志，可以使用的zone号码映射起来，具体的说，
+</p>
+
+<p>
+第四种case：
+</p>
+
+<p>
+第五种case：
+</p>
+
+
+<p>
+是对取模操作的一个优化，关于这个优化参见附节<a href="#orga53720d">附节：使用与操作优化取模操作</a>。
 </p>
 </div>
 </div>
 
 
-<div id="outline-container-org4814088" class="outline-3">
-<h3 id="org4814088"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-org0515636" class="outline-3">
+<h3 id="org0515636"><span class="section-number-3">2.2.</span> 第二部分</h3>
 </div>
-<div id="outline-container-orgae0f865" class="outline-3">
-<h3 id="orgae0f865"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-org2067584" class="outline-3">
+<h3 id="org2067584"><span class="section-number-3">2.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-org77f8e2b" class="outline-2">
-<h2 id="org77f8e2b"><span class="section-number-2">3.</span> 附节</h2>
+<div id="outline-container-org9f2be5f" class="outline-2">
+<h2 id="org9f2be5f"><span class="section-number-2">3.</span> 附节</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org89044f8" class="outline-3">
-<h3 id="org89044f8"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org5ab3e41" class="outline-3">
+<h3 id="org5ab3e41"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
 </div>
-<div id="outline-container-org6485356" class="outline-3">
-<h3 id="org6485356"><span class="section-number-3">3.2.</span> 使用与操作优化取模</h3>
+<div id="outline-container-orga53720d" class="outline-3">
+<h3 id="orga53720d"><span class="section-number-3">3.2.</span> 使用与操作优化取模</h3>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-08 Fri 22:51</p>
+<p class="date">Created: 2024-11-09 Sat 22:52</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
