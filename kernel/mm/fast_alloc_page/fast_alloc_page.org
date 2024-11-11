@@ -245,11 +245,12 @@ struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文[[get_vma_policy生成ilx][附节: get_vma_policy生成ilx]]中有介绍。
 
 *详细分析：*\\
-alloc_pages_mpol_noprof主要分为三个部分来完成其功能，一是通过policy_nodemask函数获得在哪个（些）节点上分配内存，由nodemask_t类型的指针nodemask表示，并且返回在哪个目标节点上分配的节点号，由nid表示。
+alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
++ 第一部分是通过policy_nodemask函数获得在哪个（些）节点上分配内存，由nodemask_t类型的指针nodemask表示，并且返回在哪个目标节点上分配的节点号，由nid表示。
 
-第二部分是针对不同的情况调用不同的分配函数，一种是针对MPOL_PREFERRED_MANY内存策略，调用alloc_pages_preferred_many分配内存，而针对大页内存分配的情况会做一些特殊处理，然后再调用__alloc_pages_node_noprof完成内存分配，最后一种情况就是通过__alloc_pages_noprof完成除前面两种特殊情况的“正常”页面分配。
++ 第二部分是针对不同的情况调用不同的分配函数，一种是针对MPOL_PREFERRED_MANY内存策略，调用alloc_pages_preferred_many分配内存，而针对大页内存分配的情况会做一些特殊处理，然后再调用__alloc_pages_node_noprof完成内存分配，最后一种情况就是通过__alloc_pages_noprof完成除前面两种特殊情况的“正常”页面分配。
 
-第三部分是针对交错分配的方式，要更新一些统计信息。以下继续针对这三部分的代码详细分析。
++ 第三部分是针对交错分配的方式，要更新一些统计信息。以下继续针对这三部分的代码详细分析。
 
 ** 第一部分
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -265,7 +266,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 				   pgoff_t ilx, int *nid)
 #+end_src
 
-第一种case MPOL_PREFERRED：
+*第一种case MPOL_PREFERRED：*
 #+begin_src c
 	nodemask_t *nodemask = NULL;
 
@@ -277,7 +278,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 #+end_src
 这种情况只设置了优先使用分配内存的节点号，使用first_node去找到pol->nodes里第一个置位的bit的序号，从这里也可以看出pol->nodes这个成员表征了候选的可以用于分配的一些节点，只是说这些节点要按各种不同的策略去选择。
 
-第二种case MPOL_PREFERRED_MANY：
+*第二种case MPOL_PREFERRED_MANY：*
 #+begin_src c
 	case MPOL_PREFERRED_MANY:
 		nodemask = &pol->nodes;
@@ -287,7 +288,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 #+end_src
 这种情况是有nodemask的，因为perferred many就是在一组优先的节点里分配，并且pol->home_node是有效值时，返回pol里的home_node号作为优先分配的节点。
 
-第三种case MPOL_BIND：
+*第三种case MPOL_BIND：*
 #+begin_src c
 	case MPOL_BIND:
 		/* Restrict to nodemask (but not on lower zones) */
@@ -306,13 +307,175 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 #+end_src
 对于使用MPOL_BIND的内存策略，要限制内存策略不能应用到较低序号的zone，这个判断逻辑由apply_policy_zone函数实现，它的第二个参数，调用gfp_zone由gfp标志里去获得分配内存的目标zone号，也就是获得的目标zone号要大于apply_policy_zone里的一个特别的zone号，这时内存策略才生效。这里主要详细分析下gfp_zone的实现，它决定了内存从哪个zone去分配，较为关键。至于本case的代码较为简单。
 
-在分析gfp_zone前，先介绍内核内存管理涉及到的各种类型的zone，
+在分析gfp_zone函数前，先介绍内核内存管理涉及到的各种类型的zone：
++ ZONE_DMA \\
+  区域ZONE_DMA用于适应一些旧式设备，这些设备只能通过DMA（直接内存访问）访问低地址的内存（通常在16MB以下），部分旧设备只能访问某个范围内的物理内存地址。如果要在这些设备上进行DMA操作，内存必须分配在这个特定区域内，比如ISA总线设备或早期的DMA控制器。CONFIG_ZONE_DMA配置选项决定是否启用这个zone。
 
-GFP_ZONE_TABLE这个宏类似于一个表，它将不同的GFP标志，可以使用的zone号码映射起来，具体的说，
++ ZONE_DMA32 \\
+  区域ZONE_DMA32用于支持能够访问32位地址空间（4GB以下）但不能访问更高地址的设备。一些设备，如32位PCI设备，只能访问4GB以下的内存，因此分配时需要确保内存位于这个范围内。适用于需要低于4G地址范围的64位系统。CONFIG_ZONE_DMA32配置选项决定是否启用该zone。
 
-第四种case：
++ ZONE_NORMAL \\
+  区域ZONE_NORMAL包含可被大多数内核和用户进程直接访问的常规物理内存区域。在大多数情况下，DMA操作和内核直接访问都可以在ZONE_NORMAL中完成，这是标准的内存区域。所有常规的内存操作（除非设备或操作对内存有特殊要求）。
 
-第五种case：
++ ZONE_HIGHMEM \\
+  ZONE_HIGHMEM用于32位系统中超过直接寻址能力的高地址空间。它通过分页机制（如映射页表条目）来访问高于900MB的内存。32位系统只能直接寻址4GB的地址空间，对于大内存机器而言，这样的空间显得不足。因此，把高地址的物理内存放到ZONE_HIGHMEM中，使内核可以通过间接的方式访问它们。在内存大于4GB的32位系统上，通过页表映射方式访问超出寻址能力的内存区域。启用CONFIG_HIGHMEM后可用。
+
++ ZONE_MOVABLE \\
+  ZONE_MOVABLE主要用于可以迁移的页面，比如用户态内存或页缓存等。在内存卸载和巨页分配时，这个zone有助于提高成功率。通过将可以迁移的内存放在ZONE_MOVABLE，可以确保在需要时有一部分内存可以被迁移或回收，从而进行更灵活的内存管理。例如，大页分配和热插拔内存。用于可热插拔的内存、可移动页面的分配，以及减少不能迁移的分配对系统性能的影响。
+
+  这种类型类似于ZONE_NORMAL，但是不可移动的页面却只能在ZONE_NORMAL。不过有以下一些情况会存在ZONE_MOVABLE有unmovable页面的情况：
+  - 长期钉住的页面是不可移动的，因此在ZONE_MOVABLE里不允许长期钉住页面，当页面先钉住然后通过page fault分配物理页面，这种情况没什么问题，页面会来自正确的zone（避开ZONE_MOVABLE），但是当页面被钉住时有可能地址空间里已经有页面位于ZONE_MOVABLE了，这时会将这些页面迁移到不同zone（避开ZONE_MOVABLE）中，迁移要是失败，钉住页面也会失败。
+
+  - memblock对于kernelcore/movablecore区域的设置可能会导致ZONE_MOVABLE里有unmovable的页面。
++ ZONE_DEVICE \\
+  ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直插内存模块）或其它直接映射到系统内存的设备。随着硬件的演进，现代系统需要支持直接映射到内存的硬件设备，如持久内存。这些设备可以直接与系统内存交互，通常是可持久化的。如使用非易失性存储器（如 NVDIMM）、显存映射等。启用CONFIG_ZONE_DEVICE后可用。
+
+针对笔者目前环境的配置，zone_type的定义如下：
+#+begin_src c
+  enum zone_type {
+          ZONE_DMA,
+          ZONE_DMA32,
+          ZONE_NORMAL,
+          ZONE_MOVABLE,
+          ZONE_DEVICE,
+          __MAX_NR_ZONES
+  };
+#+end_src
+
+现在可以介绍gfp_zone函数了，gfp_zone函数的主要作用就是根据传入的gfp标志映射到不同类型的zone，也就是返回zone_type类型的枚举，这些类型前面刚介绍过了。现在看gfp_zone的实现：
+#+begin_src c
+static inline enum zone_type gfp_zone(gfp_t flags)
+{
+	enum zone_type z;
+	int bit = (__force int) (flags & GFP_ZONEMASK);
+
+	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &
+					 ((1 << GFP_ZONES_SHIFT) - 1);
+	VM_BUG_ON((GFP_ZONE_BAD >> bit) & 1);
+	return z;
+}
+#+end_src
+GFP_ZONE_TABLE这个宏类似于一个表（数组），它将不同的GFP标志组合映射到不同的zone_type：
+#+begin_src c
+#define GFP_ZONE_TABLE ( \
+	(ZONE_NORMAL << 0 * GFP_ZONES_SHIFT)				       \
+	| (OPT_ZONE_DMA << ___GFP_DMA * GFP_ZONES_SHIFT)		       \
+	| (OPT_ZONE_HIGHMEM << ___GFP_HIGHMEM * GFP_ZONES_SHIFT)	       \
+	| (OPT_ZONE_DMA32 << ___GFP_DMA32 * GFP_ZONES_SHIFT)		       \
+	| (ZONE_NORMAL << ___GFP_MOVABLE * GFP_ZONES_SHIFT)		       \
+	| (OPT_ZONE_DMA << (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)    \
+	| (ZONE_MOVABLE << (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT)\
+	| (OPT_ZONE_DMA32 << (___GFP_MOVABLE | ___GFP_DMA32) * GFP_ZONES_SHIFT)\
+)
+#+end_src
+这样定义出来这个GFP_ZONE_TABLE其实就是一个数字，只是这个数字按每GFP_ZONES_SHIFT个数目的bit存储一个条目，这个条目通过传入的gfp标志索引，索引到的位置上存放了对应gfp标志优先使用的zone用来分配。
+
+这个宏其实定义了一种zone分配的优先级，举个例子对于条目：
+#+begin_src c
+ZONE_MOVABLE << (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT
+#+end_src
+就是说当传入的GFP标志既设置了__GFP_MOVABLE又设置了__GFP_HIGHMEM，那么优先在ZONE_MOVABLE中分配，但是这个区域分配失败时，也是可以在__GFP_HIGHMEM中分配的。当然，有一些标志组合是无法满足的，比如同时设置了DMA+HIGHMEM，DMA本来就要求地址在低内存区，当然无法又在高地址区分配。
+
+GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个比特保存一个条目。通过这种一个数字就实现表格映射的作用，实际也是一种性能优化，通过逻辑运算一个数字的方式是比查表数组访存要高效的。
+
+在没有定义特殊的内存zone（比如DMA，HIGHMEM等）时，都会退化为ZONE_NORMAL：
+#+begin_src c
+#ifdef CONFIG_HIGHMEM
+#define OPT_ZONE_HIGHMEM ZONE_HIGHMEM
+#else
+#define OPT_ZONE_HIGHMEM ZONE_NORMAL
+#endif
+
+#ifdef CONFIG_ZONE_DMA
+#define OPT_ZONE_DMA ZONE_DMA
+#else
+#define OPT_ZONE_DMA ZONE_NORMAL
+#endif
+
+#ifdef CONFIG_ZONE_DMA32
+#define OPT_ZONE_DMA32 ZONE_DMA32
+#else
+#define OPT_ZONE_DMA32 ZONE_NORMAL
+#endif
+#+end_src
+再来看gpf_zone函数就简单了首先从flags中拿到低4bit的值：
+#+begin_src c
+	enum zone_type z;
+	int bit = (__force int) (flags & GFP_ZONEMASK);
+#+end_src
+为什么是低4bit呢，通过GFP_ZONEMASK的定义就知道了：
+#+begin_src c
+  enum {
+          ___GFP_DMA_BIT,
+          ___GFP_HIGHMEM_BIT,
+          ___GFP_DMA32_BIT,
+          ___GFP_MOVABLE_BIT,
+          ...
+  };
+  #define BIT(nr)			(UL(1) << (nr))
+  #define ___GFP_DMA		BIT(___GFP_DMA_BIT)
+  #define ___GFP_HIGHMEM		BIT(___GFP_HIGHMEM_BIT)
+  #define ___GFP_DMA32		BIT(___GFP_DMA32_BIT)
+  #define ___GFP_MOVABLE		BIT(___GFP_MOVABLE_BIT)
+  #define __GFP_DMA	((__force gfp_t)___GFP_DMA)
+  #define __GFP_HIGHMEM	((__force gfp_t)___GFP_HIGHMEM)
+  #define __GFP_DMA32	((__force gfp_t)___GFP_DMA32)
+  #define __GFP_MOVABLE	((__force gfp_t)___GFP_MOVABLE)  /* ZONE_MOVABLE allowed */
+  #define GFP_ZONEMASK	(__GFP_DMA|__GFP_HIGHMEM|__GFP_DMA32|__GFP_MOVABLE)
+#+end_src
+这里可以看到低4个bit其实就是zone修饰符，指明了哪些zone用于分配内存。之前介绍过gfp_t本质是个int，但它具有受限的取值，以限制某些int能进行的运算（范围），但是gfp_t不行。比如上面提到了gfp_t可能的四种值，一个完整的gfp_t值列表如下：
+#+begin_src c
+enum {
+	___GFP_DMA_BIT,
+	___GFP_HIGHMEM_BIT,
+	___GFP_DMA32_BIT,
+	___GFP_MOVABLE_BIT,
+	___GFP_RECLAIMABLE_BIT,
+	___GFP_HIGH_BIT,
+	___GFP_IO_BIT,
+	___GFP_FS_BIT,
+	___GFP_ZERO_BIT,
+	___GFP_UNUSED_BIT,	/* 0x200u unused */
+	___GFP_DIRECT_RECLAIM_BIT,
+	___GFP_KSWAPD_RECLAIM_BIT,
+	___GFP_WRITE_BIT,
+	___GFP_NOWARN_BIT,
+	___GFP_RETRY_MAYFAIL_BIT,
+	___GFP_NOFAIL_BIT,
+	___GFP_NORETRY_BIT,
+	___GFP_MEMALLOC_BIT,
+	___GFP_COMP_BIT,
+	___GFP_NOMEMALLOC_BIT,
+	___GFP_HARDWALL_BIT,
+	___GFP_THISNODE_BIT,
+	___GFP_ACCOUNT_BIT,
+	___GFP_ZEROTAGS_BIT,
+#ifdef CONFIG_KASAN_HW_TAGS
+	___GFP_SKIP_ZERO_BIT,
+	___GFP_SKIP_KASAN_BIT,
+#endif
+#ifdef CONFIG_LOCKDEP
+	___GFP_NOLOCKDEP_BIT,
+#endif
+#ifdef CONFIG_SLAB_OBJ_EXT
+	___GFP_NO_OBJ_EXT_BIT,
+#endif
+	___GFP_LAST_BIT
+};
+#+end_src
+所有这些gfp_t类型的值，有些是zone修饰符，有些是内存分配行为，比如___GFP_DIRECT_RECLAIM_BIT允许触发直接内存回收，后面的内存管理分析的系列文章还会遇到这些标志，再在具体的代码上下文分析更为形象。
+
+继续分析gfp_zone函数：
+#+begin_src c
+	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &
+					 ((1 << GFP_ZONES_SHIFT) - 1);
+#+end_src
+将GFP_ZONE_TABLE右移bit * GFP_ZONES_SHIFT，这正是前面定义GFP_ZONE_TABLE时，存放在bit这种标志组合索引处的zone序号，它用来优先为bit这种gfp标志组合分配内存，注意是以2个比特为一个条目，所以最后做与运算，相当于只取最后两位。
+
+
+*第四种case：*
+
+*第五种case：*
 
 
 是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。
