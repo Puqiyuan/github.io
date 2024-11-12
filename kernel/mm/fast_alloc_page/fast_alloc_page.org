@@ -472,10 +472,53 @@ enum {
 #+end_src
 将GFP_ZONE_TABLE右移bit * GFP_ZONES_SHIFT，这正是前面定义GFP_ZONE_TABLE时，存放在bit这种标志组合索引处的zone序号，它用来优先为bit这种gfp标志组合分配内存，注意是以2个比特为一个条目，所以最后做与运算，相当于只取最后两位。
 
+回到policy_nodemask函数的第三种MPOL_BIND的情况，apply_policy_zone是说要将内存策略应用在较高点的区域，这个条件是本case下设置nodemask的必要条件，另一个必要条件是内存策略的pol->nodes要和当前进程允许的节点mask有交集（也就是task_struct:mems_allowed）。当然MPOL_BIND下也要将内存策略设置的优先node号带出并返回。
 
-*第四种case：*
+*第四种case MPOL_INTERLEAVE：*\\
+根据前面的分析，这种情况就是内存分配在一组节点内交错循环分配：
+#+begin_src c
+	case MPOL_INTERLEAVE:
+		/* Override input node id */
+		*nid = (ilx == NO_INTERLEAVE_INDEX) ?
+			interleave_nodes(pol) : interleave_nid(pol, ilx);
+		break;
+#+end_src
+可以看到，分两种情况选择使用不同的函数来获得内存分配的优先节点，NO_INTERLEAVE_INDEX主要指示了要不要使用task_struct:il_prev来作为索引选择内存分配的节点，如果使用task_struct:il_prev（也就是ilx参数为-1）则通过interleave_nodes函数来获得内存分配的节点：
+#+begin_src c
+static unsigned int interleave_nodes(struct mempolicy *policy)
+{
+	unsigned int nid;
+	unsigned int cpuset_mems_cookie;
 
-*第五种case：*
+	/* to prevent miscount, use tsk->mems_allowed_seq to detect rebind */
+	do {
+		cpuset_mems_cookie = read_mems_allowed_begin();
+		nid = next_node_in(current->il_prev, policy->nodes);
+	} while (read_mems_allowed_retry(cpuset_mems_cookie));
+
+	if (nid < MAX_NUMNODES)
+		current->il_prev = nid;
+	return nid;
+}
+#+end_src
+do-while循环主要是处理并发情况，此处不讨论了。该函数主要使用next_node_in来获得合适的节点号，也就是在pol->nodes中找到第一个置位的bit的序号，并且是在current->il_prev之后，返回的nid小于MAX_NUMNODES时才会给出nid给调用者。
+
+这里需要简单看下next_node_in的实现，该函数主要是要处理一种临界情况，那就是返回的node id的序号等于MAX_NUMNODES，就又要回到参数srcp的第一个置位的bit的序号：
+#+begin_src c
+#define next_node_in(n, src) __next_node_in((n), &(src))
+static __always_inline unsigned int __next_node_in(int node, const nodemask_t *srcp)
+{
+	unsigned int ret = __next_node(node, srcp);
+
+	if (ret == MAX_NUMNODES)
+		ret = __first_node(srcp);
+	return ret;
+}
+#+end_src
+
+
+*第五种case MPOL_WEIGHTED_INTERLEAVE：* \\
+
 
 
 是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。

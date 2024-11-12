@@ -4,3 +4,5 @@ get_task_policy
 numa_node_id
 alloc_pages_mpol_noprof
 policy_nodemask
+interleave_nodes
+interleave_nid
