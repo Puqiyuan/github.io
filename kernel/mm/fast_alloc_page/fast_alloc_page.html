@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-12 Tue 22:29 -->
+<!-- 2024-11-13 Wed 22:34 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,18 +38,18 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgcfe957e">1. alloc_pages_noprof</a></li>
-<li><a href="#org8641bd8">2. alloc_pages_mpol_noprof</a>
+<li><a href="#org080f223">1. alloc_pages_noprof</a></li>
+<li><a href="#orgbc8b3c4">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#orge88d109">2.1. 第一部分</a></li>
-<li><a href="#org923e02f">2.2. 第二部分</a></li>
-<li><a href="#org40f4876">2.3. 第三部分</a></li>
+<li><a href="#orgc0031d1">2.1. 第一部分</a></li>
+<li><a href="#orga3e46e8">2.2. 第二部分</a></li>
+<li><a href="#orgcd88eaf">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org49eb5ac">3. 附节</a>
+<li><a href="#orgfc5af2d">3. 附节</a>
 <ul>
-<li><a href="#orgc74a7ec">3.1. get_vma_policy生成ilx</a></li>
-<li><a href="#org7506b08">3.2. 使用与操作优化取模</a></li>
+<li><a href="#orgd7cad43">3.1. get_vma_policy生成ilx</a></li>
+<li><a href="#org0922543">3.2. 使用与操作优化取模</a></li>
 </ul>
 </li>
 </ul>
@@ -59,8 +59,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-orgcfe957e" class="outline-2">
-<h2 id="orgcfe957e"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org080f223" class="outline-2">
+<h2 id="org080f223"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -159,7 +159,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="orgee53795">
+<pre class="example" id="org3bbecf5">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -192,7 +192,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="org48202c9">
+<pre class="example" id="org54aa9ae">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -370,8 +370,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-org8641bd8" class="outline-2">
-<h2 id="org8641bd8"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-orgbc8b3c4" class="outline-2">
+<h2 id="orgbc8b3c4"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -384,7 +384,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#orgc74a7ec">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#orgd7cad43">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -400,8 +400,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </ul>
 </div>
 
-<div id="outline-container-orge88d109" class="outline-3">
-<h3 id="orge88d109"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-orgc0031d1" class="outline-3">
+<h3 id="orgc0031d1"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -748,43 +748,128 @@ do-while循环主要是处理并发情况，此处不讨论了。该函数主要
 }
 </pre>
 </div>
+<p>
+如果不使用task_struct:il_prev，就会调用interleave_nid来获得内存分配的节点号：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">interleave_nid</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span>, <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">ilx</span>)
+{
+        <span style="color: #7CB8BB;">nodemask_t</span> <span style="color: #DFAF8F;">nodemask</span>;
+        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">target</span>, <span style="color: #DFAF8F;">nnodes</span>;
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>;
+
+        nnodes = read_once_policy_nodemask(pol, &amp;nodemask);
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>nnodes)
+                <span style="color: #F0DFAF; font-weight: bold;">return</span> numa_node_id();
+        target = ilx % nnodes;
+        nid = first_node(nodemask);
+        <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; target; i++)
+                nid = next_node(nid, nodemask);
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> nid;
+}
+</pre>
+</div>
+<p>
+该函数以传入的ilx作为索引来选择内存分配的节点，首先ilx需要对pol-&gt;nodes里置位的节点数目进行取模得到target，然后通过first_node获得nodemask里第一个置位的节点号nid，最后从nid开始循环target次，找到低target个置位的比特的序号，返回。
+</p>
 
 
 <p>
 <b>第五种case MPOL_WEIGHTED_INTERLEAVE：</b> <br>
+该种情况与case 4类似，依据ilx参数的不同，而调用不同的函数确定nid并返回。当使用task_struct:il_prev时（也就是ilx无效为-1）调用weighted_interleave_nodes来确定分配内存的节点号，当ilx有效时，就会调用weighted_interleave_nid使用ilx来确定，下面依次分析。
 </p>
 
+<p>
+首先是weighted_interleave_nodes函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">weighted_interleave_nodes</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">policy</span>)
+{
+        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>;
+        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">cpuset_mems_cookie</span>;
+
+<span style="color: #BFEBBF;">retry</span>:
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">to prevent miscount use tsk-&gt;mems_allowed_seq to detect rebind</span><span style="color: #5F7F5F;"> */</span>
+        cpuset_mems_cookie = read_mems_allowed_begin();
+        node = current-&gt;il_prev;
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>current-&gt;il_weight || <span style="color: #F0DFAF; font-weight: bold;">!</span>node_isset(node, policy-&gt;nodes)) {
+                node = next_node_in(node, policy-&gt;nodes);
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (read_mems_allowed_retry(cpuset_mems_cookie))
+                        <span style="color: #F0DFAF; font-weight: bold;">goto</span> <span style="color: #BFEBBF;">retry</span>;
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (node == MAX_NUMNODES)
+                        <span style="color: #F0DFAF; font-weight: bold;">return</span> node;
+                current-&gt;il_prev = node;
+                current-&gt;il_weight = get_il_weight(node);
+        }
+        current-&gt;il_weight--;
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> node;
+}
+</pre>
+</div>
+
+<p>
+先抛开if条件里的逻辑不谈，每次进入weighted_interleave_nodes函数，就会返回current这个task_struct结构体里的il_prev，它就是记录了当前用于内存分配的节点号，每分配一次，current-&gt;il_weight就会递减，这相当于在il_prev这个内存节点上做了权重，分配il_weight次后就会将这个权重递减为1了。
+</p>
+
+<p>
+现在分析if里的逻辑，进入这个if的条件是il_weight递减到0，或者前次使用的内存节点已经不在policy里允许的nodes时。
+</p>
+
+<p>
+if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，同时current:il_weight也要更新为当前这个节点的权重，这可以通过get_il_weight去获得：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">u8</span> <span style="color: #93E0E3;">get_il_weight</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>)
+{
+        <span style="color: #7CB8BB;">u8</span> *<span style="color: #DFAF8F;">table</span>;
+        <span style="color: #7CB8BB;">u8</span> <span style="color: #DFAF8F;">weight</span>;
+
+        rcu_read_lock();
+        table = rcu_dereference(iw_table);
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">if no iw_table, use system default</span><span style="color: #5F7F5F;"> */</span>
+        weight = table ? table[node] : 1;
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">if value in iw_table is 0, use system default</span><span style="color: #5F7F5F;"> */</span>
+        weight = weight ? weight : 1;
+        rcu_read_unlock();
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> weight;
+}
+</pre>
+</div>
+<p>
+从这个函数可以知道weight其实就是来自iw_table里对应节点的权重，它事先通过node_store函数去存放。
+</p>
 
 
 <p>
-是对取模操作的一个优化，关于这个优化参见附节<a href="#org7506b08">附节：使用与操作优化取模操作</a>。
+是对取模操作的一个优化，关于这个优化参见附节<a href="#org0922543">附节：使用与操作优化取模操作</a>。
 </p>
 </div>
 </div>
 
 
-<div id="outline-container-org923e02f" class="outline-3">
-<h3 id="org923e02f"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-orga3e46e8" class="outline-3">
+<h3 id="orga3e46e8"><span class="section-number-3">2.2.</span> 第二部分</h3>
 </div>
-<div id="outline-container-org40f4876" class="outline-3">
-<h3 id="org40f4876"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-orgcd88eaf" class="outline-3">
+<h3 id="orgcd88eaf"><span class="section-number-3">2.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-org49eb5ac" class="outline-2">
-<h2 id="org49eb5ac"><span class="section-number-2">3.</span> 附节</h2>
+<div id="outline-container-orgfc5af2d" class="outline-2">
+<h2 id="orgfc5af2d"><span class="section-number-2">3.</span> 附节</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-orgc74a7ec" class="outline-3">
-<h3 id="orgc74a7ec"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-orgd7cad43" class="outline-3">
+<h3 id="orgd7cad43"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
 </div>
-<div id="outline-container-org7506b08" class="outline-3">
-<h3 id="org7506b08"><span class="section-number-3">3.2.</span> 使用与操作优化取模</h3>
+<div id="outline-container-org0922543" class="outline-3">
+<h3 id="org0922543"><span class="section-number-3">3.2.</span> 使用与操作优化取模</h3>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-12 Tue 22:29</p>
+<p class="date">Created: 2024-11-13 Wed 22:34</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

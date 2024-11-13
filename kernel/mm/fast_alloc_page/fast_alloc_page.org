@@ -515,10 +515,78 @@ static __always_inline unsigned int __next_node_in(int node, const nodemask_t *s
 	return ret;
 }
 #+end_src
+如果不使用task_struct:il_prev，就会调用interleave_nid来获得内存分配的节点号：
+#+begin_src c
+static unsigned int interleave_nid(struct mempolicy *pol, pgoff_t ilx)
+{
+	nodemask_t nodemask;
+	unsigned int target, nnodes;
+	int i;
+	int nid;
+
+	nnodes = read_once_policy_nodemask(pol, &nodemask);
+	if (!nnodes)
+		return numa_node_id();
+	target = ilx % nnodes;
+	nid = first_node(nodemask);
+	for (i = 0; i < target; i++)
+		nid = next_node(nid, nodemask);
+	return nid;
+}
+#+end_src
+该函数以传入的ilx作为索引来选择内存分配的节点，首先ilx需要对pol->nodes里置位的节点数目进行取模得到target，然后通过first_node获得nodemask里第一个置位的节点号nid，最后从nid开始循环target次，找到低target个置位的比特的序号，返回。
 
 
 *第五种case MPOL_WEIGHTED_INTERLEAVE：* \\
+该种情况与case 4类似，依据ilx参数的不同，而调用不同的函数确定nid并返回。当使用task_struct:il_prev时（也就是ilx无效为-1）调用weighted_interleave_nodes来确定分配内存的节点号，当ilx有效时，就会调用weighted_interleave_nid使用ilx来确定，下面依次分析。
 
+首先是weighted_interleave_nodes函数：
+#+begin_src c
+static unsigned int weighted_interleave_nodes(struct mempolicy *policy)
+{
+	unsigned int node;
+	unsigned int cpuset_mems_cookie;
+
+retry:
+	/* to prevent miscount use tsk->mems_allowed_seq to detect rebind */
+	cpuset_mems_cookie = read_mems_allowed_begin();
+	node = current->il_prev;
+	if (!current->il_weight || !node_isset(node, policy->nodes)) {
+		node = next_node_in(node, policy->nodes);
+		if (read_mems_allowed_retry(cpuset_mems_cookie))
+			goto retry;
+		if (node == MAX_NUMNODES)
+			return node;
+		current->il_prev = node;
+		current->il_weight = get_il_weight(node);
+	}
+	current->il_weight--;
+	return node;
+}
+#+end_src
+
+先抛开if条件里的逻辑不谈，每次进入weighted_interleave_nodes函数，就会返回current这个task_struct结构体里的il_prev，它就是记录了当前用于内存分配的节点号，每分配一次，current->il_weight就会递减，这相当于在il_prev这个内存节点上做了权重，分配il_weight次后就会将这个权重递减为1了。
+
+现在分析if里的逻辑，进入这个if的条件是il_weight递减到0，或者前次使用的内存节点已经不在policy里允许的nodes时。
+
+if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，同时current:il_weight也要更新为当前这个节点的权重，这可以通过get_il_weight去获得：
+#+begin_src c
+static u8 get_il_weight(int node)
+{
+	u8 *table;
+	u8 weight;
+
+	rcu_read_lock();
+	table = rcu_dereference(iw_table);
+	/* if no iw_table, use system default */
+	weight = table ? table[node] : 1;
+	/* if value in iw_table is 0, use system default */
+	weight = weight ? weight : 1;
+	rcu_read_unlock();
+	return weight;
+}
+#+end_src
+从这个函数可以知道weight其实就是来自iw_table里对应节点的权重，它事先通过node_store函数去存放。
 
 
 是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。

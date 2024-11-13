@@ -6,3 +6,5 @@ alloc_pages_mpol_noprof
 policy_nodemask
 interleave_nodes
 interleave_nid
+weighted_interleave_nodes
+weighted_interleave_nid
