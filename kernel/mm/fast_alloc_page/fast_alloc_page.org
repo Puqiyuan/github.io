@@ -538,7 +538,15 @@ static unsigned int interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 
 
 *第五种case MPOL_WEIGHTED_INTERLEAVE：* \\
-该种情况与case 4类似，依据ilx参数的不同，而调用不同的函数确定nid并返回。当使用task_struct:il_prev时（也就是ilx无效为-1）调用weighted_interleave_nodes来确定分配内存的节点号，当ilx有效时，就会调用weighted_interleave_nid使用ilx来确定，下面依次分析。
+该种情况与case 4类似：
+#+begin_src c
+	case MPOL_WEIGHTED_INTERLEAVE:
+		*nid = (ilx == NO_INTERLEAVE_INDEX) ?
+			weighted_interleave_nodes(pol) :
+			weighted_interleave_nid(pol, ilx);
+		break;
+#+end_src
+依据ilx参数的不同，而调用不同的函数确定nid并返回。当使用task_struct:il_prev时（也就是ilx无效为-1）调用weighted_interleave_nodes来确定分配内存的节点号，当ilx有效时，就会调用weighted_interleave_nid使用ilx来确定，下面依次分析。
 
 首先是weighted_interleave_nodes函数：
 #+begin_src c
@@ -586,8 +594,58 @@ static u8 get_il_weight(int node)
 	return weight;
 }
 #+end_src
-从这个函数可以知道weight其实就是来自iw_table里对应节点的权重，它事先通过node_store函数去存放。
+从这个函数可以知道weight其实就是来自iw_table里对应节点的权重，它事先通过node_store函数去存放。总结来说，这个函数的功能就是达到前面介绍interleave分配的效果：在一组节点中交错分配内存，并且会按照一定的权重来分配，比如这里体现这点的就是每次进这个函数都会将current->il_weight权重递减，为非零本次分配内存的节点号不会改变，而当这个值递减为0，就会改变分配内存的节点号。
 
+当ilx有效时，是weighted_interleave_nid函数用来确定分配内存的节点：
+#+begin_src c
+static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
+{
+	nodemask_t nodemask;
+	unsigned int target, nr_nodes;
+	u8 *table;
+	unsigned int weight_total = 0;
+	u8 weight;
+	int nid;
+
+	nr_nodes = read_once_policy_nodemask(pol, &nodemask);
+	if (!nr_nodes)
+		return numa_node_id();
+
+	rcu_read_lock();
+	table = rcu_dereference(iw_table);
+	/* calculate the total weight */
+	for_each_node_mask(nid, nodemask) {
+		/* detect system default usage */
+		weight = table ? table[nid] : 1;
+		weight = weight ? weight : 1;
+		weight_total += weight;
+	}
+
+	/* Calculate the node offset based on totals */
+	target = ilx % weight_total;
+	nid = first_node(nodemask);
+	while (target) {
+		/* detect system default usage */
+		weight = table ? table[nid] : 1;
+		weight = weight ? weight : 1;
+		if (target < weight)
+			break;
+		target -= weight;
+		nid = next_node_in(nid, nodemask);
+	}
+	rcu_read_unlock();
+	return nid;
+}
+#+end_src
+
+
+
+最后这个policy_nodemask函数就是返回前面各个case算出的nodemask，注意nodemask是可以为NULL的，而nid通过最后一个参数带出：
+#+begin_src c
+	return nodemask;
+#+end_src
+
+这样alloc_pages_mpol_noprof函数的第一部分policy_nodemask函数就介绍完了。
 
 是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。
 
