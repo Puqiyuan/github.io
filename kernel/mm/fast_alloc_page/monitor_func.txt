@@ -8,3 +8,5 @@ interleave_nodes
 interleave_nid
 weighted_interleave_nodes
 weighted_interleave_nid
+alloc_pages_preferred_many
+__alloc_pages_noprof

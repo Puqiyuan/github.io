@@ -638,7 +638,8 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 }
 #+end_src
 
-
+该函数首先通过一个循环for_each_node_mask将pol->nodes里置上的节点的所有权重求和，然后ilx可以作为一个虚拟地址，其要对weight_total进行取余，这样ilx就会落在权重区间[0, weight_total]。
+而后面的while循环实现了将余数target按权重落到相应的区间，其实现方式就是每次只要当前剩余target还不小于当前节点的权重，就会将当前target减去当前节点的权重。举个例子，系统有三个节点，权重依次为3，2，1那么中的权重为6，ilx作为虚拟地址比如可以为0-5，那么这六个地址按照比例一定是有3/6，2/6，1/6的概率分别在第一、二以及三个节点上完成内存分配请求，至于大于5的地址对weight_total取余数后一样符合这个加权概率。
 
 最后这个policy_nodemask函数就是返回前面各个case算出的nodemask，注意nodemask是可以为NULL的，而nid通过最后一个参数带出：
 #+begin_src c
@@ -647,11 +648,83 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 
 这样alloc_pages_mpol_noprof函数的第一部分policy_nodemask函数就介绍完了。
 
-是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。
+# 是对取模操作的一个优化，关于这个优化参见附节[[使用与操作优化取模][附节：使用与操作优化取模操作]]。
 
 
 ** 第二部分
+下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
+
+*情形一MPOL_PREFERRED_MANY*
+
+调用alloc_pages_preferred_many函数：
+#+begin_src c
+	if (pol->mode == MPOL_PREFERRED_MANY)
+		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+#+end_src
+#+begin_src c
+static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
+						int nid, nodemask_t *nodemask)
+{
+	struct page *page;
+	gfp_t preferred_gfp;
+
+	/*
+	 * This is a two pass approach. The first pass will only try the
+	 * preferred nodes but skip the direct reclaim and allow the
+	 * allocation to fail, while the second pass will try all the
+	 * nodes in system.
+	 */
+	preferred_gfp = gfp | __GFP_NOWARN;
+	preferred_gfp &= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
+	page = __alloc_pages_noprof(preferred_gfp, order, nid, nodemask);
+	if (!page)
+		page = __alloc_pages_noprof(gfp, order, nid, NULL);
+
+	return page;
+}
+#+end_src
+可以看到该种情形通过alloc_pages_preferred_many实现两阶段的页面分配，第一阶段先尝试在nodemask中指定的节点中分配内存，并且不打印分配失败相关的一些信息，也不允许进入直接页面回收，
+如果这种分配方式可以成功分配出页面，就返回页面了。否则就会以NULL参数作为nodemask再次调用__alloc_pages_noprof。所以这里可以看到对于指定在某些节点分配内存的方式，先是尽力在这些节点上分配，分配失败时还是会尝试整个系统的节点都可以分配，这是一种回退，尽量保证分配成功有内存可用的方式。
+
+*情形二*
+
+该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定页面进行分配：
+#+begin_src c
+	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+	    /* filter "hugepage" allocation, unless from alloc_pages() */
+	    order == HPAGE_PMD_ORDER && ilx != NO_INTERLEAVE_INDEX) {
+		/*
+		 * For hugepage allocation and non-interleave policy which
+		 * allows the current node (or other explicitly preferred
+		 * node) we only try to allocate from the current/preferred
+		 * node and don't fall back to other nodes, as the cost of
+		 * remote accesses would likely offset THP benefits.
+		 *
+		 * If the policy is interleave or does not allow the current
+		 * node in its nodemask, we allocate the standard way.
+		 */
+		if (pol->mode != MPOL_INTERLEAVE &&
+		    pol->mode != MPOL_WEIGHTED_INTERLEAVE &&
+		    (!nodemask || node_isset(nid, *nodemask))) {
+			/*
+			 * First, try to allocate THP only on local node, but
+			 * don't reclaim unnecessarily, just compact.
+			 */
+			page = __alloc_pages_node_noprof(nid,
+				gfp | __GFP_THISNODE | __GFP_NORETRY, order);
+			if (page || !(gfp & __GFP_DIRECT_RECLAIM))
+				return page;
+			/*
+			 * If hugepage allocations are configured to always
+			 * synchronous compact or the vma has been madvised
+			 * to prefer hugepage backing, retry allowing remote
+			 * memory with both reclaim and compact as well.
+			 */
+		}
+	}
+#+end_src
+首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12= 9，即分配2^9个页面，2MB大小的空间），
 ** 第三部分
 * 附节
 ** get_vma_policy生成ilx
-** 使用与操作优化取模
+# ** 使用与操作优化取模

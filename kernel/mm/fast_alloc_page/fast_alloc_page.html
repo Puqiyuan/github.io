@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-17 Sun 22:19 -->
+<!-- 2024-11-18 Mon 23:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,18 +38,17 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9367d01">1. alloc_pages_noprof</a></li>
-<li><a href="#org2876f52">2. alloc_pages_mpol_noprof</a>
+<li><a href="#orgd85961a">1. alloc_pages_noprof</a></li>
+<li><a href="#org6163a51">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#org2f7eab2">2.1. 第一部分</a></li>
-<li><a href="#orgad8b679">2.2. 第二部分</a></li>
-<li><a href="#org79b80f1">2.3. 第三部分</a></li>
+<li><a href="#orgebce7dd">2.1. 第一部分</a></li>
+<li><a href="#org0d76f90">2.2. 第二部分</a></li>
+<li><a href="#orgfdfb66c">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org4acbefb">3. 附节</a>
+<li><a href="#orge526370">3. 附节</a>
 <ul>
-<li><a href="#org3496bfa">3.1. get_vma_policy生成ilx</a></li>
-<li><a href="#org9369e36">3.2. 使用与操作优化取模</a></li>
+<li><a href="#org7791f00">3.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -59,8 +58,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-org9367d01" class="outline-2">
-<h2 id="org9367d01"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-orgd85961a" class="outline-2">
+<h2 id="orgd85961a"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -159,7 +158,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="orgabed53c">
+<pre class="example" id="org0ac2a89">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -192,7 +191,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="orgae90768">
+<pre class="example" id="org699270d">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -370,8 +369,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-org2876f52" class="outline-2">
-<h2 id="org2876f52"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-org6163a51" class="outline-2">
+<h2 id="org6163a51"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -384,7 +383,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org3496bfa">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org7791f00">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -400,8 +399,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </ul>
 </div>
 
-<div id="outline-container-org2f7eab2" class="outline-3">
-<h3 id="org2f7eab2"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-orgebce7dd" class="outline-3">
+<h3 id="orgebce7dd"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -896,7 +895,10 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </pre>
 </div>
 
-
+<p>
+该函数首先通过一个循环for_each_node_mask将pol-&gt;nodes里置上的节点的所有权重求和，然后ilx可以作为一个虚拟地址，其要对weight_total进行取余，这样ilx就会落在权重区间[0, weight_total]。
+而后面的while循环实现了将余数target按权重落到相应的区间，其实现方式就是每次只要当前剩余target还不小于当前节点的权重，就会将当前target减去当前节点的权重。举个例子，系统有三个节点，权重依次为3，2，1那么中的权重为6，ilx作为虚拟地址比如可以为0-5，那么这六个地址按照比例一定是有3/6，2/6，1/6的概率分别在第一、二以及三个节点上完成内存分配请求，至于大于5的地址对weight_total取余数后一样符合这个加权概率。
+</p>
 
 <p>
 最后这个policy_nodemask函数就是返回前面各个case算出的nodemask，注意nodemask是可以为NULL的，而nid通过最后一个参数带出：
@@ -909,36 +911,122 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 <p>
 这样alloc_pages_mpol_noprof函数的第一部分policy_nodemask函数就介绍完了。
 </p>
+</div>
+</div>
+
+
+<div id="outline-container-org0d76f90" class="outline-3">
+<h3 id="org0d76f90"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div class="outline-text-3" id="text-2-2">
+<p>
+下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
+</p>
 
 <p>
-是对取模操作的一个优化，关于这个优化参见附节<a href="#org9369e36">附节：使用与操作优化取模操作</a>。
+<b>情形一MPOL_PREFERRED_MANY</b>
+</p>
+
+<p>
+调用alloc_pages_preferred_many函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;mode == MPOL_PREFERRED_MANY)
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> alloc_pages_preferred_many(gfp, order, nid, nodemask);
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">alloc_pages_preferred_many</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
+                                                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>, <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>;
+        <span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">preferred_gfp</span>;
+
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * This is a two pass approach. The first pass will only try the</span>
+<span style="color: #7F9F7F;">         * preferred nodes but skip the direct reclaim and allow the</span>
+<span style="color: #7F9F7F;">         * allocation to fail, while the second pass will try all the</span>
+<span style="color: #7F9F7F;">         * nodes in system.</span>
+<span style="color: #5F7F5F;">         */</span>
+        preferred_gfp = gfp | __GFP_NOWARN;
+        preferred_gfp &amp;= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
+        page = __alloc_pages_noprof(preferred_gfp, order, nid, nodemask);
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>page)
+                page = __alloc_pages_noprof(gfp, order, nid, <span style="color: #BFEBBF;">NULL</span>);
+
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> page;
+}
+</pre>
+</div>
+<p>
+可以看到该种情形通过alloc_pages_preferred_many实现两阶段的页面分配，第一阶段先尝试在nodemask中指定的节点中分配内存，并且不打印分配失败相关的一些信息，也不允许进入直接页面回收，
+如果这种分配方式可以成功分配出页面，就返回页面了。否则就会以NULL参数作为nodemask再次调用__alloc_pages_noprof。所以这里可以看到对于指定在某些节点分配内存的方式，先是尽力在这些节点上分配，分配失败时还是会尝试整个系统的节点都可以分配，这是一种回退，尽量保证分配成功有内存可用的方式。
+</p>
+
+<p>
+<b>情形二</b>
+</p>
+
+<p>
+该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定页面进行分配：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &amp;&amp;
+    <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">filter "hugepage" allocation, unless from alloc_pages()</span><span style="color: #5F7F5F;"> */</span>
+    order == HPAGE_PMD_ORDER &amp;&amp; ilx != NO_INTERLEAVE_INDEX) {
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * For hugepage allocation and non-interleave policy which</span>
+<span style="color: #7F9F7F;">         * allows the current node (or other explicitly preferred</span>
+<span style="color: #7F9F7F;">         * node) we only try to allocate from the current/preferred</span>
+<span style="color: #7F9F7F;">         * node and don't fall back to other nodes, as the cost of</span>
+<span style="color: #7F9F7F;">         * remote accesses would likely offset THP benefits.</span>
+<span style="color: #7F9F7F;">         *</span>
+<span style="color: #7F9F7F;">         * If the policy is interleave or does not allow the current</span>
+<span style="color: #7F9F7F;">         * node in its nodemask, we allocate the standard way.</span>
+<span style="color: #5F7F5F;">         */</span>
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;mode != MPOL_INTERLEAVE &amp;&amp;
+            pol-&gt;mode != MPOL_WEIGHTED_INTERLEAVE &amp;&amp;
+            (<span style="color: #F0DFAF; font-weight: bold;">!</span>nodemask || node_isset(nid, *nodemask))) {
+                <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">                 * First, try to allocate THP only on local node, but</span>
+<span style="color: #7F9F7F;">                 * don't reclaim unnecessarily, just compact.</span>
+<span style="color: #5F7F5F;">                 */</span>
+                page = __alloc_pages_node_noprof(nid,
+                        gfp | __GFP_THISNODE | __GFP_NORETRY, order);
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (page || <span style="color: #F0DFAF; font-weight: bold;">!</span>(gfp &amp; __GFP_DIRECT_RECLAIM))
+                        <span style="color: #F0DFAF; font-weight: bold;">return</span> page;
+                <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">                 * If hugepage allocations are configured to always</span>
+<span style="color: #7F9F7F;">                 * synchronous compact or the vma has been madvised</span>
+<span style="color: #7F9F7F;">                 * to prefer hugepage backing, retry allowing remote</span>
+<span style="color: #7F9F7F;">                 * memory with both reclaim and compact as well.</span>
+<span style="color: #5F7F5F;">                 */</span>
+        }
+}
+</pre>
+</div>
+<p>
+首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12= 9，即分配2^9个页面，2MB大小的空间），
 </p>
 </div>
 </div>
-
-
-<div id="outline-container-orgad8b679" class="outline-3">
-<h3 id="orgad8b679"><span class="section-number-3">2.2.</span> 第二部分</h3>
-</div>
-<div id="outline-container-org79b80f1" class="outline-3">
-<h3 id="org79b80f1"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-orgfdfb66c" class="outline-3">
+<h3 id="orgfdfb66c"><span class="section-number-3">2.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-org4acbefb" class="outline-2">
-<h2 id="org4acbefb"><span class="section-number-2">3.</span> 附节</h2>
+<div id="outline-container-orge526370" class="outline-2">
+<h2 id="orge526370"><span class="section-number-2">3.</span> 附节</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org3496bfa" class="outline-3">
-<h3 id="org3496bfa"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org7791f00" class="outline-3">
+<h3 id="org7791f00"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
+<div class="outline-text-3" id="text-3-1">
 </div>
-<div id="outline-container-org9369e36" class="outline-3">
-<h3 id="org9369e36"><span class="section-number-3">3.2.</span> 使用与操作优化取模</h3>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-17 Sun 22:19</p>
+<p class="date">Created: 2024-11-18 Mon 23:00</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
