@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-18 Mon 23:00 -->
+<!-- 2024-11-19 Tue 20:24 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,17 +38,17 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgd85961a">1. alloc_pages_noprof</a></li>
-<li><a href="#org6163a51">2. alloc_pages_mpol_noprof</a>
+<li><a href="#org174023c">1. alloc_pages_noprof</a></li>
+<li><a href="#org00b6827">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#orgebce7dd">2.1. 第一部分</a></li>
-<li><a href="#org0d76f90">2.2. 第二部分</a></li>
-<li><a href="#orgfdfb66c">2.3. 第三部分</a></li>
+<li><a href="#org9f525fa">2.1. 第一部分</a></li>
+<li><a href="#org1200703">2.2. 第二部分</a></li>
+<li><a href="#org802f1af">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orge526370">3. 附节</a>
+<li><a href="#orgd42efc5">3. 附节</a>
 <ul>
-<li><a href="#org7791f00">3.1. get_vma_policy生成ilx</a></li>
+<li><a href="#org75e716a">3.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -58,8 +58,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-orgd85961a" class="outline-2">
-<h2 id="orgd85961a"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org174023c" class="outline-2">
+<h2 id="org174023c"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -158,7 +158,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org0ac2a89">
+<pre class="example" id="orgd8ef320">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -191,7 +191,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="org699270d">
+<pre class="example" id="orgf793568">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -369,8 +369,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-org6163a51" class="outline-2">
-<h2 id="org6163a51"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-org00b6827" class="outline-2">
+<h2 id="org00b6827"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -383,7 +383,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org7791f00">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org75e716a">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -399,8 +399,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </ul>
 </div>
 
-<div id="outline-container-orgebce7dd" class="outline-3">
-<h3 id="orgebce7dd"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-org9f525fa" class="outline-3">
+<h3 id="org9f525fa"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -915,8 +915,8 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 
 
-<div id="outline-container-org0d76f90" class="outline-3">
-<h3 id="org0d76f90"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-org1200703" class="outline-3">
+<h3 id="org1200703"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -967,7 +967,7 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </p>
 
 <p>
-该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定页面进行分配：
+该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定节点进行分配：
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &amp;&amp;
@@ -1005,20 +1005,38 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </pre>
 </div>
 <p>
-首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12= 9，即分配2^9个页面，2MB大小的空间），
+首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12=
+9，即分配2^9个页面，2MB大小的空间），而随后的条件ilx != NO_INTERLEAVE_INDEX、pol-&gt;mode !=
+MPOL_INTERLEAVE以及pol-&gt;mode != MPOL_WEIGHTED_INTERLEAVE都是过滤掉交错分配的情况，因为交错
+分配的本质要求就是要不固定节点分配，这和这个优化的要求：固定节点分配内存，是相矛盾的，最后
+一个条件如果nodemask非空，就要求首选内存节点nid在这个nodemask中。这些条件任一不满足都会走
+情形三的标准方式去分配内存。
 </p>
+
+<p>
+__GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调用者保证未来的内存访问来自nid的cpu，然后内存也是在nid节点分配的，这样本地内存访问的性能优势就得以体现。
+</p>
+
+<p>
+<b>情形三</b>
+改种情形其实没有太多分析的了，就是以前面算好的nodemask和nid，上层函数过来的gfp与order调用__alloc_pages_noprof函数即可。
+</p>
+<div class="org-src-container">
+<pre class="src src-c">page = __alloc_pages_noprof(gfp, order, nid, nodemask);
+</pre>
 </div>
 </div>
-<div id="outline-container-orgfdfb66c" class="outline-3">
-<h3 id="orgfdfb66c"><span class="section-number-3">2.3.</span> 第三部分</h3>
+</div>
+<div id="outline-container-org802f1af" class="outline-3">
+<h3 id="org802f1af"><span class="section-number-3">2.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-orge526370" class="outline-2">
-<h2 id="orge526370"><span class="section-number-2">3.</span> 附节</h2>
+<div id="outline-container-orgd42efc5" class="outline-2">
+<h2 id="orgd42efc5"><span class="section-number-2">3.</span> 附节</h2>
 <div class="outline-text-2" id="text-3">
 </div>
-<div id="outline-container-org7791f00" class="outline-3">
-<h3 id="org7791f00"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org75e716a" class="outline-3">
+<h3 id="org75e716a"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
 <div class="outline-text-3" id="text-3-1">
 </div>
 </div>
@@ -1026,7 +1044,7 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-18 Mon 23:00</p>
+<p class="date">Created: 2024-11-19 Tue 20:24</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -688,7 +688,7 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 
 *情形二*
 
-该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定页面进行分配：
+该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定节点进行分配：
 #+begin_src c
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -723,7 +723,22 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 		}
 	}
 #+end_src
-首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12= 9，即分配2^9个页面，2MB大小的空间），
+首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12=
+9，即分配2^9个页面，2MB大小的空间），而随后的条件ilx != NO_INTERLEAVE_INDEX、pol->mode !=
+MPOL_INTERLEAVE以及pol->mode != MPOL_WEIGHTED_INTERLEAVE都是过滤掉交错分配的情况，因为交错
+分配的本质要求就是要不固定节点分配，这和这个优化的要求：固定节点分配内存，是相矛盾的，最后
+一个条件如果nodemask非空，就要求首选内存节点nid在这个nodemask中。这些条件任一不满足都会走
+情形三的标准方式去分配内存。
+
+__GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调用者保证未来的内存访问来自nid的cpu，然后内存也是在nid节点分配的，这样本地内存访问的性能优势就得以体现。
+
+*情形三*
+改种情形其实没有太多分析的了，就是以前面算好的nodemask和nid，上层函数过来的gfp与order调用__alloc_pages_noprof函数即可：
+#+begin_src c
+  page = __alloc_pages_noprof(gfp, order, nid, nodemask);
+#+end_src
+
+
 ** 第三部分
 * 附节
 ** get_vma_policy生成ilx
