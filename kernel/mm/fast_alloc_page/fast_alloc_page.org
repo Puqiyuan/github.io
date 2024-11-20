@@ -4,6 +4,7 @@
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../../org-manual.css" type="text/css">
 #+OPTIONS: htmlize:nil
+#+OPTIONS: html-link-use-abs-url:nil
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 
 * alloc_pages_noprof
@@ -194,6 +195,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 #define MAX_NUMNODES    (1 << NODES_SHIFT)
 #+end_src
 
+<<nodes_shift>>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
 #+begin_src conf
 config NODES_SHIFT
@@ -331,6 +333,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
   ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直插内存模块）或其它直接映射到系统内存的设备。随着硬件的演进，现代系统需要支持直接映射到内存的硬件设备，如持久内存。这些设备可以直接与系统内存交互，通常是可持久化的。如使用非易失性存储器（如 NVDIMM）、显存映射等。启用CONFIG_ZONE_DEVICE后可用。
 
 针对笔者目前环境的配置，zone_type的定义如下：
+<<__MAX_NR_ZONES>>
 #+begin_src c
   enum zone_type {
           ZONE_DMA,
@@ -733,13 +736,127 @@ MPOL_INTERLEAVE以及pol->mode != MPOL_WEIGHTED_INTERLEAVE都是过滤掉交错�
 __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调用者保证未来的内存访问来自nid的cpu，然后内存也是在nid节点分配的，这样本地内存访问的性能优势就得以体现。
 
 *情形三*
-改种情形其实没有太多分析的了，就是以前面算好的nodemask和nid，上层函数过来的gfp与order调用__alloc_pages_noprof函数即可：
+
+该种情形其实没有太多分析的了，就是以前面算好的nodemask和nid，上层函数过来的gfp与order调用__alloc_pages_noprof函数即可：
 #+begin_src c
   page = __alloc_pages_noprof(gfp, order, nid, nodemask);
 #+end_src
 
 
 ** 第三部分
+
+这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
+#+begin_src c
+	if (unlikely(pol->mode == MPOL_INTERLEAVE) && page) {
+		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
+		if (static_branch_likely(&vm_numa_stat_key) &&
+		    page_to_nid(page) == nid) {
+			preempt_disable();
+			__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
+			preempt_enable();
+		}
+	}
+#+end_src
+
+注意这种更新只会对MPOL_INTERLEAVE策略有效，另外numa stat统计信息也是可以不使能的。下面看下__count_numa_event函数：
+#+begin_src c
+static inline void
+__count_numa_event(struct zone *zone, enum numa_stat_item item)
+{
+	struct per_cpu_zonestat __percpu *pzstats = zone->per_cpu_zonestats;
+
+	raw_cpu_inc(pzstats->vm_numa_event[item]);
+}
+#+end_src
+可以清楚的看到，其就是增加了zone里percpu类型的变量per_cpu_zonestats的vm_numa_event数组里对应事件的计数。
+
+这里需要分析下page_to_nid和page_zone这两个函数，这在现代常见的NUMA或SMP架构里是十分常见的。首先是page_to_nid，定义在mm.h里：
+#+begin_src c
+#ifdef NODE_NOT_IN_PAGE_FLAGS
+int page_to_nid(const struct page *page);
+#else
+static inline int page_to_nid(const struct page *page)
+{
+	return (PF_POISONED_CHECK(page)->flags >> NODES_PGSHIFT) & NODES_MASK;
+}
+#endif
+#+end_src
+可以看到依据NODE_NOT_IN_PAGE_FLAGS宏是否定义而分两种版本的实现，如果它定义了，page_to_nid函数实现在sparse.c文件中，就不实现后面的版本了。这个宏其实区分了node id是否要放置在page:flags成员中，因为这个成员其实就是个unsigned long，也就是64个比特位，有可能是没有足够空间来容纳node id的：
+#+begin_src c
+#if NODES_SHIFT != 0 && NODES_WIDTH == 0
+#define NODE_NOT_IN_PAGE_FLAGS	1
+#endif
+#+end_src
+要想NODE_NOT_IN_PAGE_FLAGS有定义，那么NODES_SHIFT要非0，而NODES_WIDTH为0：
+#+begin_src c
+#ifdef CONFIG_NODES_SHIFT
+#define NODES_SHIFT     CONFIG_NODES_SHIFT
+#else
+#define NODES_SHIFT     0
+#endif
+#+end_src
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的[[nodes_shift][CONFIG_NODES_SHIFT]]有介绍，也就是说第一个条件一般是满足的。
+
+下面就是考虑NODES_WIDTH的值：
+#+begin_src c
+#if ZONES_WIDTH + LRU_GEN_WIDTH + SECTIONS_WIDTH + NODES_SHIFT \
+	<= BITS_PER_LONG - NR_PAGEFLAGS
+#define NODES_WIDTH		NODES_SHIFT
+#elif defined(CONFIG_SPARSEMEM_VMEMMAP)
+#error "Vmemmap: No space for nodes field in page flags"
+#else
+#define NODES_WIDTH		0
+#endif
+#+end_src
+
+这里NR_PAGEFLAGS是用于表示页面状态（比如PG_locked、PG_dirty以及PG_uptodate等）占用多少比特位，这会在编译时确定，它其实就是__NR_PAGEFLAGS，在笔者的笔记本上它就是24。而在64位架构下BITS_PER_LONG一般就是64位。
+
+ZONES_WIDTH定义如下：
+#+begin_src c
+#if MAX_NR_ZONES < 2
+#define ZONES_SHIFT 0
+#elif MAX_NR_ZONES <= 2
+#define ZONES_SHIFT 1
+#elif MAX_NR_ZONES <= 4
+#define ZONES_SHIFT 2
+#elif MAX_NR_ZONES <= 8
+#define ZONES_SHIFT 3
+#else
+#error ZONES_SHIFT "Too many zones configured"
+#endif
+
+#define ZONES_WIDTH		ZONES_SHIFT
+#+end_src
+MAX_NR_ZONES其实就是[[__MAX_NR_ZONES][__MAX_NR_ZONES]]，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+
+对于SECTIONS_WIDTH定义如下：
+#+begin_src c
+#if defined(CONFIG_SPARSEMEM) && !defined(CONFIG_SPARSEMEM_VMEMMAP)
+#define SECTIONS_WIDTH		SECTIONS_SHIFT
+#else
+#define SECTIONS_WIDTH		0
+#endif
+#+end_src
+
+#+begin_src c
+#ifdef CONFIG_SPARSEMEM
+#include <asm/sparsemem.h>
+#define SECTIONS_SHIFT	(MAX_PHYSMEM_BITS - SECTION_SIZE_BITS)
+#else
+#define SECTIONS_SHIFT	0
+#endif
+#+end_src
+CONFIG_SPARSEMEM用于支持物理地址内存布局不连续或稀疏分布的系统，物理地址空间可能存在多个“空洞”（没有内存的区域），这样的系统包括NUMA系统（多节点非均匀内存访问），高端服务器或具有大地址空间的系统。将物理内存按大块划分为多个section（默认大小如128MB，具体取决于SECTION_SIZE_BITS）。每个section的元数据存储在struct mem_section中，用来描述该section的物理内存状态。如果某个section内有物理内存，则分配struct page元数据；否则不分配，节省内存。通过CONFIG_SPARSEMEM，内核能够按section大粒度来管理物理内存，而不是逐页操作，从而减少元数据开销。与稀疏内存模型相对的是平坦（FLATMEM）内存模型，适用于物理内存布局连续且紧凑的系统，例如嵌入式设备或简单的单处理器系统。内存布局是线性的，没有大的稀疏区域。
+
+CONFIG_SPARSEMEM这种实现需要明确知道section的数量，而section的数量（SECTIONS_WIDTH占用多少比特位）由SECTIONS_SHIFT决定，依赖物理地址空间和section大小。因此，在这种模式下：SECTIONS_WIDTH = SECTIONS_SHIFT，用于指定section的数量以及在数据结构中进行索引的宽度。
+
+而CONFIG_SPARSEMEM_VMEMMAP是CONFIG_SPARSEMEM的一种改进版本，优化了元数据的管理。使用VMEMMAP（虚拟内存映射来为每个物理页创建映射。每个页框的元数据直接存储在struct page中，而不
+是依赖 struct mem_section。通过这种方式，不再需要SECTIONS_SHIFT，因为元数据已经按页粒度存储。vmemmap模式的核心特点是通过预先映射的虚拟地址直接访问struct page，而不是依赖struct
+mem_section，struct page并不是直接按物理地址或其他逻辑地址存储，而是通过vmemmap映射到内核的虚拟地址空间，vmemmap通过虚拟地址空间为所有struct page提供了连续的地址映射，内核可以直接访问struct page而不会引发页面缺页异常（Page Fault），可以直接通过简单的偏移量计算找到对应的struct page。
+
+现代系统一般都是既配置了CONFIG_SPARSEMEM，也配置了CONFIG_SPARSEMEM_VMEMMAP（比如笔者的环境），所以SECTIONS_WIDTH为0。
+
+那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) <= (64 - 24 = 40)。也就是NODES_WIDTH有值为10。
 * 附节
 ** get_vma_policy生成ilx
 # ** 使用与操作优化取模

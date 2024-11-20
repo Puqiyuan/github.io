@@ -21,3 +21,5 @@ __PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
 6, __alloc_pages_noprof->__memcg_kmem_charge_page->obj_cgroup_charge_pages->try_charge_memcg，研究memcg主题。
 
 7，x86设置numa node号码的一个流程：start_secondary->cpu_init->set_numa_node
+
+8，multigen_lru.rst文档。
