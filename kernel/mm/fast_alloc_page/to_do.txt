@@ -23,3 +23,5 @@ __PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
 7，x86设置numa node号码的一个流程：start_secondary->cpu_init->set_numa_node
 
 8，multigen_lru.rst文档。
+
+9，ASSERT_EXCLUSIVE_BITS的实现原理。

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-20 Wed 23:58 -->
+<!-- 2024-11-21 Thu 23:31 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,17 +38,24 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgee1a813">1. alloc_pages_noprof</a></li>
-<li><a href="#orgc32cd72">2. alloc_pages_mpol_noprof</a>
+<li><a href="#orgb294766">1. alloc_pages_noprof</a></li>
+<li><a href="#orgc28eecb">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#org1964a9a">2.1. 第一部分</a></li>
-<li><a href="#org3247235">2.2. 第二部分</a></li>
-<li><a href="#org45b5b0c">2.3. 第三部分</a></li>
+<li><a href="#orgd20090d">2.1. 第一部分</a></li>
+<li><a href="#org432b047">2.2. 第二部分</a></li>
+<li><a href="#org874998a">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org809f751">3. 附节</a>
+<li><a href="#org062d8f0">3. __alloc_pages_noprof</a>
 <ul>
-<li><a href="#org76e3c7f">3.1. get_vma_policy生成ilx</a></li>
+<li><a href="#orgbede25a">3.1. 第一部分</a></li>
+<li><a href="#orgc0a51c0">3.2. 第二部分</a></li>
+<li><a href="#org3b62363">3.3. 第三部分</a></li>
+</ul>
+</li>
+<li><a href="#org30cfa19">4. 附节</a>
+<ul>
+<li><a href="#org228f56f">4.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -58,8 +65,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-orgee1a813" class="outline-2">
-<h2 id="orgee1a813"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-orgb294766" class="outline-2">
+<h2 id="orgb294766"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -158,7 +165,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org8022ee5">
+<pre class="example" id="orga8488bc">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -191,7 +198,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="orgca302bf">
+<pre class="example" id="org2651f67">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -317,7 +324,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </div>
 
 <p>
-<a id="orgbf64fa0"></a>
+<a id="orgc4a8b76"></a>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
 </p>
 <div class="org-src-container">
@@ -370,8 +377,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-orgc32cd72" class="outline-2">
-<h2 id="orgc32cd72"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-orgc28eecb" class="outline-2">
+<h2 id="orgc28eecb"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -384,7 +391,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org76e3c7f">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org228f56f">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -396,12 +403,16 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 
 <li>第二部分是针对不同的情况调用不同的分配函数，一种是针对MPOL_PREFERRED_MANY内存策略，调用alloc_pages_preferred_many分配内存，而针对大页内存分配的情况会做一些特殊处理，然后再调用__alloc_pages_node_noprof完成内存分配，最后一种情况就是通过__alloc_pages_noprof完成除前面两种特殊情况的“正常”页面分配。</li>
 
-<li>第三部分是针对交错分配的方式，要更新一些统计信息。以下继续针对这三部分的代码详细分析。</li>
+<li>第三部分是针对交错分配的方式，要更新一些统计信息。</li>
 </ul>
+
+<p>
+以下继续针对这三部分的代码详细分析。
+</p>
 </div>
 
-<div id="outline-container-org1964a9a" class="outline-3">
-<h3 id="org1964a9a"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-orgd20090d" class="outline-3">
+<h3 id="orgd20090d"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -502,7 +513,7 @@ ZONE_MOVABLE主要用于可以迁移的页面，比如用户态内存或页缓�
 </p>
 
 <p>
-这种类型类似于ZONE_NORMAL，但是不可移动的页面却只能在ZONE_NORMAL。不过有以下一些情况会存在ZONE_MOVABLE有unmovable页面的情况：
+这种类型类似于ZONE_NORMAL，但是不可移动的页面却只能在ZONE_NORMAL。不过以下有一些情况会存在ZONE_MOVABLE有unmovable页面的情况：
 </p>
 <ul class="org-ul">
 <li>长期钉住的页面是不可移动的，因此在ZONE_MOVABLE里不允许长期钉住页面，当页面先钉住然后通过page fault分配物理页面，这种情况没什么问题，页面会来自正确的zone（避开ZONE_MOVABLE），但是当页面被钉住时有可能地址空间里已经有页面位于ZONE_MOVABLE了，这时会将这些页面迁移到不同zone（避开ZONE_MOVABLE）中，迁移要是失败，钉住页面也会失败。</li>
@@ -515,7 +526,8 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 
 <p>
 针对笔者目前环境的配置，zone_type的定义如下：
-<a id="org8b62067"></a>
+<a id="orgf9bf4af"></a>
+<a id="org691f2db"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> {
@@ -917,8 +929,8 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 
 
-<div id="outline-container-org3247235" class="outline-3">
-<h3 id="org3247235"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-org432b047" class="outline-3">
+<h3 id="org432b047"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -1034,8 +1046,8 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </div>
 
 
-<div id="outline-container-org45b5b0c" class="outline-3">
-<h3 id="org45b5b0c"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-org874998a" class="outline-3">
+<h3 id="org874998a"><span class="section-number-3">2.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
@@ -1105,7 +1117,7 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </pre>
 </div>
 <p>
-现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgbf64fa0">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgc4a8b76">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
 </p>
 
 <p>
@@ -1147,7 +1159,7 @@ ZONES_WIDTH定义如下：
 </pre>
 </div>
 <p>
-MAX_NR_ZONES其实就是<a href="#org8b62067">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+MAX_NR_ZONES其实就是<a href="#orgf9bf4af">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
 </p>
 
 <p>
@@ -1190,25 +1202,196 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 </p>
 
 <p>
-那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) &lt;= (64 - 24 = 40)。也就是NODES_WIDTH有值为10。
+那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) &lt;= (64 - 24 = 40)。也就是NODES_WIDTH有值为10，node id就在page:flags中。那么page_to_nid的实现就容易理解了，先将flags右移NODES_PGSHIFT位，这会保证node id所占的比特对齐到最低位，再与上NODES_MASK，只取node id所占的所有bit：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_MASK</span>              ((1UL &lt;&lt; NODES_WIDTH) - 1)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_PGSHIFT</span>           (NODES_PGOFF * (NODES_WIDTH != 0))
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SECTIONS_PGOFF</span>          ((<span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>)*8) - SECTIONS_WIDTH)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_PGOFF</span>             (SECTIONS_PGOFF - NODES_WIDTH)
+</pre>
+</div>
+<p>
+再用下图总结下page:flags的布局：
+</p>
+<pre class="example" id="org95a127b">
+| [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
+</pre>
+<p>
+可以看到，只有ZONE和FLAGS是必须的。并且从这个结构里也可以看出内存的一种层次架构，section里分多少node，节点里又分多少zone。
+</p>
+
+<p>
+后面再来理解page_zone就简单了，它通过zone type返回当前节点对应的zone结构体：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> *<span style="color: #93E0E3;">page_zone</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> &amp;NODE_DATA(page_to_nid(page))-&gt;node_zones[page_zonenum(page)];
+}
+</pre>
+</div>
+<p>
+page_to_nid前面已经介绍了，page_zonenum的实现类似：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #93E0E3;">page_zonenum</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>)
+{
+        ASSERT_EXCLUSIVE_BITS(page-&gt;flags, ZONES_MASK &lt;&lt; ZONES_PGSHIFT);
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> (page-&gt;flags &gt;&gt; ZONES_PGSHIFT) &amp; ZONES_MASK;
+}
+</pre>
+</div>
+
+<p>
+也是先将flags右移zone id所占的那些bit到最低位，然后和ZONES_MASK相与只取zone id所占的比特，另外pglist_data里node_zones成员表示这个节点所有的zone。注意这里有个ASSERT_EXCLUSIVE_BITS宏，它的主要作用是保证没有并发的写发生在(ZONES_MASK &lt;&lt; ZONES_PGSHIFT)里设置的比特位上，其具体实现原理可以参考kcsan-checks.h。
+</p>
+
+<p>
+到这里终于分析完了alloc_pages_mpol_noprof函数的三个部分，后面继续分析alloc_pages_mpol_noprof函数调用的一个关键函数：__alloc_pages_noprof。
 </p>
 </div>
 </div>
 </div>
-<div id="outline-container-org809f751" class="outline-2">
-<h2 id="org809f751"><span class="section-number-2">3.</span> 附节</h2>
+
+<div id="outline-container-org062d8f0" class="outline-2">
+<h2 id="org062d8f0"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-3">
+<p>
+<b>原型：</b>
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">__alloc_pages_noprof</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
+                                      <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">preferred_nid</span>, <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>)
+</pre>
 </div>
-<div id="outline-container-org76e3c7f" class="outline-3">
-<h3 id="org76e3c7f"><span class="section-number-3">3.1.</span> get_vma_policy生成ilx</h3>
+
+<p>
+<b>作用：</b>
+</p>
+
+<p>
+分配2^order个页面，preferred_nid是首选节点，nodemask是备用的节点mask，可以从里面选择。
+</p>
+
+<p>
+<b>详细分析：</b>
+</p>
+
+<p>
+从这个函数开始就进入伙伴系统的代码（page_alloc.c）了，之前一直是在NUMA内存分配策略的实现上（mempolicy.c）。该函数也分为三个部分来分析：
+</p>
+<ul class="org-ul">
+<li>第一部分是确定alloc_context结构体里成员的值。</li>
+<li>第二部分是真正的分配页面部分，包括快速和慢速路径，本文主要关心快速路径。</li>
+<li>第三部分是依据条件更新统计信息到mem cgroup中。</li>
+</ul>
+
+<p>
+下面逐一分析。
+</p>
+</div>
+<div id="outline-container-orgbede25a" class="outline-3">
+<h3 id="orgbede25a"><span class="section-number-3">3.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-3-1">
+<p>
+首先介绍一个结构体alloc_context：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">alloc_context</span> {
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> *<span style="color: #DFAF8F;">zonelist</span>;
+        <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>;
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #DFAF8F;">preferred_zoneref</span>;
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">migratetype</span>;
+
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * highest_zoneidx represents highest usable zone index of</span>
+<span style="color: #7F9F7F;">         * the allocation request. Due to the nature of the zone,</span>
+<span style="color: #7F9F7F;">         * memory on lower zone than the highest_zoneidx will be</span>
+<span style="color: #7F9F7F;">         * protected by lowmem_reserve[highest_zoneidx].</span>
+<span style="color: #7F9F7F;">         *</span>
+<span style="color: #7F9F7F;">         * highest_zoneidx is also used by reclaim/compaction to limit</span>
+<span style="color: #7F9F7F;">         * the target zone since higher zone than this index cannot be</span>
+<span style="color: #7F9F7F;">         * usable for this allocation request.</span>
+<span style="color: #5F7F5F;">         */</span>
+        <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">highest_zoneidx</span>;
+        <span style="color: #7CB8BB;">bool</span> <span style="color: #DFAF8F;">spread_dirty_pages</span>;
+};
+</pre>
+</div>
+<p>
+它用于保存一些在内核内存管理内部使用分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
+</p>
+
+<p>
+这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org691f2db">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">lowmem_reserve</span>[MAX_NR_ZONES];
+</pre>
+</div>
+<p>
+它表示当前的zone需要回退到低区zone分配内存时，它需要查询这个数组，不能分配低于数组元素里存放的内存地址。
+</p>
+
+<p>
+另外由于highest_zoneidx也限制了内存分配最高可用的zone，那么在慢速路径中针对高于highest_zoneidx的zone就没有必要做回收或压缩了，因为即使回收/压缩出空闲内存了也会因为内存位于高highest_zoneidx的zone而不会使用，这相当于是内存回收/压缩的一种优化。
+</p>
+
+<p>
+第一部分主要就是确定alloc_context参数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>;
+<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">alloc_flags</span> = ALLOC_WMARK_LOW;
+<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">alloc_gfp</span>; <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">The gfp_t that was actually used for allocation</span><span style="color: #5F7F5F;"> */</span>
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">alloc_context</span> <span style="color: #DFAF8F;">ac</span> = { };
+
+<span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;"> * There are several places where we assume that the order value is sane</span>
+<span style="color: #7F9F7F;"> * so bail out early if the request is out of bound.</span>
+<span style="color: #5F7F5F;"> */</span>
+<span style="color: #F0DFAF; font-weight: bold;">if</span> (WARN_ON_ONCE_GFP(order &gt; MAX_PAGE_ORDER, gfp))
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">NULL</span>;
+
+gfp &amp;= gfp_allowed_mask;
+<span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;"> * Apply scoped allocation constraints. This is mainly about GFP_NOFS</span>
+<span style="color: #7F9F7F;"> * resp. GFP_NOIO which has to be inherited for all allocation requests</span>
+<span style="color: #7F9F7F;"> * from a particular context which has been marked by</span>
+<span style="color: #7F9F7F;"> * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures</span>
+<span style="color: #7F9F7F;"> * movable zones are not used during allocation.</span>
+<span style="color: #5F7F5F;"> */</span>
+gfp = current_gfp_context(gfp);
+alloc_gfp = gfp;
+<span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &amp;ac,
+                &amp;alloc_gfp, &amp;alloc_flags))
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">NULL</span>;
+</pre>
+</div>
+</div>
+</div>
+<div id="outline-container-orgc0a51c0" class="outline-3">
+<h3 id="orgc0a51c0"><span class="section-number-3">3.2.</span> 第二部分</h3>
+</div>
+<div id="outline-container-org3b62363" class="outline-3">
+<h3 id="org3b62363"><span class="section-number-3">3.3.</span> 第三部分</h3>
+</div>
+</div>
+<div id="outline-container-org30cfa19" class="outline-2">
+<h2 id="org30cfa19"><span class="section-number-2">4.</span> 附节</h2>
+<div class="outline-text-2" id="text-4">
+</div>
+<div id="outline-container-org228f56f" class="outline-3">
+<h3 id="org228f56f"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
+<div class="outline-text-3" id="text-4-1">
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-20 Wed 23:58</p>
+<p class="date">Created: 2024-11-21 Thu 23:31</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

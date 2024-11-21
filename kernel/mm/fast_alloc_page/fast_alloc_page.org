@@ -252,7 +252,9 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 
 + 第二部分是针对不同的情况调用不同的分配函数，一种是针对MPOL_PREFERRED_MANY内存策略，调用alloc_pages_preferred_many分配内存，而针对大页内存分配的情况会做一些特殊处理，然后再调用__alloc_pages_node_noprof完成内存分配，最后一种情况就是通过__alloc_pages_noprof完成除前面两种特殊情况的“正常”页面分配。
 
-+ 第三部分是针对交错分配的方式，要更新一些统计信息。以下继续针对这三部分的代码详细分析。
++ 第三部分是针对交错分配的方式，要更新一些统计信息。
+
+以下继续针对这三部分的代码详细分析。
 
 ** 第一部分
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -325,7 +327,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 + ZONE_MOVABLE \\
   ZONE_MOVABLE主要用于可以迁移的页面，比如用户态内存或页缓存等。在内存卸载和巨页分配时，这个zone有助于提高成功率。通过将可以迁移的内存放在ZONE_MOVABLE，可以确保在需要时有一部分内存可以被迁移或回收，从而进行更灵活的内存管理。例如，大页分配和热插拔内存。用于可热插拔的内存、可移动页面的分配，以及减少不能迁移的分配对系统性能的影响。
 
-  这种类型类似于ZONE_NORMAL，但是不可移动的页面却只能在ZONE_NORMAL。不过有以下一些情况会存在ZONE_MOVABLE有unmovable页面的情况：
+  这种类型类似于ZONE_NORMAL，但是不可移动的页面却只能在ZONE_NORMAL。不过以下有一些情况会存在ZONE_MOVABLE有unmovable页面的情况：
   - 长期钉住的页面是不可移动的，因此在ZONE_MOVABLE里不允许长期钉住页面，当页面先钉住然后通过page fault分配物理页面，这种情况没什么问题，页面会来自正确的zone（避开ZONE_MOVABLE），但是当页面被钉住时有可能地址空间里已经有页面位于ZONE_MOVABLE了，这时会将这些页面迁移到不同zone（避开ZONE_MOVABLE）中，迁移要是失败，钉住页面也会失败。
 
   - memblock对于kernelcore/movablecore区域的设置可能会导致ZONE_MOVABLE里有unmovable的页面。
@@ -334,6 +336,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 
 针对笔者目前环境的配置，zone_type的定义如下：
 <<__MAX_NR_ZONES>>
+<<zone_type>>
 #+begin_src c
   enum zone_type {
           ZONE_DMA,
@@ -856,7 +859,122 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 
 现代系统一般都是既配置了CONFIG_SPARSEMEM，也配置了CONFIG_SPARSEMEM_VMEMMAP（比如笔者的环境），所以SECTIONS_WIDTH为0。
 
-那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) <= (64 - 24 = 40)。也就是NODES_WIDTH有值为10。
+那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) <= (64 - 24 = 40)。也就是NODES_WIDTH有值为10，node id就在page:flags中。那么page_to_nid的实现就容易理解了，先将flags右移NODES_PGSHIFT位，这会保证node id所占的比特对齐到最低位，再与上NODES_MASK，只取node id所占的所有bit：
+#+begin_src c
+#define NODES_MASK		((1UL << NODES_WIDTH) - 1)
+#define NODES_PGSHIFT		(NODES_PGOFF * (NODES_WIDTH != 0))
+#define SECTIONS_PGOFF		((sizeof(unsigned long)*8) - SECTIONS_WIDTH)
+#define NODES_PGOFF		(SECTIONS_PGOFF - NODES_WIDTH)
+#+end_src
+再用下图总结下page:flags的布局：
+#+begin_example
+| [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
+#+end_example
+可以看到，只有ZONE和FLAGS是必须的。并且从这个结构里也可以看出内存的一种层次架构，section里分多少node，节点里又分多少zone。
+
+后面再来理解page_zone就简单了，它通过zone type返回当前节点对应的zone结构体：
+#+begin_src c
+static inline struct zone *page_zone(const struct page *page)
+{
+	return &NODE_DATA(page_to_nid(page))->node_zones[page_zonenum(page)];
+}
+#+end_src
+page_to_nid前面已经介绍了，page_zonenum的实现类似：
+#+begin_src c
+static inline enum zone_type page_zonenum(const struct page *page)
+{
+	ASSERT_EXCLUSIVE_BITS(page->flags, ZONES_MASK << ZONES_PGSHIFT);
+	return (page->flags >> ZONES_PGSHIFT) & ZONES_MASK;
+}
+#+end_src
+
+也是先将flags右移zone id所占的那些bit到最低位，然后和ZONES_MASK相与只取zone id所占的比特，另外pglist_data里node_zones成员表示这个节点所有的zone。注意这里有个ASSERT_EXCLUSIVE_BITS宏，它的主要作用是保证没有并发的写发生在(ZONES_MASK << ZONES_PGSHIFT)里设置的比特位上，其具体实现原理可以参考kcsan-checks.h。
+
+到这里终于分析完了alloc_pages_mpol_noprof函数的三个部分，后面继续分析alloc_pages_mpol_noprof函数调用的一个关键函数：__alloc_pages_noprof。
+
+* __alloc_pages_noprof
+
+*原型：*
+#+begin_src c
+struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
+				      int preferred_nid, nodemask_t *nodemask)
+#+end_src
+
+*作用：*
+
+分配2^order个页面，preferred_nid是首选节点，nodemask是备用的节点mask，可以从里面选择。
+
+*详细分析：*
+
+从这个函数开始就进入伙伴系统的代码（page_alloc.c）了，之前一直是在NUMA内存分配策略的实现上（mempolicy.c）。该函数也分为三个部分来分析：
++ 第一部分是确定alloc_context结构体里成员的值。
++ 第二部分是真正的分配页面部分，包括快速和慢速路径，本文主要关心快速路径。
++ 第三部分是依据条件更新统计信息到mem cgroup中。
+
+下面逐一分析。
+** 第一部分
+首先介绍一个结构体alloc_context：
+#+begin_src c
+struct alloc_context {
+	struct zonelist *zonelist;
+	nodemask_t *nodemask;
+	struct zoneref *preferred_zoneref;
+	int migratetype;
+
+	/*
+	 * highest_zoneidx represents highest usable zone index of
+	 * the allocation request. Due to the nature of the zone,
+	 * memory on lower zone than the highest_zoneidx will be
+	 * protected by lowmem_reserve[highest_zoneidx].
+	 *
+	 * highest_zoneidx is also used by reclaim/compaction to limit
+	 * the target zone since higher zone than this index cannot be
+	 * usable for this allocation request.
+	 */
+	enum zone_type highest_zoneidx;
+	bool spread_dirty_pages;
+};
+#+end_src
+它用于保存一些在内核内存管理内部使用分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
+
+这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的[[zone_type][zone_type]]，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
+#+begin_src c
+	long lowmem_reserve[MAX_NR_ZONES];
+#+end_src
+它表示当前的zone需要回退到低区zone分配内存时，它需要查询这个数组，不能分配低于数组元素里存放的内存地址。
+
+另外由于highest_zoneidx也限制了内存分配最高可用的zone，那么在慢速路径中针对高于highest_zoneidx的zone就没有必要做回收或压缩了，因为即使回收/压缩出空闲内存了也会因为内存位于高highest_zoneidx的zone而不会使用，这相当于是内存回收/压缩的一种优化。
+
+第一部分主要就是确定alloc_context参数：
+#+begin_src c
+	struct page *page;
+	unsigned int alloc_flags = ALLOC_WMARK_LOW;
+	gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
+	struct alloc_context ac = { };
+
+	/*
+	 * There are several places where we assume that the order value is sane
+	 * so bail out early if the request is out of bound.
+	 */
+	if (WARN_ON_ONCE_GFP(order > MAX_PAGE_ORDER, gfp))
+		return NULL;
+
+	gfp &= gfp_allowed_mask;
+	/*
+	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS
+	 * resp. GFP_NOIO which has to be inherited for all allocation requests
+	 * from a particular context which has been marked by
+	 * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
+	 * movable zones are not used during allocation.
+	 */
+	gfp = current_gfp_context(gfp);
+	alloc_gfp = gfp;
+	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
+			&alloc_gfp, &alloc_flags))
+		return NULL;
+#+end_src
+** 第二部分
+** 第三部分
 * 附节
 ** get_vma_policy生成ilx
 # ** 使用与操作优化取模
