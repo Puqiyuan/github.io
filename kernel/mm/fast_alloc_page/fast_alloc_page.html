@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-21 Thu 23:31 -->
+<!-- 2024-11-23 Sat 11:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,24 +38,24 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgb294766">1. alloc_pages_noprof</a></li>
-<li><a href="#orgc28eecb">2. alloc_pages_mpol_noprof</a>
+<li><a href="#orgc1aef79">1. alloc_pages_noprof</a></li>
+<li><a href="#org9fa6e7c">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#orgd20090d">2.1. 第一部分</a></li>
-<li><a href="#org432b047">2.2. 第二部分</a></li>
-<li><a href="#org874998a">2.3. 第三部分</a></li>
+<li><a href="#org7345ee5">2.1. 第一部分</a></li>
+<li><a href="#org121933e">2.2. 第二部分</a></li>
+<li><a href="#org440718a">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org062d8f0">3. __alloc_pages_noprof</a>
+<li><a href="#orgcf64a32">3. __alloc_pages_noprof</a>
 <ul>
-<li><a href="#orgbede25a">3.1. 第一部分</a></li>
-<li><a href="#orgc0a51c0">3.2. 第二部分</a></li>
-<li><a href="#org3b62363">3.3. 第三部分</a></li>
+<li><a href="#org045ffd1">3.1. 第一部分</a></li>
+<li><a href="#orgc6ddffd">3.2. 第二部分</a></li>
+<li><a href="#org797462e">3.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org30cfa19">4. 附节</a>
+<li><a href="#orgd1e72e2">4. 附节</a>
 <ul>
-<li><a href="#org228f56f">4.1. get_vma_policy生成ilx</a></li>
+<li><a href="#org5139de0">4.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -65,8 +65,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-orgb294766" class="outline-2">
-<h2 id="orgb294766"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-orgc1aef79" class="outline-2">
+<h2 id="orgc1aef79"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -165,7 +165,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="orga8488bc">
+<pre class="example" id="org235c2bc">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -198,7 +198,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="org2651f67">
+<pre class="example" id="orgafd4879">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -324,7 +324,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </div>
 
 <p>
-<a id="orgc4a8b76"></a>
+<a id="orgf38e944"></a>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
 </p>
 <div class="org-src-container">
@@ -377,8 +377,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-orgc28eecb" class="outline-2">
-<h2 id="orgc28eecb"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-org9fa6e7c" class="outline-2">
+<h2 id="org9fa6e7c"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -391,7 +391,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org228f56f">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org5139de0">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -411,8 +411,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </p>
 </div>
 
-<div id="outline-container-orgd20090d" class="outline-3">
-<h3 id="orgd20090d"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-org7345ee5" class="outline-3">
+<h3 id="org7345ee5"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -526,8 +526,8 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 
 <p>
 针对笔者目前环境的配置，zone_type的定义如下：
-<a id="orgf9bf4af"></a>
-<a id="org691f2db"></a>
+<a id="org22c1a36"></a>
+<a id="org5775d92"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> {
@@ -929,8 +929,8 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 
 
-<div id="outline-container-org432b047" class="outline-3">
-<h3 id="org432b047"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-org121933e" class="outline-3">
+<h3 id="org121933e"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -1046,8 +1046,8 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </div>
 
 
-<div id="outline-container-org874998a" class="outline-3">
-<h3 id="org874998a"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-org440718a" class="outline-3">
+<h3 id="org440718a"><span class="section-number-3">2.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
@@ -1117,7 +1117,7 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </pre>
 </div>
 <p>
-现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgc4a8b76">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgf38e944">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
 </p>
 
 <p>
@@ -1159,7 +1159,7 @@ ZONES_WIDTH定义如下：
 </pre>
 </div>
 <p>
-MAX_NR_ZONES其实就是<a href="#orgf9bf4af">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+MAX_NR_ZONES其实就是<a href="#org22c1a36">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
 </p>
 
 <p>
@@ -1214,7 +1214,7 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 再用下图总结下page:flags的布局：
 </p>
-<pre class="example" id="org95a127b">
+<pre class="example" id="orga5e2847">
 | [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
 </pre>
 <p>
@@ -1254,8 +1254,8 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </div>
 </div>
 
-<div id="outline-container-org062d8f0" class="outline-2">
-<h2 id="org062d8f0"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
+<div id="outline-container-orgcf64a32" class="outline-2">
+<h2 id="orgcf64a32"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 <b>原型：</b>
@@ -1291,8 +1291,8 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 下面逐一分析。
 </p>
 </div>
-<div id="outline-container-orgbede25a" class="outline-3">
-<h3 id="orgbede25a"><span class="section-number-3">3.1.</span> 第一部分</h3>
+<div id="outline-container-org045ffd1" class="outline-3">
+<h3 id="org045ffd1"><span class="section-number-3">3.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
 首先介绍一个结构体alloc_context：
@@ -1320,11 +1320,11 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </pre>
 </div>
 <p>
-它用于保存一些在内核内存管理内部使用分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
+它用于保存一些在内核内存管理内部使用的分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
 </p>
 
 <p>
-这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org691f2db">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
+这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org5775d92">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">lowmem_reserve</span>[MAX_NR_ZONES];
@@ -1371,19 +1371,20 @@ alloc_gfp = gfp;
 </div>
 </div>
 </div>
-<div id="outline-container-orgc0a51c0" class="outline-3">
-<h3 id="orgc0a51c0"><span class="section-number-3">3.2.</span> 第二部分</h3>
+
+<div id="outline-container-orgc6ddffd" class="outline-3">
+<h3 id="orgc6ddffd"><span class="section-number-3">3.2.</span> 第二部分</h3>
 </div>
-<div id="outline-container-org3b62363" class="outline-3">
-<h3 id="org3b62363"><span class="section-number-3">3.3.</span> 第三部分</h3>
+<div id="outline-container-org797462e" class="outline-3">
+<h3 id="org797462e"><span class="section-number-3">3.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-org30cfa19" class="outline-2">
-<h2 id="org30cfa19"><span class="section-number-2">4.</span> 附节</h2>
+<div id="outline-container-orgd1e72e2" class="outline-2">
+<h2 id="orgd1e72e2"><span class="section-number-2">4.</span> 附节</h2>
 <div class="outline-text-2" id="text-4">
 </div>
-<div id="outline-container-org228f56f" class="outline-3">
-<h3 id="org228f56f"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org5139de0" class="outline-3">
+<h3 id="org5139de0"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
 <div class="outline-text-3" id="text-4-1">
 </div>
 </div>
@@ -1391,7 +1392,7 @@ alloc_gfp = gfp;
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-21 Thu 23:31</p>
+<p class="date">Created: 2024-11-23 Sat 11:00</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

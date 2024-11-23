@@ -935,7 +935,7 @@ struct alloc_context {
 	bool spread_dirty_pages;
 };
 #+end_src
-它用于保存一些在内核内存管理内部使用分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
+它用于保存一些在内核内存管理内部使用的分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
 
 这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的[[zone_type][zone_type]]，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
 #+begin_src c
@@ -973,6 +973,7 @@ struct alloc_context {
 			&alloc_gfp, &alloc_flags))
 		return NULL;
 #+end_src
+
 ** 第二部分
 ** 第三部分
 * 附节
