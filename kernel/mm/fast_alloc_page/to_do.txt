@@ -25,3 +25,5 @@ __PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
 8，multigen_lru.rst文档。
 
 9，ASSERT_EXCLUSIVE_BITS的实现原理。
+
+10，build_zonelists初始化node_zonelists以供内存分配使用pglist_data:node_zonelists，它确定了内存分配在所有节点（zone）上分配的回退原则。
