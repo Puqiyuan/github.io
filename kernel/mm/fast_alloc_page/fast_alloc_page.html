@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-23 Sat 11:00 -->
+<!-- 2024-11-24 Sun 23:50 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,24 +38,24 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgc1aef79">1. alloc_pages_noprof</a></li>
-<li><a href="#org9fa6e7c">2. alloc_pages_mpol_noprof</a>
+<li><a href="#org3afa3bc">1. alloc_pages_noprof</a></li>
+<li><a href="#orga7230c7">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#org7345ee5">2.1. 第一部分</a></li>
-<li><a href="#org121933e">2.2. 第二部分</a></li>
-<li><a href="#org440718a">2.3. 第三部分</a></li>
+<li><a href="#orgccacaea">2.1. 第一部分</a></li>
+<li><a href="#org9f389ee">2.2. 第二部分</a></li>
+<li><a href="#orgdf3f8fb">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orgcf64a32">3. __alloc_pages_noprof</a>
+<li><a href="#orgfa7f795">3. __alloc_pages_noprof</a>
 <ul>
-<li><a href="#org045ffd1">3.1. 第一部分</a></li>
-<li><a href="#orgc6ddffd">3.2. 第二部分</a></li>
-<li><a href="#org797462e">3.3. 第三部分</a></li>
+<li><a href="#org97d33b1">3.1. 第一部分</a></li>
+<li><a href="#org97f4c8e">3.2. 第二部分</a></li>
+<li><a href="#org962e6a1">3.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orgd1e72e2">4. 附节</a>
+<li><a href="#org7990b8f">4. 附节</a>
 <ul>
-<li><a href="#org5139de0">4.1. get_vma_policy生成ilx</a></li>
+<li><a href="#org6f140e4">4.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -65,8 +65,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-orgc1aef79" class="outline-2">
-<h2 id="orgc1aef79"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org3afa3bc" class="outline-2">
+<h2 id="org3afa3bc"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -165,7 +165,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org235c2bc">
+<pre class="example" id="org678b62a">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -198,7 +198,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="orgafd4879">
+<pre class="example" id="orge80a5e5">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -324,7 +324,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </div>
 
 <p>
-<a id="orgf38e944"></a>
+<a id="orgfe189b9"></a>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
 </p>
 <div class="org-src-container">
@@ -377,8 +377,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-org9fa6e7c" class="outline-2">
-<h2 id="org9fa6e7c"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-orga7230c7" class="outline-2">
+<h2 id="orga7230c7"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -391,7 +391,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org5139de0">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org6f140e4">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -411,8 +411,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </p>
 </div>
 
-<div id="outline-container-org7345ee5" class="outline-3">
-<h3 id="org7345ee5"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-orgccacaea" class="outline-3">
+<h3 id="orgccacaea"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -526,8 +526,8 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 
 <p>
 针对笔者目前环境的配置，zone_type的定义如下：
-<a id="org22c1a36"></a>
-<a id="org5775d92"></a>
+<a id="org3764287"></a>
+<a id="org9b78a66"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> {
@@ -929,8 +929,8 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 
 
-<div id="outline-container-org121933e" class="outline-3">
-<h3 id="org121933e"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-org9f389ee" class="outline-3">
+<h3 id="org9f389ee"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -1046,8 +1046,8 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </div>
 
 
-<div id="outline-container-org440718a" class="outline-3">
-<h3 id="org440718a"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-orgdf3f8fb" class="outline-3">
+<h3 id="orgdf3f8fb"><span class="section-number-3">2.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
@@ -1117,7 +1117,7 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </pre>
 </div>
 <p>
-现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgf38e944">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgfe189b9">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
 </p>
 
 <p>
@@ -1159,7 +1159,7 @@ ZONES_WIDTH定义如下：
 </pre>
 </div>
 <p>
-MAX_NR_ZONES其实就是<a href="#org22c1a36">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+MAX_NR_ZONES其实就是<a href="#org3764287">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
 </p>
 
 <p>
@@ -1214,7 +1214,7 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 再用下图总结下page:flags的布局：
 </p>
-<pre class="example" id="orga5e2847">
+<pre class="example" id="org51f988d">
 | [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
 </pre>
 <p>
@@ -1254,8 +1254,8 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </div>
 </div>
 
-<div id="outline-container-orgcf64a32" class="outline-2">
-<h2 id="orgcf64a32"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
+<div id="outline-container-orgfa7f795" class="outline-2">
+<h2 id="orgfa7f795"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 <b>原型：</b>
@@ -1291,10 +1291,11 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 下面逐一分析。
 </p>
 </div>
-<div id="outline-container-org045ffd1" class="outline-3">
-<h3 id="org045ffd1"><span class="section-number-3">3.1.</span> 第一部分</h3>
+<div id="outline-container-org97d33b1" class="outline-3">
+<h3 id="org97d33b1"><span class="section-number-3">3.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
+<a id="orgc37a05a"></a>
 首先介绍一个结构体alloc_context：
 </p>
 <div class="org-src-container">
@@ -1324,7 +1325,7 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </p>
 
 <p>
-这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org5775d92">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
+这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org9b78a66">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">lowmem_reserve</span>[MAX_NR_ZONES];
@@ -1369,22 +1370,245 @@ alloc_gfp = gfp;
         <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">NULL</span>;
 </pre>
 </div>
-</div>
+
+<p>
+ALLOC_WMARK_LOW代表内存的水位线之一，每个zone都有几种水位线，用于控制空闲内存在不同的水位时，在内存回收方面采取不同程度的措施：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> {
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Read-mostly fields</span><span style="color: #5F7F5F;"> */</span>
+
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">zone watermarks, access with *_wmark_pages(zone) macros</span><span style="color: #5F7F5F;"> */</span>
+        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">_watermark</span>[NR_WMARK];
+        ...
+};
+<span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_watermarks</span> {
+        <span style="color: #DFAF8F;">WMARK_MIN</span>,
+        <span style="color: #DFAF8F;">WMARK_LOW</span>,
+        <span style="color: #DFAF8F;">WMARK_HIGH</span>,
+        <span style="color: #DFAF8F;">WMARK_PROMO</span>,
+        <span style="color: #DFAF8F;">NR_WMARK</span>
+};
+
+<span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">The ALLOC_WMARK bits are used as an index to zone-&gt;watermark</span><span style="color: #5F7F5F;"> */</span>
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_WMARK_MIN</span>         WMARK_MIN
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_WMARK_LOW</span>         WMARK_LOW
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_WMARK_HIGH</span>        WMARK_HIGH
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_NO_WATERMARKS</span>     0x04 <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">don't check watermarks at all</span><span style="color: #5F7F5F;"> */</span>
+</pre>
 </div>
 
-<div id="outline-container-orgc6ddffd" class="outline-3">
-<h3 id="orgc6ddffd"><span class="section-number-3">3.2.</span> 第二部分</h3>
+<p>
+ALLOC_WMARK_MIN对应的水位线是WMARK_MIN，这是最低的水位线，通常表示内存分配的最低安全阈值。当zone的可用页数低于此值时，分配内存需要特别严格的限制。如果内存低于这个水位线，系统可能会触发直接回收或触发OOM（Out-Of-Memory）杀手。保证系统维持最基本的内存可用性。通常用于高优先级的内存分配，避免耗尽内存。
+</p>
+
+<p>
+ALLOC_WMARK_LOW对应的水位线是WMARK_LOW，是比ALLOC_WMARK_MIN高一点的阀值，用于防止内存过度分配导致系统进入紧急回收状态。如果zone的可用页数低于此水位线，但高于WMARK_MIN，后台内存回收机制（如kswapd）会被唤醒以补充内存。
+</p>
+
+<p>
+ALLOC_WMARK_HIGH对应的水位线是 WMARK_HIGH，是最高的阈值。这是一个更宽松的水位线，当可用内存高于此值时，分配内存不需要触发任何回收机制。表示内存资源充足，分配可以直接进行。
+</p>
+
+<p>
+ALLOC_NO_WATERMARKS不检查任何水位线。此标志用于绕过所有的水位线检查，通常在某些特殊情况下使用，比如高优先级的内存分配或紧急情况下的内存分配（如GFP_ATOMIC分配）。例如，在中断上下文或内存分配必须快速完成时。
+</p>
+
+<p>
+alloc_gfp是在传进来的分配标志gfp的基础上在本次分配时还会添加一些标志，是实际用于内存分配的标志。
+</p>
+
+<p>
+ac参数在<a href="#orgc37a05a">alloc_context</a>介绍过了。
+</p>
+
+<p>
+接下来的WARN_ON_ONCE_GFP是当order大于MAX_PAGE_ORDER时打印警告，单次分配的内存，不能做到物理上有大于2^MAX_PAGE_ORDER个页面连续，所以这里做了拦截。这里主要想稍微详细的展开WARN_ON_ONCE_GFP宏：
+</p>
+
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">WARN_ON_ONCE_GFP</span>(<span style="color: #DFAF8F;">cond</span>, <span style="color: #DFAF8F;">gfp</span>)     ({                              \
+        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">bool</span> <span style="color: #93E0E3;">__section</span>(<span style="color: #CC9393;">".data.once"</span>) __warned;                   \
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__ret_warn_once</span> = <span style="color: #F0DFAF; font-weight: bold;">!</span>!(cond);                                 \
+                                                                        \
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(<span style="color: #F0DFAF; font-weight: bold;">!</span>(gfp &amp; __GFP_NOWARN) &amp;&amp; __ret_warn_once &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>__warned)) { \
+                __warned = <span style="color: #BFEBBF;">true</span>;                                        \
+                WARN_ON(1);                                             \
+        }                                                               \
+        unlikely(__ret_warn_once);                                      \
+})
+</pre>
 </div>
-<div id="outline-container-org797462e" class="outline-3">
-<h3 id="org797462e"><span class="section-number-3">3.3.</span> 第三部分</h3>
+<p>
+可以看到，如果gfp里指定了__GFP_NOWARN，那么就不会打印警告，同时这里保证只打印一次的逻辑是在.data.once节里声明一个静态变量__warned，它初始为0，一旦满足条件通过WRAN_ON打印警告，同时全局静态变量__warned被改写为true，那么以后就再也不会打印警告了。
+</p>
+
+<p>
+另外有一个相对通用的WARN_ON_ONCE实现。针对x86来说，一般配置了CONFIG_GENERIC_BUG、CONFIG_DEBUG_BUGVERBOSE以及宏__WARN_FLAGS，后者是个架构相关的宏，并且在绝大分架构上都有定义，它支持通过主动产生异常的方式，在异常句柄里去打印warning警告信息，对于x86架构来说就是ud2指令（否则就是warn_slowpath_fmt方式打印）：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">__WARN_FLAGS</span>(<span style="color: #DFAF8F;">flags</span>)                                     \
+<span style="color: #F0DFAF; font-weight: bold;">do</span> {                                                            \
+        <span style="color: #7CB8BB;">__auto_type</span> <span style="color: #DFAF8F;">__flags</span> = BUGFLAG_WARNING|(flags);          \
+        instrumentation_begin();                                \
+        _BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);            \
+        instrumentation_end();                                  \
+} <span style="color: #F0DFAF; font-weight: bold;">while</span> (0)
+</pre>
+</div>
+<p>
+这样WARN_ON_ONCE就可以通过__WARN_FLAGS方式实现：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">WARN_ON_ONCE</span>(<span style="color: #DFAF8F;">condition</span>) ({                              \
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__ret_warn_on</span> = <span style="color: #F0DFAF; font-weight: bold;">!</span>!(condition);                      \
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(__ret_warn_on))                            \
+                __WARN_FLAGS(BUGFLAG_ONCE |                     \
+                             BUGFLAG_TAINT(TAINT_WARN));        \
+        unlikely(__ret_warn_on);                                \
+})
+<span style="color: #94BFF3;">#endif</span>
+</pre>
+</div>
+
+<p>
+可以看到这里传入了BUGFLAG_ONCE标志，__WARN_FLAGS的实现如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">__WARN_FLAGS</span>(<span style="color: #DFAF8F;">flags</span>)                                     \
+<span style="color: #F0DFAF; font-weight: bold;">do</span> {                                                            \
+        <span style="color: #7CB8BB;">__auto_type</span> <span style="color: #DFAF8F;">__flags</span> = BUGFLAG_WARNING|(flags);          \
+        instrumentation_begin();                                \
+        _BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);            \
+        instrumentation_end();                                  \
+} <span style="color: #F0DFAF; font-weight: bold;">while</span> (0)
+</pre>
+</div>
+<p>
+_BUG_FLAGS宏的作用相当于是准备参数并通过ud2指令触发异常，这里就不贴代码了。最后异常的处理会来到__report_bug函数，里面有使用BUGFLAG_ONCE来保证只打印一次：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">bug_entry</span> *<span style="color: #DFAF8F;">bug</span>;
+<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">file</span>;
+<span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">line</span>, <span style="color: #DFAF8F;">warning</span>, <span style="color: #DFAF8F;">once</span>, <span style="color: #DFAF8F;">done</span>;
+
+<span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>is_valid_bugaddr(bugaddr))
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> BUG_TRAP_TYPE_NONE;
+
+bug = find_bug(bugaddr);
+<span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>bug)
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> BUG_TRAP_TYPE_NONE;
+
+<span style="color: #93E0E3;">disable_trace_on_warning</span>();
+
+<span style="color: #93E0E3;">bug_get_file_line</span>(bug, &amp;file, &amp;line);
+
+warning = (bug-&gt;flags &amp; BUGFLAG_WARNING) != 0;
+once = (bug-&gt;flags &amp; BUGFLAG_ONCE) != 0;
+done = (bug-&gt;flags &amp; BUGFLAG_DONE) != 0;
+
+<span style="color: #F0DFAF; font-weight: bold;">if</span> (warning &amp;&amp; once) {
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (done)
+                <span style="color: #F0DFAF; font-weight: bold;">return</span> BUG_TRAP_TYPE_WARN;
+
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * Since this is the only store, concurrency is not an issue.</span>
+<span style="color: #5F7F5F;">         */</span>
+        bug-&gt;flags |= BUGFLAG_DONE;
+}
+</pre>
+</div>
+<p>
+可以看到，只要设置了BUGFLAG_ONCE和BUGFLAG_WARNING，就是要打印warning且只打印一次的话，就会将BUGFLAG_DONE标志置上给bug-&gt;flags。这个bug类型是bug_entry，它是从bug table里通过bugaddr作为索引找到的：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">bug_entry</span> *<span style="color: #93E0E3;">find_bug</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">bugaddr</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">bug_entry</span> *<span style="color: #DFAF8F;">bug</span>;
+
+        <span style="color: #F0DFAF; font-weight: bold;">for</span> (bug = __start___bug_table; bug &lt; __stop___bug_table; ++bug)
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (bugaddr == bug_addr(bug))
+                        <span style="color: #F0DFAF; font-weight: bold;">return</span> bug;
+
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> module_find_bug(bugaddr);
+}
+</pre>
+</div>
+<p>
+而bug_addr就是在_BUG_FLAGS宏里当作参数传入的，它一般就是WARN_ON_ONCE调用处。另外如果从内核的bug table里找不到，还可以从module的bug table里去找。
+</p>
+
+<p>
+而一旦打印一次给bug-&gt;flags置上BUGFLAG_DONE后，下次再进入这个逻辑，就会满足if (done)的逻辑
+直接返回而不进行后面真正的打印动作了。
+</p>
+
+<p>
+这就是WARN_ON_ONCE实现只打印一次的方法，它主要是利用了bug_entry来保存打印情况，而WARN_ON_ONCE_GFP采取了另一个不同的办法来实现这种只打印一次的逻辑：在.data.section里声明一个静态变量__warned记录打印情况。
+</p>
+
+<p>
+关于WARN/bug handle的更多细节实现，可以参考笔者其它文章。
+</p>
+
+<p>
+回到__alloc_pages_noprof函数的第一部分继续看代码：
+</p>
+<div class="org-src-container">
+<pre class="src src-c">gfp &amp;= gfp_allowed_mask;
+<span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;"> * Apply scoped allocation constraints. This is mainly about GFP_NOFS</span>
+<span style="color: #7F9F7F;"> * resp. GFP_NOIO which has to be inherited for all allocation requests</span>
+<span style="color: #7F9F7F;"> * from a particular context which has been marked by</span>
+<span style="color: #7F9F7F;"> * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures</span>
+<span style="color: #7F9F7F;"> * movable zones are not used during allocation.</span>
+<span style="color: #5F7F5F;"> */</span>
+gfp = current_gfp_context(gfp);
+alloc_gfp = gfp;
+</pre>
+</div>
+<p>
+这一部分对本次内存分配实际使用的gfp再次进行了一些调整并给到alloc_gfp。gfp_allowed_mask主要是用于解决启动早期不能使用一些gfp标志的问题，它初始定义如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_BOOT_MASK</span> (__GFP_BITS_MASK &amp; ~(__GFP_RECLAIM|__GFP_IO|__GFP_FS))
+gfp_t <span style="color: #7CB8BB;">gfp_allowed_mask</span> <span style="color: #DFAF8F;">__read_mostly</span> = GFP_BOOT_MASK;
+</pre>
+</div>
+<p>
+可以看到初始的时候，清除了这三个标志，意味着在启动阶段，这三个标志涉及到的功能内核还没有准备好，比如说磁盘IO或者文件操作还没有就绪。而在kernel_init_freeable函数里会解开这些限制：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">noinline</span> <span style="color: #7CB8BB;">void</span> __init kernel_init_freeable(<span style="color: #7CB8BB;">void</span>)
+{
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Now the scheduler is fully set up and can do blocking allocations</span><span style="color: #5F7F5F;"> */</span>
+        gfp_allowed_mask = __GFP_BITS_MASK;
+    ...
+}
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">__GFP_BITS_MASK</span> ((__force <span style="color: #7CB8BB;">gfp_t</span>)((1 &lt;&lt; __GFP_BITS_SHIFT) - 1))
+</pre>
+</div>
+<p>
+__GFP_BITS_SHIFT就是最后一个gfp标志所占的比特。
+</p>
 </div>
 </div>
-<div id="outline-container-orgd1e72e2" class="outline-2">
-<h2 id="orgd1e72e2"><span class="section-number-2">4.</span> 附节</h2>
+<div id="outline-container-org97f4c8e" class="outline-3">
+<h3 id="org97f4c8e"><span class="section-number-3">3.2.</span> 第二部分</h3>
+</div>
+<div id="outline-container-org962e6a1" class="outline-3">
+<h3 id="org962e6a1"><span class="section-number-3">3.3.</span> 第三部分</h3>
+</div>
+</div>
+<div id="outline-container-org7990b8f" class="outline-2">
+<h2 id="org7990b8f"><span class="section-number-2">4.</span> 附节</h2>
 <div class="outline-text-2" id="text-4">
 </div>
-<div id="outline-container-org5139de0" class="outline-3">
-<h3 id="org5139de0"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org6f140e4" class="outline-3">
+<h3 id="org6f140e4"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
 <div class="outline-text-3" id="text-4-1">
 </div>
 </div>
@@ -1392,7 +1616,7 @@ alloc_gfp = gfp;
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-23 Sat 11:00</p>
+<p class="date">Created: 2024-11-24 Sun 23:50</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -913,6 +913,7 @@ struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
 
 下面逐一分析。
 ** 第一部分
+<<alloc_context>>
 首先介绍一个结构体alloc_context：
 #+begin_src c
 struct alloc_context {
@@ -974,6 +975,174 @@ struct alloc_context {
 		return NULL;
 #+end_src
 
+ALLOC_WMARK_LOW代表内存的水位线之一，每个zone都有几种水位线，用于控制空闲内存在不同的水位时，在内存回收方面采取不同程度的措施：
+#+begin_src c
+struct zone {
+        /* Read-mostly fields */
+ 
+        /* zone watermarks, access with *_wmark_pages(zone) macros */
+        unsigned long _watermark[NR_WMARK];
+        ...
+};
+enum zone_watermarks {
+        WMARK_MIN,
+        WMARK_LOW,
+        WMARK_HIGH,
+        WMARK_PROMO,
+        NR_WMARK
+};
+
+/* The ALLOC_WMARK bits are used as an index to zone->watermark */
+#define ALLOC_WMARK_MIN		WMARK_MIN
+#define ALLOC_WMARK_LOW		WMARK_LOW
+#define ALLOC_WMARK_HIGH	WMARK_HIGH
+#define ALLOC_NO_WATERMARKS	0x04 /* don't check watermarks at all */
+#+end_src
+
+ALLOC_WMARK_MIN对应的水位线是WMARK_MIN，这是最低的水位线，通常表示内存分配的最低安全阈值。当zone的可用页数低于此值时，分配内存需要特别严格的限制。如果内存低于这个水位线，系统可能会触发直接回收或触发OOM（Out-Of-Memory）杀手。保证系统维持最基本的内存可用性。通常用于高优先级的内存分配，避免耗尽内存。
+
+ALLOC_WMARK_LOW对应的水位线是WMARK_LOW，是比ALLOC_WMARK_MIN高一点的阀值，用于防止内存过度分配导致系统进入紧急回收状态。如果zone的可用页数低于此水位线，但高于WMARK_MIN，后台内存回收机制（如kswapd）会被唤醒以补充内存。
+
+ALLOC_WMARK_HIGH对应的水位线是 WMARK_HIGH，是最高的阈值。这是一个更宽松的水位线，当可用内存高于此值时，分配内存不需要触发任何回收机制。表示内存资源充足，分配可以直接进行。
+
+ALLOC_NO_WATERMARKS不检查任何水位线。此标志用于绕过所有的水位线检查，通常在某些特殊情况下使用，比如高优先级的内存分配或紧急情况下的内存分配（如GFP_ATOMIC分配）。例如，在中断上下文或内存分配必须快速完成时。
+
+alloc_gfp是在传进来的分配标志gfp的基础上在本次分配时还会添加一些标志，是实际用于内存分配的标志。
+
+ac参数在[[alloc_context][alloc_context]]介绍过了。
+
+接下来的WARN_ON_ONCE_GFP是当order大于MAX_PAGE_ORDER时打印警告，单次分配的内存，不能做到物理上有大于2^MAX_PAGE_ORDER个页面连续，所以这里做了拦截。这里主要想稍微详细的展开WARN_ON_ONCE_GFP宏：
+
+#+begin_src c
+#define WARN_ON_ONCE_GFP(cond, gfp)	({				\
+	static bool __section(".data.once") __warned;			\
+	int __ret_warn_once = !!(cond);					\
+									\
+	if (unlikely(!(gfp & __GFP_NOWARN) && __ret_warn_once && !__warned)) { \
+		__warned = true;					\
+		WARN_ON(1);						\
+	}								\
+	unlikely(__ret_warn_once);					\
+})
+#+end_src
+可以看到，如果gfp里指定了__GFP_NOWARN，那么就不会打印警告，同时这里保证只打印一次的逻辑是在.data.once节里声明一个静态变量__warned，它初始为0，一旦满足条件通过WRAN_ON打印警告，同时全局静态变量__warned被改写为true，那么以后就再也不会打印警告了。
+
+另外有一个相对通用的WARN_ON_ONCE实现。针对x86来说，一般配置了CONFIG_GENERIC_BUG、CONFIG_DEBUG_BUGVERBOSE以及宏__WARN_FLAGS，后者是个架构相关的宏，并且在绝大分架构上都有定义，它支持通过主动产生异常的方式，在异常句柄里去打印warning警告信息，对于x86架构来说就是ud2指令（否则就是warn_slowpath_fmt方式打印）：
+#+begin_src c
+#define __WARN_FLAGS(flags)					\
+do {								\
+	__auto_type __flags = BUGFLAG_WARNING|(flags);		\
+	instrumentation_begin();				\
+	_BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);		\
+	instrumentation_end();					\
+} while (0)
+#+end_src
+这样WARN_ON_ONCE就可以通过__WARN_FLAGS方式实现：
+#+begin_src c
+#define WARN_ON_ONCE(condition) ({				\
+	int __ret_warn_on = !!(condition);			\
+	if (unlikely(__ret_warn_on))				\
+		__WARN_FLAGS(BUGFLAG_ONCE |			\
+			     BUGFLAG_TAINT(TAINT_WARN));	\
+	unlikely(__ret_warn_on);				\
+})
+#endif
+#+end_src
+
+可以看到这里传入了BUGFLAG_ONCE标志，__WARN_FLAGS的实现如下：
+#+begin_src c
+#define __WARN_FLAGS(flags)					\
+do {								\
+	__auto_type __flags = BUGFLAG_WARNING|(flags);		\
+	instrumentation_begin();				\
+	_BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);		\
+	instrumentation_end();					\
+} while (0)
+#+end_src
+_BUG_FLAGS宏的作用相当于是准备参数并通过ud2指令触发异常，这里就不贴代码了。最后异常的处理会来到__report_bug函数，里面有使用BUGFLAG_ONCE来保证只打印一次：
+#+begin_src c
+	struct bug_entry *bug;
+	const char *file;
+	unsigned line, warning, once, done;
+
+	if (!is_valid_bugaddr(bugaddr))
+		return BUG_TRAP_TYPE_NONE;
+
+	bug = find_bug(bugaddr);
+	if (!bug)
+		return BUG_TRAP_TYPE_NONE;
+
+	disable_trace_on_warning();
+
+	bug_get_file_line(bug, &file, &line);
+
+	warning = (bug->flags & BUGFLAG_WARNING) != 0;
+	once = (bug->flags & BUGFLAG_ONCE) != 0;
+	done = (bug->flags & BUGFLAG_DONE) != 0;
+
+	if (warning && once) {
+		if (done)
+			return BUG_TRAP_TYPE_WARN;
+
+		/*
+		 * Since this is the only store, concurrency is not an issue.
+		 */
+		bug->flags |= BUGFLAG_DONE;
+	}
+#+end_src
+可以看到，只要设置了BUGFLAG_ONCE和BUGFLAG_WARNING，就是要打印warning且只打印一次的话，就会将BUGFLAG_DONE标志置上给bug->flags。这个bug类型是bug_entry，它是从bug table里通过bugaddr作为索引找到的：
+#+begin_src c
+struct bug_entry *find_bug(unsigned long bugaddr)
+{
+	struct bug_entry *bug;
+
+	for (bug = __start___bug_table; bug < __stop___bug_table; ++bug)
+		if (bugaddr == bug_addr(bug))
+			return bug;
+
+	return module_find_bug(bugaddr);
+}
+#+end_src
+而bug_addr就是在_BUG_FLAGS宏里当作参数传入的，它一般就是WARN_ON_ONCE调用处。另外如果从内核的bug table里找不到，还可以从module的bug table里去找。
+
+而一旦打印一次给bug->flags置上BUGFLAG_DONE后，下次再进入这个逻辑，就会满足if (done)的逻辑
+直接返回而不进行后面真正的打印动作了。
+
+这就是WARN_ON_ONCE实现只打印一次的方法，它主要是利用了bug_entry来保存打印情况，而WARN_ON_ONCE_GFP采取了另一个不同的办法来实现这种只打印一次的逻辑：在.data.section里声明一个静态变量__warned记录打印情况。
+
+关于WARN/bug handle的更多细节实现，可以参考笔者其它文章。
+
+回到__alloc_pages_noprof函数的第一部分继续看代码：
+#+begin_src c
+	gfp &= gfp_allowed_mask;
+	/*
+	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS
+	 * resp. GFP_NOIO which has to be inherited for all allocation requests
+	 * from a particular context which has been marked by
+	 * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
+	 * movable zones are not used during allocation.
+	 */
+	gfp = current_gfp_context(gfp);
+	alloc_gfp = gfp;
+#+end_src
+这一部分对本次内存分配实际使用的gfp再次进行了一些调整并给到alloc_gfp。gfp_allowed_mask主要是用于解决启动早期不能使用一些gfp标志的问题，它初始定义如下：
+#+begin_src c
+#define GFP_BOOT_MASK (__GFP_BITS_MASK & ~(__GFP_RECLAIM|__GFP_IO|__GFP_FS))
+gfp_t gfp_allowed_mask __read_mostly = GFP_BOOT_MASK;
+#+end_src
+可以看到初始的时候，清除了这三个标志，意味着在启动阶段，这三个标志涉及到的功能内核还没有准备好，比如说磁盘IO或者文件操作还没有就绪。而在kernel_init_freeable函数里会解开这些限制：
+#+begin_src c
+static noinline void __init kernel_init_freeable(void)
+{
+	/* Now the scheduler is fully set up and can do blocking allocations */
+	gfp_allowed_mask = __GFP_BITS_MASK;
+    ...
+}
+#+end_src
+#+begin_src c
+#define __GFP_BITS_MASK ((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1))
+#+end_src
+__GFP_BITS_SHIFT就是最后一个gfp标志所占的比特。
 ** 第二部分
 ** 第三部分
 * 附节

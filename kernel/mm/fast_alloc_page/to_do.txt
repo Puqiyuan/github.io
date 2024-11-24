@@ -27,3 +27,5 @@ __PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
 9，ASSERT_EXCLUSIVE_BITS的实现原理。
 
 10，build_zonelists初始化node_zonelists以供内存分配使用pglist_data:node_zonelists，它确定了内存分配在所有节点（zone）上分配的回退原则。
+
+11，WARN_ON_ONCE、ude2异常指令以及report_bug的详细逻辑。
