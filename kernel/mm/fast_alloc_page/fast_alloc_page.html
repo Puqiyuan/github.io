@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-24 Sun 23:50 -->
+<!-- 2024-11-25 Mon 23:00 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,24 +38,24 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org3afa3bc">1. alloc_pages_noprof</a></li>
-<li><a href="#orga7230c7">2. alloc_pages_mpol_noprof</a>
+<li><a href="#org0c10bf8">1. alloc_pages_noprof</a></li>
+<li><a href="#org762115b">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#orgccacaea">2.1. 第一部分</a></li>
-<li><a href="#org9f389ee">2.2. 第二部分</a></li>
-<li><a href="#orgdf3f8fb">2.3. 第三部分</a></li>
+<li><a href="#org95c92a7">2.1. 第一部分</a></li>
+<li><a href="#org0b01184">2.2. 第二部分</a></li>
+<li><a href="#org6089c08">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orgfa7f795">3. __alloc_pages_noprof</a>
+<li><a href="#org5b26ada">3. __alloc_pages_noprof</a>
 <ul>
-<li><a href="#org97d33b1">3.1. 第一部分</a></li>
-<li><a href="#org97f4c8e">3.2. 第二部分</a></li>
-<li><a href="#org962e6a1">3.3. 第三部分</a></li>
+<li><a href="#org5815c0a">3.1. 第一部分</a></li>
+<li><a href="#org6aa908a">3.2. 第二部分</a></li>
+<li><a href="#org2330c52">3.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org7990b8f">4. 附节</a>
+<li><a href="#org6d141b3">4. 附节</a>
 <ul>
-<li><a href="#org6f140e4">4.1. get_vma_policy生成ilx</a></li>
+<li><a href="#org8cee7e1">4.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -65,8 +65,8 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-org3afa3bc" class="outline-2">
-<h2 id="org3afa3bc"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org0c10bf8" class="outline-2">
+<h2 id="org0c10bf8"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
@@ -165,7 +165,7 @@ X86架构下，preempt_count被如下定义：
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org678b62a">
+<pre class="example" id="org67d0380">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -198,7 +198,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="orge80a5e5">
+<pre class="example" id="org9417eab">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -324,7 +324,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </div>
 
 <p>
-<a id="orgfe189b9"></a>
+<a id="org83cf712"></a>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
 </p>
 <div class="org-src-container">
@@ -377,8 +377,8 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 </div>
 </div>
 
-<div id="outline-container-orga7230c7" class="outline-2">
-<h2 id="orga7230c7"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-org762115b" class="outline-2">
+<h2 id="org762115b"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
@@ -391,7 +391,7 @@ get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org6f140e4">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org8cee7e1">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -411,8 +411,8 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </p>
 </div>
 
-<div id="outline-container-orgccacaea" class="outline-3">
-<h3 id="orgccacaea"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-org95c92a7" class="outline-3">
+<h3 id="org95c92a7"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
@@ -526,8 +526,8 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 
 <p>
 针对笔者目前环境的配置，zone_type的定义如下：
-<a id="org3764287"></a>
-<a id="org9b78a66"></a>
+<a id="org3e362ef"></a>
+<a id="org066671c"></a>
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> {
@@ -542,6 +542,7 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 </div>
 
 <p>
+<a id="org7c4c72a"></a>
 现在可以介绍gfp_zone函数了，gfp_zone函数的主要作用就是根据传入的gfp标志映射到不同类型的zone，也就是返回zone_type类型的枚举，这些类型前面刚介绍过了。现在看gfp_zone的实现：
 </p>
 <div class="org-src-container">
@@ -929,8 +930,8 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 
 
-<div id="outline-container-org9f389ee" class="outline-3">
-<h3 id="org9f389ee"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-org0b01184" class="outline-3">
+<h3 id="org0b01184"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -1046,8 +1047,8 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </div>
 
 
-<div id="outline-container-orgdf3f8fb" class="outline-3">
-<h3 id="orgdf3f8fb"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-org6089c08" class="outline-3">
+<h3 id="org6089c08"><span class="section-number-3">2.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
@@ -1117,7 +1118,7 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 </pre>
 </div>
 <p>
-现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgfe189b9">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#org83cf712">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
 </p>
 
 <p>
@@ -1159,7 +1160,7 @@ ZONES_WIDTH定义如下：
 </pre>
 </div>
 <p>
-MAX_NR_ZONES其实就是<a href="#org3764287">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+MAX_NR_ZONES其实就是<a href="#org3e362ef">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
 </p>
 
 <p>
@@ -1214,7 +1215,7 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 再用下图总结下page:flags的布局：
 </p>
-<pre class="example" id="org51f988d">
+<pre class="example" id="org7f60354">
 | [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
 </pre>
 <p>
@@ -1254,8 +1255,8 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </div>
 </div>
 
-<div id="outline-container-orgfa7f795" class="outline-2">
-<h2 id="orgfa7f795"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
+<div id="outline-container-org5b26ada" class="outline-2">
+<h2 id="org5b26ada"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 <b>原型：</b>
@@ -1291,11 +1292,11 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 下面逐一分析。
 </p>
 </div>
-<div id="outline-container-org97d33b1" class="outline-3">
-<h3 id="org97d33b1"><span class="section-number-3">3.1.</span> 第一部分</h3>
+<div id="outline-container-org5815c0a" class="outline-3">
+<h3 id="org5815c0a"><span class="section-number-3">3.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
-<a id="orgc37a05a"></a>
+<a id="orgbfdae40"></a>
 首先介绍一个结构体alloc_context：
 </p>
 <div class="org-src-container">
@@ -1325,7 +1326,7 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </p>
 
 <p>
-这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org9b78a66">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
+这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的<a href="#org066671c">zone_type</a>，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
 </p>
 <div class="org-src-container">
 <pre class="src src-c"><span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">lowmem_reserve</span>[MAX_NR_ZONES];
@@ -1419,7 +1420,7 @@ alloc_gfp是在传进来的分配标志gfp的基础上在本次分配时还会�
 </p>
 
 <p>
-ac参数在<a href="#orgc37a05a">alloc_context</a>介绍过了。
+ac参数在<a href="#orgbfdae40">alloc_context</a>介绍过了。
 </p>
 
 <p>
@@ -1592,23 +1593,297 @@ gfp_t <span style="color: #7CB8BB;">gfp_allowed_mask</span> <span style="color: 
 </pre>
 </div>
 <p>
-__GFP_BITS_SHIFT就是最后一个gfp标志所占的比特。
+__GFP_BITS_SHIFT就是最后一个gfp标志所占的比特，也就是所有gfp标志都可以使用了。
 </p>
+
+<p>
+current_gfp_context主要是结合上Per-Process Flags，进程级别也可以设置gfp标志，存放于task_struct:flags域，比如进程可以设置PF_MEMALLOC_PIN标志，页面可以pin住，这时gfp flags需要清除__GFP_MOVABLE标志，也就是分配的页面是不能移动的了：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">gfp_t</span> <span style="color: #93E0E3;">current_gfp_context</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">flags</span>)
+{
+        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">pflags</span> = READ_ONCE(current-&gt;flags);
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(pflags &amp; (PF_MEMALLOC_NOIO | PF_MEMALLOC_NOFS | PF_MEMALLOC_PIN))) {
+                <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">                 * NOIO implies both NOIO and NOFS and it is a weaker context</span>
+<span style="color: #7F9F7F;">                 * so always make sure it makes precedence</span>
+<span style="color: #5F7F5F;">                 */</span>
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (pflags &amp; PF_MEMALLOC_NOIO)
+                        flags &amp;= ~(__GFP_IO | __GFP_FS);
+                <span style="color: #F0DFAF; font-weight: bold;">else</span> <span style="color: #F0DFAF; font-weight: bold;">if</span> (pflags &amp; PF_MEMALLOC_NOFS)
+                        flags &amp;= ~__GFP_FS;
+
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (pflags &amp; PF_MEMALLOC_PIN)
+                        flags &amp;= ~__GFP_MOVABLE;
+        }
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> flags;
+}
+</pre>
+</div>
+<p>
+接下来继续分析prepare_alloc_pages函数，该函数最终敲定alloc_context参数，较为关键：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">bool</span> <span style="color: #93E0E3;">prepare_alloc_pages</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp_mask</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
+                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">preferred_nid</span>, <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>,
+                <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">alloc_context</span> *<span style="color: #DFAF8F;">ac</span>, <span style="color: #7CB8BB;">gfp_t</span> *<span style="color: #DFAF8F;">alloc_gfp</span>,
+                <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">alloc_flags</span>)
+{
+        ac-&gt;highest_zoneidx = gfp_zone(gfp_mask);
+        ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
+        ac-&gt;nodemask = nodemask;
+        ac-&gt;migratetype = gfp_migratetype(gfp_mask);
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (cpusets_enabled()) {
+                *alloc_gfp |= __GFP_HARDWALL;
+                <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">                 * When we are in the interrupt context, it is irrelevant</span>
+<span style="color: #7F9F7F;">                 * to the current task context. It means that any node ok.</span>
+<span style="color: #5F7F5F;">                 */</span>
+                <span style="color: #F0DFAF; font-weight: bold;">if</span> (in_task() &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>ac-&gt;nodemask)
+                        ac-&gt;nodemask = &amp;cpuset_current_mems_allowed;
+                <span style="color: #F0DFAF; font-weight: bold;">else</span>
+                        *alloc_flags |= ALLOC_CPUSET;
+        }
+
+        might_alloc(gfp_mask);
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (should_fail_alloc_page(gfp_mask, order))
+                <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">false</span>;
+
+        *alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, *alloc_flags);
+
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Dirty zone balancing only done in the fast path</span><span style="color: #5F7F5F;"> */</span>
+        ac-&gt;spread_dirty_pages = (gfp_mask &amp; __GFP_WRITE);
+
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * The preferred zone is used for statistics but crucially it is</span>
+<span style="color: #7F9F7F;">         * also used as the starting point for the zonelist iterator. It</span>
+<span style="color: #7F9F7F;">         * may get reset for allocations that ignore memory policies.</span>
+<span style="color: #5F7F5F;">         */</span>
+        ac-&gt;preferred_zoneref = first_zones_zonelist(ac-&gt;zonelist,
+                                        ac-&gt;highest_zoneidx, ac-&gt;nodemask);
+
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">true</span>;
+}
+</pre>
+</div>
+<p>
+第一行确定最高可以分配的zone_type（idx），通过gfp_zone得到，该函数（宏）在前面已经<a href="#org7c4c72a">详细</a>介绍了。
+第二行代码比较关键：
+<a id="orgd98350a"></a>
+</p>
+<div class="org-src-container">
+<pre class="src src-c">ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
+</pre>
+</div>
+<p>
+这里就要引入内核内存管理的一个关键数据结构了：zonelist。在NUMA系统里每个内存节点由pglist_data数据结构表示，该结构体里有一个zonelist类型的数组成员名为node_zonelists：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"> <span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pglist_data</span> {
+     ...;
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * node_zonelists contains references to all zones in all nodes.</span>
+<span style="color: #7F9F7F;">         * Generally the first zones will be references to this node's</span>
+<span style="color: #7F9F7F;">         * node_zones.</span>
+<span style="color: #5F7F5F;">         */</span>
+    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> <span style="color: #DFAF8F;">node_zonelists</span>[MAX_ZONELISTS];
+    ...
+} <span style="color: #7CB8BB;">pg_data_t</span>;
+</pre>
+</div>
+<p>
+<a id="org4257ded"></a>
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;"> * One allocation request operates on a zonelist. A zonelist</span>
+<span style="color: #7F9F7F;"> * is a list of zones, the first one is the 'goal' of the</span>
+<span style="color: #7F9F7F;"> * allocation, the other zones are fallback zones, in decreasing</span>
+<span style="color: #7F9F7F;"> * priority.</span>
+<span style="color: #7F9F7F;"> *</span>
+<span style="color: #7F9F7F;"> * To speed the reading of the zonelist, the zonerefs contain the zone index</span>
+<span style="color: #7F9F7F;"> * of the entry being read. Helper functions to access information given</span>
+<span style="color: #7F9F7F;"> * a struct zoneref are</span>
+<span style="color: #7F9F7F;"> *</span>
+<span style="color: #7F9F7F;"> * zonelist_zone()      - Return the struct zone * for an entry in _zonerefs</span>
+<span style="color: #7F9F7F;"> * zonelist_zone_idx()  - Return the index of the zone for an entry</span>
+<span style="color: #7F9F7F;"> * zonelist_node_idx()  - Return the index of the node for an entry</span>
+<span style="color: #5F7F5F;"> */</span>
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> {
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> <span style="color: #DFAF8F;">_zonerefs</span>[MAX_ZONES_PER_ZONELIST + 1];
+};
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;"> * This struct contains information about a zone in a zonelist. It is stored</span>
+<span style="color: #7F9F7F;"> * here to avoid dereferences into large structures and lookups of tables</span>
+<span style="color: #5F7F5F;"> */</span>
+<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> {
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> *<span style="color: #DFAF8F;">zone</span>;      <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Pointer to actual zone</span><span style="color: #5F7F5F;"> */</span>
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">zone_idx</span>;           <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">zone_idx(zoneref-&gt;zone)</span><span style="color: #5F7F5F;"> */</span>
+};
+</pre>
+</div>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Maximum number of zones on a zonelist</span><span style="color: #5F7F5F;"> */</span>
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">MAX_ZONES_PER_ZONELIST</span> (MAX_NUMNODES * MAX_NR_ZONES)
+</pre>
+</div>
+<p>
+从上面这些代码就可以看出引入zonelist的缘由了，一个zonelist包含所有节点上的所有zone，一次分配就在一个zonelist上去操作（也就是所有的zone都是有可能去分配的）。zonelist里的zone按顺序依次向后具有较低的优先级用于分配内存，而排在最前面的zone就是最优先的zone要从里面分配内存。从MAX_ZONES_PER_ZONELIST宏的定义可以看出来所有内存其实就是按一种层次化组织，对于多节点的NUMA架构来说，就是分若干节点，每个节点又分若干zone。另外对于NUMA架构来说，node_zonelists成员实际分两条，一条是可以fallback的：ZONELIST_FALLBACK，也就是这里面有所有节点的所有zone，另外一条是：ZONELIST_NOFALLBACK，是内存分配标志gfp在指明了__GFP_THISNODE不允许回退时使用的zonelist，也就是只能从指定节点的zone里分配内存。
+</p>
+
+<p>
+zoneref是具体存在一个zonelist里元素，它主要是加速访问zonelist，缓存下zone不用经常查阅zonelist这个表。
+</p>
+
+<p>
+有了这些背景知识再来理解<a href="#orgd98350a">node_zonelist</a>的实现就简单了，gfp_zonelist主要是看gfp标志里是否设置了__GFP_THISNODE依据不同的情况返回是fallback还是nofallback的zonelist索引：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">gfp_zonelist</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">flags</span>)
+{
+<span style="color: #94BFF3;">#ifdef</span> CONFIG_NUMA
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(flags &amp; __GFP_THISNODE))
+                <span style="color: #F0DFAF; font-weight: bold;">return</span> ZONELIST_NOFALLBACK;
+<span style="color: #94BFF3;">#endif</span>
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> ZONELIST_FALLBACK;
+}
+</pre>
+</div>
+<p>
+返回的索引再加上node_zonelists就得到目标zonelist了，并存放到alloc_context的zonelist成员，后续会用来索引目标zone。
+</p>
+
+<p>
+在继续分析prepare_alloc_pages的代码前，这里想简单的介绍下zonelist的初始化，详细的分析可以参见读者另外的文章。
+</p>
+
+<p>
+对于多节点NUMA架构来说主要通过如下流程去初始化zonelist：
+</p>
+<pre class="example" id="org2691a7b">
+__build_all_zonelists-&gt;build_zonelists-&gt;build_zonelists_in_node_order-&gt;build_zonerefs_node-&gt;zoneref_set_zone
+</pre>
+
+<p>
+__build_all_zonelists里有如下代码循环针对所有的node去构建zonelist：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #93E0E3;">for_each_node</span>(nid) {
+        <span style="color: #7CB8BB;">pg_data_t</span> *<span style="color: #DFAF8F;">pgdat</span> = NODE_DATA(nid);
+        build_zonelists(pgdat);
+}
+</pre>
+</div>
+<p>
+build_zonelists里有关键代码如下：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">while</span> ((node = find_next_best_node(local_node, &amp;used_mask)) &gt;= 0) {
+        <span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;">         * We don't want to pressure a particular node.</span>
+<span style="color: #7F9F7F;">         * So adding penalty to the first node in same</span>
+<span style="color: #7F9F7F;">         * distance group to make it round-robin.</span>
+<span style="color: #5F7F5F;">         */</span>
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (node_distance(local_node, node) !=
+            node_distance(local_node, prev_node))
+                node_load[node] += 1;
+
+        node_order[nr_nodes++] = node;
+        prev_node = node;
+}
+
+<span style="color: #93E0E3;">build_zonelists_in_node_order</span>(pgdat, node_order, nr_nodes);
+</pre>
+</div>
+<p>
+就是说通过node_distance确定的节点间的距离，生成了一个node_order数组，这个数组里的元素是node的标号，数组里越靠后的元素表示的节点距离当前处理的节点越远，node_distance可以根据下层硬件的实际拓扑通过ACPI表传上来，这方面的细节参见笔者其它文章。node_order生成好了之后，它又作为参数调用了build_zonelists_in_node_order函数：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
+<span style="color: #7F9F7F;"> * Build zonelists ordered by node and zones within node.</span>
+<span style="color: #7F9F7F;"> * This results in maximum locality--normal zone overflows into local</span>
+<span style="color: #7F9F7F;"> * DMA zone, if any--but risks exhausting DMA zone.</span>
+<span style="color: #5F7F5F;"> */</span>
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">build_zonelists_in_node_order</span>(<span style="color: #7CB8BB;">pg_data_t</span> *<span style="color: #DFAF8F;">pgdat</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">node_order</span>,
+                <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">nr_nodes</span>)
+{
+        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #DFAF8F;">zonerefs</span>;
+        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+
+        zonerefs = pgdat-&gt;node_zonelists[ZONELIST_FALLBACK]._zonerefs;
+
+        <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; nr_nodes; i++) {
+                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nr_zones</span>;
+
+                <span style="color: #7CB8BB;">pg_data_t</span> *<span style="color: #DFAF8F;">node</span> = NODE_DATA(node_order[i]);
+
+                nr_zones = build_zonerefs_node(node, zonerefs);
+                zonerefs += nr_zones;
+        }
+        zonerefs-&gt;zone = <span style="color: #BFEBBF;">NULL</span>;
+        zonerefs-&gt;zone_idx = 0;
+}
+</pre>
+</div>
+<p>
+从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出调用build_zonerefs_node，更多的细节本文不再赘述了。
+</p>
+
+<p>
+由上面初始化zonelist的简单分析也就可以更加深刻的理解<a href="#org4257ded">前面代码</a>里对zonelist的注释了：
+</p>
+<pre class="example" id="orgd6ea49f">
+the first one is the 'goal' of the allocation, the other zones are fallback zones, in decreasing priority.
+</pre>
+
+<p>
+回到prepare_alloc_pages继续分析，gfp_migratetype主要是用来从gfp标志中提取出页面的迁移类型，一种是可移动__GFP_MOVABLE，一种是可回收__GFP_RECLAIMABLE：
+</p>
+<div class="org-src-container">
+<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Convert GFP flags to their corresponding migrate type</span><span style="color: #5F7F5F;"> */</span>
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_MOVABLE_MASK</span> (__GFP_RECLAIMABLE|__GFP_MOVABLE)
+<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_MOVABLE_SHIFT</span> 3
+
+<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">gfp_migratetype</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp_flags</span>)
+{
+        VM_WARN_ON((gfp_flags &amp; GFP_MOVABLE_MASK) == GFP_MOVABLE_MASK);
+        BUILD_BUG_ON((1UL &lt;&lt; GFP_MOVABLE_SHIFT) != ___GFP_MOVABLE);
+        BUILD_BUG_ON((___GFP_MOVABLE &gt;&gt; GFP_MOVABLE_SHIFT) != MIGRATE_MOVABLE);
+        BUILD_BUG_ON((___GFP_RECLAIMABLE &gt;&gt; GFP_MOVABLE_SHIFT) != MIGRATE_RECLAIMABLE);
+        BUILD_BUG_ON(((___GFP_MOVABLE | ___GFP_RECLAIMABLE) &gt;&gt;
+                      GFP_MOVABLE_SHIFT) != MIGRATE_HIGHATOMIC);
+
+        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(page_group_by_mobility_disabled))
+                <span style="color: #F0DFAF; font-weight: bold;">return</span> MIGRATE_UNMOVABLE;
+
+        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Group based on mobility</span><span style="color: #5F7F5F;"> */</span>
+        <span style="color: #F0DFAF; font-weight: bold;">return</span> (__force <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>)(gfp_flags &amp; GFP_MOVABLE_MASK) &gt;&gt; GFP_MOVABLE_SHIFT;
+}
+<span style="color: #94BFF3;">#undef</span> GFP_MOVABLE_MASK
+<span style="color: #94BFF3;">#undef</span> GFP_MOVABLE_SHIFT
+</pre>
 </div>
 </div>
-<div id="outline-container-org97f4c8e" class="outline-3">
-<h3 id="org97f4c8e"><span class="section-number-3">3.2.</span> 第二部分</h3>
 </div>
-<div id="outline-container-org962e6a1" class="outline-3">
-<h3 id="org962e6a1"><span class="section-number-3">3.3.</span> 第三部分</h3>
+<div id="outline-container-org6aa908a" class="outline-3">
+<h3 id="org6aa908a"><span class="section-number-3">3.2.</span> 第二部分</h3>
+</div>
+<div id="outline-container-org2330c52" class="outline-3">
+<h3 id="org2330c52"><span class="section-number-3">3.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-org7990b8f" class="outline-2">
-<h2 id="org7990b8f"><span class="section-number-2">4.</span> 附节</h2>
+<div id="outline-container-org6d141b3" class="outline-2">
+<h2 id="org6d141b3"><span class="section-number-2">4.</span> 附节</h2>
 <div class="outline-text-2" id="text-4">
 </div>
-<div id="outline-container-org6f140e4" class="outline-3">
-<h3 id="org6f140e4"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org8cee7e1" class="outline-3">
+<h3 id="org8cee7e1"><span class="section-number-3">4.1.</span> get_vma_policy生成ilx</h3>
 <div class="outline-text-3" id="text-4-1">
 </div>
 </div>
@@ -1616,7 +1891,7 @@ __GFP_BITS_SHIFT就是最后一个gfp标志所占的比特。
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-24 Sun 23:50</p>
+<p class="date">Created: 2024-11-25 Mon 23:00</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

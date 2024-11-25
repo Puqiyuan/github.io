@@ -348,6 +348,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
   };
 #+end_src
 
+<<gfp_zone>>
 现在可以介绍gfp_zone函数了，gfp_zone函数的主要作用就是根据传入的gfp标志映射到不同类型的zone，也就是返回zone_type类型的枚举，这些类型前面刚介绍过了。现在看gfp_zone的实现：
 #+begin_src c
 static inline enum zone_type gfp_zone(gfp_t flags)
@@ -1142,7 +1143,235 @@ static noinline void __init kernel_init_freeable(void)
 #+begin_src c
 #define __GFP_BITS_MASK ((__force gfp_t)((1 << __GFP_BITS_SHIFT) - 1))
 #+end_src
-__GFP_BITS_SHIFT就是最后一个gfp标志所占的比特。
+__GFP_BITS_SHIFT就是最后一个gfp标志所占的比特，也就是所有gfp标志都可以使用了。
+
+current_gfp_context主要是结合上Per-Process Flags，进程级别也可以设置gfp标志，存放于task_struct:flags域，比如进程可以设置PF_MEMALLOC_PIN标志，页面可以pin住，这时gfp flags需要清除__GFP_MOVABLE标志，也就是分配的页面是不能移动的了：
+#+begin_src c
+static inline gfp_t current_gfp_context(gfp_t flags)
+{
+	unsigned int pflags = READ_ONCE(current->flags);
+
+	if (unlikely(pflags & (PF_MEMALLOC_NOIO | PF_MEMALLOC_NOFS | PF_MEMALLOC_PIN))) {
+		/*
+		 * NOIO implies both NOIO and NOFS and it is a weaker context
+		 * so always make sure it makes precedence
+		 */
+		if (pflags & PF_MEMALLOC_NOIO)
+			flags &= ~(__GFP_IO | __GFP_FS);
+		else if (pflags & PF_MEMALLOC_NOFS)
+			flags &= ~__GFP_FS;
+
+		if (pflags & PF_MEMALLOC_PIN)
+			flags &= ~__GFP_MOVABLE;
+	}
+	return flags;
+}
+#+end_src
+接下来继续分析prepare_alloc_pages函数，该函数最终敲定alloc_context参数，较为关键：
+#+begin_src c
+static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask,
+		struct alloc_context *ac, gfp_t *alloc_gfp,
+		unsigned int *alloc_flags)
+{
+	ac->highest_zoneidx = gfp_zone(gfp_mask);
+	ac->zonelist = node_zonelist(preferred_nid, gfp_mask);
+	ac->nodemask = nodemask;
+	ac->migratetype = gfp_migratetype(gfp_mask);
+
+	if (cpusets_enabled()) {
+		*alloc_gfp |= __GFP_HARDWALL;
+		/*
+		 * When we are in the interrupt context, it is irrelevant
+		 * to the current task context. It means that any node ok.
+		 */
+		if (in_task() && !ac->nodemask)
+			ac->nodemask = &cpuset_current_mems_allowed;
+		else
+			*alloc_flags |= ALLOC_CPUSET;
+	}
+
+	might_alloc(gfp_mask);
+
+	if (should_fail_alloc_page(gfp_mask, order))
+		return false;
+
+	*alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, *alloc_flags);
+
+	/* Dirty zone balancing only done in the fast path */
+	ac->spread_dirty_pages = (gfp_mask & __GFP_WRITE);
+
+	/*
+	 * The preferred zone is used for statistics but crucially it is
+	 * also used as the starting point for the zonelist iterator. It
+	 * may get reset for allocations that ignore memory policies.
+	 */
+	ac->preferred_zoneref = first_zones_zonelist(ac->zonelist,
+					ac->highest_zoneidx, ac->nodemask);
+
+	return true;
+}
+#+end_src
+第一行确定最高可以分配的zone_type（idx），通过gfp_zone得到，该函数（宏）在前面已经[[gfp_zone][详细]]介绍了。
+第二行代码比较关键：
+<<node_zonelist>>
+#+begin_src c
+ac->zonelist = node_zonelist(preferred_nid, gfp_mask);
+#+end_src
+这里就要引入内核内存管理的一个关键数据结构了：zonelist。在NUMA系统里每个内存节点由pglist_data数据结构表示，该结构体里有一个zonelist类型的数组成员名为node_zonelists：
+#+begin_src c
+ typedef struct pglist_data {
+     ...;
+  	/*
+	 * node_zonelists contains references to all zones in all nodes.
+	 * Generally the first zones will be references to this node's
+	 * node_zones.
+	 */
+    struct zonelist node_zonelists[MAX_ZONELISTS];
+    ...
+} pg_data_t;
+#+end_src
+<<zonelist_comment>>
+#+begin_src c
+/*
+ * One allocation request operates on a zonelist. A zonelist
+ * is a list of zones, the first one is the 'goal' of the
+ * allocation, the other zones are fallback zones, in decreasing
+ * priority.
+ *
+ * To speed the reading of the zonelist, the zonerefs contain the zone index
+ * of the entry being read. Helper functions to access information given
+ * a struct zoneref are
+ *
+ * zonelist_zone()	- Return the struct zone * for an entry in _zonerefs
+ * zonelist_zone_idx()	- Return the index of the zone for an entry
+ * zonelist_node_idx()	- Return the index of the node for an entry
+ */
+struct zonelist {
+	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
+};
+#+end_src
+#+begin_src c
+/*
+ * This struct contains information about a zone in a zonelist. It is stored
+ * here to avoid dereferences into large structures and lookups of tables
+ */
+struct zoneref {
+	struct zone *zone;	/* Pointer to actual zone */
+	int zone_idx;		/* zone_idx(zoneref->zone) */
+};
+#+end_src
+#+begin_src c
+/* Maximum number of zones on a zonelist */
+#define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
+#+end_src
+从上面这些代码就可以看出引入zonelist的缘由了，一个zonelist包含所有节点上的所有zone，一次分配就在一个zonelist上去操作（也就是所有的zone都是有可能去分配的）。zonelist里的zone按顺序依次向后具有较低的优先级用于分配内存，而排在最前面的zone就是最优先的zone要从里面分配内存。从MAX_ZONES_PER_ZONELIST宏的定义可以看出来所有内存其实就是按一种层次化组织，对于多节点的NUMA架构来说，就是分若干节点，每个节点又分若干zone。另外对于NUMA架构来说，node_zonelists成员实际分两条，一条是可以fallback的：ZONELIST_FALLBACK，也就是这里面有所有节点的所有zone，另外一条是：ZONELIST_NOFALLBACK，是内存分配标志gfp在指明了__GFP_THISNODE不允许回退时使用的zonelist，也就是只能从指定节点的zone里分配内存。
+
+zoneref是具体存在一个zonelist里元素，它主要是加速访问zonelist，缓存下zone不用经常查阅zonelist这个表。
+
+有了这些背景知识再来理解[[node_zonelist][node_zonelist]]的实现就简单了，gfp_zonelist主要是看gfp标志里是否设置了__GFP_THISNODE依据不同的情况返回是fallback还是nofallback的zonelist索引：
+#+begin_src c
+static inline int gfp_zonelist(gfp_t flags)
+{
+#ifdef CONFIG_NUMA
+	if (unlikely(flags & __GFP_THISNODE))
+		return ZONELIST_NOFALLBACK;
+#endif
+	return ZONELIST_FALLBACK;
+}
+#+end_src
+返回的索引再加上node_zonelists就得到目标zonelist了，并存放到alloc_context的zonelist成员，后续会用来索引目标zone。
+
+在继续分析prepare_alloc_pages的代码前，这里想简单的介绍下zonelist的初始化，详细的分析可以参见读者另外的文章。
+
+对于多节点NUMA架构来说主要通过如下流程去初始化zonelist：
+#+begin_example
+__build_all_zonelists->build_zonelists->build_zonelists_in_node_order->build_zonerefs_node->zoneref_set_zone
+#+end_example
+
+__build_all_zonelists里有如下代码循环针对所有的node去构建zonelist：
+#+begin_src c
+for_each_node(nid) {
+	pg_data_t *pgdat = NODE_DATA(nid);
+	build_zonelists(pgdat);
+}
+#+end_src
+build_zonelists里有关键代码如下：
+#+begin_src c
+	while ((node = find_next_best_node(local_node, &used_mask)) >= 0) {
+		/*
+		 * We don't want to pressure a particular node.
+		 * So adding penalty to the first node in same
+		 * distance group to make it round-robin.
+		 */
+		if (node_distance(local_node, node) !=
+		    node_distance(local_node, prev_node))
+			node_load[node] += 1;
+
+		node_order[nr_nodes++] = node;
+		prev_node = node;
+	}
+
+	build_zonelists_in_node_order(pgdat, node_order, nr_nodes);
+#+end_src
+就是说通过node_distance确定的节点间的距离，生成了一个node_order数组，这个数组里的元素是node的标号，数组里越靠后的元素表示的节点距离当前处理的节点越远，node_distance可以根据下层硬件的实际拓扑通过ACPI表传上来，这方面的细节参见笔者其它文章。node_order生成好了之后，它又作为参数调用了build_zonelists_in_node_order函数：
+#+begin_src c
+/*
+ * Build zonelists ordered by node and zones within node.
+ * This results in maximum locality--normal zone overflows into local
+ * DMA zone, if any--but risks exhausting DMA zone.
+ */
+static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
+		unsigned nr_nodes)
+{
+	struct zoneref *zonerefs;
+	int i;
+
+	zonerefs = pgdat->node_zonelists[ZONELIST_FALLBACK]._zonerefs;
+
+	for (i = 0; i < nr_nodes; i++) {
+		int nr_zones;
+
+		pg_data_t *node = NODE_DATA(node_order[i]);
+
+		nr_zones = build_zonerefs_node(node, zonerefs);
+		zonerefs += nr_zones;
+	}
+	zonerefs->zone = NULL;
+	zonerefs->zone_idx = 0;
+}
+#+end_src
+从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出调用build_zonerefs_node，更多的细节本文不再赘述了。
+
+由上面初始化zonelist的简单分析也就可以更加深刻的理解[[zonelist_comment][前面代码]]里对zonelist的注释了：
+#+begin_example
+the first one is the 'goal' of the allocation, the other zones are fallback zones, in decreasing priority.
+#+end_example
+
+回到prepare_alloc_pages继续分析，gfp_migratetype主要是用来从gfp标志中提取出页面的迁移类型，一种是可移动__GFP_MOVABLE，一种是可回收__GFP_RECLAIMABLE：
+#+begin_src c
+/* Convert GFP flags to their corresponding migrate type */
+#define GFP_MOVABLE_MASK (__GFP_RECLAIMABLE|__GFP_MOVABLE)
+#define GFP_MOVABLE_SHIFT 3
+
+static inline int gfp_migratetype(const gfp_t gfp_flags)
+{
+	VM_WARN_ON((gfp_flags & GFP_MOVABLE_MASK) == GFP_MOVABLE_MASK);
+	BUILD_BUG_ON((1UL << GFP_MOVABLE_SHIFT) != ___GFP_MOVABLE);
+	BUILD_BUG_ON((___GFP_MOVABLE >> GFP_MOVABLE_SHIFT) != MIGRATE_MOVABLE);
+	BUILD_BUG_ON((___GFP_RECLAIMABLE >> GFP_MOVABLE_SHIFT) != MIGRATE_RECLAIMABLE);
+	BUILD_BUG_ON(((___GFP_MOVABLE | ___GFP_RECLAIMABLE) >>
+		      GFP_MOVABLE_SHIFT) != MIGRATE_HIGHATOMIC);
+
+	if (unlikely(page_group_by_mobility_disabled))
+		return MIGRATE_UNMOVABLE;
+
+	/* Group based on mobility */
+	return (__force unsigned long)(gfp_flags & GFP_MOVABLE_MASK) >> GFP_MOVABLE_SHIFT;
+}
+#undef GFP_MOVABLE_MASK
+#undef GFP_MOVABLE_SHIFT
+#+end_src
 ** 第二部分
 ** 第三部分
 * 附节

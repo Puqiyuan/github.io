@@ -29,3 +29,5 @@ __PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
 10，build_zonelists初始化node_zonelists以供内存分配使用pglist_data:node_zonelists，它确定了内存分配在所有节点（zone）上分配的回退原则。
 
 11，WARN_ON_ONCE、ude2异常指令以及report_bug的详细逻辑。
+
+12，_build_all_zonelists->build_zonelists->build_zonelists_in_node_order->build_zonerefs_node->zoneref_set_zone，node/zone的初始化流程。
