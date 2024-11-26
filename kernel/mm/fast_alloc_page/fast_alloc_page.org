@@ -431,6 +431,7 @@ GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个�
   #define GFP_ZONEMASK	(__GFP_DMA|__GFP_HIGHMEM|__GFP_DMA32|__GFP_MOVABLE)
 #+end_src
 这里可以看到低4个bit其实就是zone修饰符，指明了哪些zone用于分配内存。之前介绍过gfp_t本质是个int，但它具有受限的取值，以限制某些int能进行的运算（范围），但是gfp_t不行。比如上面提到了gfp_t可能的四种值，一个完整的gfp_t值列表如下：
+<<all_gfp_bit>>
 #+begin_src c
 enum {
 	___GFP_DMA_BIT,
@@ -974,6 +975,12 @@ struct alloc_context {
 	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
 			&alloc_gfp, &alloc_flags))
 		return NULL;
+
+	/*
+	 * Forbid the first pass from falling back to types that fragment
+	 * memory until all local zones are considered.
+	 */
+	alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 #+end_src
 
 ALLOC_WMARK_LOW代表内存的水位线之一，每个zone都有几种水位线，用于控制空闲内存在不同的水位时，在内存回收方面采取不同程度的措施：
@@ -1372,7 +1379,118 @@ static inline int gfp_migratetype(const gfp_t gfp_flags)
 #undef GFP_MOVABLE_MASK
 #undef GFP_MOVABLE_SHIFT
 #+end_src
+这个函数前面先进行了一些检查，比如第一行的检查代表__GFP_RECLAIMABLE和__GFP_MOVABLE不能同时被设置，其它行实际是检查在[[all_gfp_bit][这个]]enum中，满足第3位是___GFP_MOVABLE_BIT，第四位是___GFP_RECLAIMABLE_BIT，从0开始计数。
+
+接下来的代码主要是处理cpuset内存资源组的限制，这种限制主要针对进程上下文并且没有设置nodemask的时候，cpuset_current_mems_allowed在设置了CONFIG_CPUSETS后，就是当前进程（current）的mems_allowed成员限制的node。
+
+在should_fail_alloc_page主要用于处理错误注入。
+
+__GFP_WRITE代表内存的申请者将会写页面，这样内存分配的时候就会尽量将其分散在不同zone中：
+#+begin_src c
+/* Dirty zone balancing only done in the fast path */
+ac->spread_dirty_pages = (gfp_mask & __GFP_WRITE);
+#+end_src
+
+最后一行代码也是比较关键的：
+#+begin_src c
+	/*
+	 * The preferred zone is used for statistics but crucially it is
+	 * also used as the starting point for the zonelist iterator. It
+	 * may get reset for allocations that ignore memory policies.
+	 */
+	ac->preferred_zoneref = first_zones_zonelist(ac->zonelist,
+					ac->highest_zoneidx, ac->nodemask);
+#+end_src
+通过first_zones_zonelist去获得目标zone，后面将使用这个目标zone去分配内存，ac->zonelist[[node_zonelist][前面]]分析过了如何得到。获得的目标zone其序号应当是小于或等于第二个参数ac->highest_zoneidx的，如果第三个参数ac->nodemask有值，还应当保证分出来的zone在ac->nodemask指明的节点里，下面是其实现：
+#+begin_src c
+/**
+ * first_zones_zonelist - Returns the first zone at or below highest_zoneidx within the allowed nodemask in a zonelist
+ * @zonelist: The zonelist to search for a suitable zone
+ * @highest_zoneidx: The zone index of the highest zone to return
+ * @nodes: An optional nodemask to filter the zonelist with
+ *
+ * This function returns the first zone at or below a given zone index that is
+ * within the allowed nodemask. The zoneref returned is a cursor that can be
+ * used to iterate the zonelist with next_zones_zonelist by advancing it by
+ * one before calling.
+ *
+ * When no eligible zone is found, zoneref->zone is NULL (zoneref itself is
+ * never NULL). This may happen either genuinely, or due to concurrent nodemask
+ * update due to cpuset modification.
+ *
+ * Return: Zoneref pointer for the first suitable zone found
+ */
+static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
+{
+	return next_zones_zonelist(zonelist->_zonerefs,
+							highest_zoneidx, nodes);
+}
+#+end_src
+#+begin_src c
+/**
+ * next_zones_zonelist - Returns the next zone at or below highest_zoneidx within the allowed nodemask using a cursor within a zonelist as a starting point
+ * @z: The cursor used as a starting point for the search
+ * @highest_zoneidx: The zone index of the highest zone to return
+ * @nodes: An optional nodemask to filter the zonelist with
+ *
+ * This function returns the next zone at or below a given zone index that is
+ * within the allowed nodemask using a cursor as the starting point for the
+ * search. The zoneref returned is a cursor that represents the current zone
+ * being examined. It should be advanced by one before calling
+ * next_zones_zonelist again.
+ *
+ * Return: the next zone at or below highest_zoneidx within the allowed
+ * nodemask using a cursor within a zonelist as a starting point
+ */
+static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
+{
+	if (likely(!nodes && zonelist_zone_idx(z) <= highest_zoneidx))
+		return z;
+	return __next_zones_zonelist(z, highest_zoneidx, nodes);
+}
+#+end_src
+可以看到一般最优可能的就是首选传进来的zone就满足条件了，如果不满足条件通过__next_zones_zonelist继续获取目标zone。从这个highest_zoneidx的[[gfp_zone][获得过程]]可以知道其最大就是[[zone_type][zone_type]]里定义的，也就是它是来自一个节点里的zone。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
+#+begin_src c
+/* Returns the next zone at or below highest_zoneidx in a zonelist */
+struct zoneref *__next_zones_zonelist(struct zoneref *z,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
+{
+	/*
+	 * Find the next suitable zone to use for the allocation.
+	 * Only filter based on nodemask if it's set
+	 */
+	if (unlikely(nodes == NULL))
+		while (zonelist_zone_idx(z) > highest_zoneidx)
+			z++;
+	else
+		while (zonelist_zone_idx(z) > highest_zoneidx ||
+				(zonelist_zone(z) && !zref_in_nodemask(z, nodes)))
+			z++;
+
+	return z;
+}
+#+end_src
+在这里看到了z自增的语句，假如没有给定目标节点的限制，那么就只需要循环到zoneref:zone_idx小于或等于highest_zoneidx就行。如果限定了node，那么还需要满足zone:node指明的节点号在参数nodes中被设置才行。这里zonelist里的zoneref有所有节点的所有zone，循环里是可能都用到的一直寻找到一个满足条件的zone。
+
+下面接续分析：
+#+begin_src c
+	/*
+	 * Forbid the first pass from falling back to types that fragment
+	 * memory until all local zones are considered.
+	 */
+	alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
+#+end_src
+
+
+
+到目前为止__alloc_pages_noprof函数的第一部分就介绍完了，它主要是确定分配用的参数结构体alloc_context。
 ** 第二部分
+
 ** 第三部分
 * 附节
 ** get_vma_policy生成ilx
