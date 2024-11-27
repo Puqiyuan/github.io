@@ -10,3 +10,17 @@ weighted_interleave_nodes
 weighted_interleave_nid
 alloc_pages_preferred_many
 __alloc_pages_noprof
+WARN_ON_ONCE_GFP
+current_gfp_context
+prepare_alloc_pages
+gfp_zone
+node_zonelist
+gfp_zonelist
+gfp_migratetype
+first_zones_zonelist
+next_zones_zonelist
+zonelist_zone_idx
+__next_zones_zonelist
+zonelist_zone
+zref_in_nodemask
+get_page_from_freelist

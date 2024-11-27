@@ -1381,8 +1381,21 @@ static inline int gfp_migratetype(const gfp_t gfp_flags)
 #+end_src
 这个函数前面先进行了一些检查，比如第一行的检查代表__GFP_RECLAIMABLE和__GFP_MOVABLE不能同时被设置，其它行实际是检查在[[all_gfp_bit][这个]]enum中，满足第3位是___GFP_MOVABLE_BIT，第四位是___GFP_RECLAIMABLE_BIT，从0开始计数。
 
+<<prepare_alloc_pages_cpuset>>
 接下来的代码主要是处理cpuset内存资源组的限制，这种限制主要针对进程上下文并且没有设置nodemask的时候，cpuset_current_mems_allowed在设置了CONFIG_CPUSETS后，就是当前进程（current）的mems_allowed成员限制的node。
-
+#+begin_src c
+	if (cpusets_enabled()) {
+		*alloc_gfp |= __GFP_HARDWALL;
+		/*
+		 * When we are in the interrupt context, it is irrelevant
+		 * to the current task context. It means that any node ok.
+		 */
+		if (in_task() && !ac->nodemask)
+			ac->nodemask = &cpuset_current_mems_allowed;
+		else
+			*alloc_flags |= ALLOC_CPUSET;
+	}
+#+end_src
 在should_fail_alloc_page主要用于处理错误注入。
 
 __GFP_WRITE代表内存的申请者将会写页面，这样内存分配的时候就会尽量将其分散在不同zone中：
@@ -1486,12 +1499,39 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 	alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 #+end_src
 
-
+这段代码主要就是禁止在第一次分配时造成内存碎片，细节不赘述了，比较简单。
 
 到目前为止__alloc_pages_noprof函数的第一部分就介绍完了，它主要是确定分配用的参数结构体alloc_context。
 ** 第二部分
+第二部分主要就是分配页面的动作，这主要分两个路径，一是快速路径通过get_page_from_freelist，二是慢速路径通过__alloc_pages_slowpath，本文主要介绍快速路径的流程，慢速路径参见作者其它文章。当快速路径不能分配页面时，就会走慢速路径了：
+#+begin_src c
+	/* First allocation attempt */
+	page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &ac);
+	if (likely(page))
+		goto out;
 
+	alloc_gfp = gfp;
+	ac.spread_dirty_pages = false;
+
+	/*
+	 * Restore the original nodemask if it was potentially replaced with
+	 * &cpuset_current_mems_allowed to optimize the fast-path attempt.
+	 */
+	ac.nodemask = nodemask;
+
+	page = __alloc_pages_slowpath(alloc_gfp, order, &ac);
+#+end_src
+可以看到当快速路径不能分配页面时，就会调整alloc_gfp，因为alloc_gfp在快速路径分配页面时可能施加了额外的限制，比如前面分析过的current_gfp_context里可能施加不能进行IO或文件系统相关的
+操作，在[[prepare_alloc_pages_cpuset][prepare_alloc_pages]]里施加的__GFP_HARDWALL标志以严格遵循cpuset的策略，这些限制在慢速路径时都会解除，以提高内存分配的成功率。
+
+另外spread_dirty_pages也是作为一种分散脏页面的限制在慢速路径也会解开。此外用于分配内存的ac->nodemask在[[prepare_alloc_pages_cpuset][prepare_alloc_pages]]里也可能因为cpuset内存组限制为cpuset_current_mems_allowed，在慢速路径时这种限制也没有了，用于分配内存的节点来自传进来的参数就可以了。
+
+后面的[[get_page_from_freelist][节]]还会详细介绍快速路径的下一个核心函数get_page_from_freelist。
 ** 第三部分
+这一部分主要是做分配内存成功后的初始化或检测，比如不满足mem cgroup的限制时，还要通过__free_pages释放页面，详细细节之于本文主题就不介绍了。
+
+<<get_page_from_freelist>>
+* get_page_from_freelist
 * 附节
 ** get_vma_policy生成ilx
 # ** 使用与操作优化取模

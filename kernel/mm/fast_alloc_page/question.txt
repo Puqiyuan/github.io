@@ -1,0 +1,1 @@
+1，__alloc_pages_noprof函数里的最后才通过__memcg_kmem_charge_page来释放不满足mem cgroup限制的页面，为什么不在一开始检测不能满足限制时，根本就不调用快速或慢速路径去分配页面呢？
