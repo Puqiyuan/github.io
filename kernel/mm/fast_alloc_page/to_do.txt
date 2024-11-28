@@ -35,3 +35,5 @@ __PAGEFLAG(Reported, reported, PF_NO_COMPOUND)
 13，__memcg_kmem_charge_page函数对于mm cgroup的实现，主要集中在memcontrol.c文件里。
 
 14，page-writeback.c，一个（些）页面回写的流程。
+
+15，config UNACCEPTED_MEMORY是一种用于虚拟化环境支持的内存安全机制，可以阻止主机恶意修改虚拟机的内存，研究其实现。
