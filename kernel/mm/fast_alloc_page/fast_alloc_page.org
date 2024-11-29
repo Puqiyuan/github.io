@@ -1544,6 +1544,13 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 
 <<get_page_from_freelist>>
 * get_page_from_freelist
+该函数会进一步进行快速页面的分配流程，也是分三个部分来分析这个函数。
++ 第一部分是要从某个zone中分配内存前都需要进行的公共检测。
++ 第二部分是检查水印并采取措施。
++ 第三部分是进一步调用rmqueue函数去获取页面。
+** 第一部分
+** 第二部分
+** 第三部分
 * 附节
 ** get_vma_policy生成ilx
 # ** 使用与操作优化取模
