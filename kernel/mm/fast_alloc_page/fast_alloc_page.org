@@ -375,13 +375,24 @@ GFP_ZONE_TABLE这个宏类似于一个表（数组），它将不同的GFP标志
 	| (OPT_ZONE_DMA32 << (___GFP_MOVABLE | ___GFP_DMA32) * GFP_ZONES_SHIFT)\
 )
 #+end_src
-这样定义出来这个GFP_ZONE_TABLE其实就是一个数字，只是这个数字按每GFP_ZONES_SHIFT个数目的bit存储一个条目，这个条目通过传入的gfp标志索引，索引到的位置上存放了对应gfp标志优先使用的zone用来分配。
+这样定义出来这个GFP_ZONE_TABLE其实就是一个数字，只是这个数字按每GFP_ZONES_SHIFT个数目的bit
+存储一个条目，这个条目通过传入的gfp标志索引，索引出来的是一个zone_type枚举类型的值。
 
-这个宏其实定义了一种zone分配的优先级，举个例子对于条目：
+这个宏其实定义了一种zone分配的回退机制，举个例子对于条目：
 #+begin_src c
 ZONE_MOVABLE << (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT
 #+end_src
-就是说当传入的GFP标志既设置了__GFP_MOVABLE又设置了__GFP_HIGHMEM，那么优先在ZONE_MOVABLE中分配，但是这个区域分配失败时，也是可以在__GFP_HIGHMEM中分配的。当然，有一些标志组合是无法满足的，比如同时设置了DMA+HIGHMEM，DMA本来就要求地址在低内存区，当然无法又在高地址区分配。
+就是说当传入的GFP标志既设置了__GFP_MOVABLE又设置了__GFP_HIGHMEM，那么最多可以回退到ZONE_MOVABLE这种zone_type，又比如：
+#+begin_src c
+(OPT_ZONE_DMA << (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)
+#+end_src
+同时gfp标志同时设置了___GFP_MOVABLE和___GFP_DMA，那么最多可以回退到ZONE_DMA这种zone_type（假如配置了CONFIG_ZONE_DMA）。
+
+那么可以观察出来，这里GFP_ZONE_TABLE映射出来的值都是往较低的zone_type中映射。
+
+但是这里要提请读者注意，所谓“回退到”并不是指可以借用zone_type中较低zone的内存，而是较高的zone需要自己预留内存。
+
+当然，有一些标志组合是无法满足的，比如同时设置了DMA+HIGHMEM，DMA本来就要求地址在低内存区，当然无法又在高地址区分配，所有这些搭配由GFP_ZONE_BAD宏表示。
 
 GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个比特保存一个条目。通过这种一个数字就实现表格映射的作用，实际也是一种性能优化，通过逻辑运算一个数字的方式是比查表数组访存要高效的。
 
@@ -940,7 +951,8 @@ struct alloc_context {
 #+end_src
 它用于保存一些在内核内存管理内部使用的分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
 
-这里着重解释下highest_zoneidx参数，它表示了在一次分配中最高可用的[[zone_type][zone_type]]，低于highest_zoneidx的zone需要预留内存以保护这些低区的内存，比如ZONE_DMA针对一些老旧设备只能使用这些低地址的内存。当在当前zone无法分配内存时，内核内存管理允许向低区的zone借用内存，但是这种借用不是无限制的，所以每个zone里都有一个lowmem_reserve成员：
+这里着重解释下highest_zoneidx参数，它通过gfp_zone函数获得zone的编号zoneidx和
+处于[[zone_type][zone_type]]zondeidx编号越大，所索引的zone_type越低。处于zone_type靠前的所以每个zone里都有一个lowmem_reserve成员：
 #+begin_src c
 	long lowmem_reserve[MAX_NR_ZONES];
 #+end_src
