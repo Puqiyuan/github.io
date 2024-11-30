@@ -24,3 +24,4 @@ __next_zones_zonelist
 zonelist_zone
 zref_in_nodemask
 get_page_from_freelist
+for_next_zone_zonelist_nodemask

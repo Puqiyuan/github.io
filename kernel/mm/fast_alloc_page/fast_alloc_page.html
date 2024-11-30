@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-29 Fri 23:09 -->
+<!-- 2024-12-01 Sun 00:30 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,31 +38,31 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org1ea93d9">1. alloc_pages_noprof</a></li>
-<li><a href="#org2979eed">2. alloc_pages_mpol_noprof</a>
+<li><a href="#orgfc1b50a">1. alloc_pages_noprof</a></li>
+<li><a href="#org3fce3df">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#org0a01645">2.1. 第一部分</a></li>
-<li><a href="#org366658e">2.2. 第二部分</a></li>
-<li><a href="#org66f9e69">2.3. 第三部分</a></li>
+<li><a href="#orgca66613">2.1. 第一部分</a></li>
+<li><a href="#orgf6ee536">2.2. 第二部分</a></li>
+<li><a href="#orgcd9c98d">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orge7d149a">3. __alloc_pages_noprof</a>
+<li><a href="#orgf214e16">3. __alloc_pages_noprof</a>
 <ul>
-<li><a href="#orga773949">3.1. 第一部分</a></li>
-<li><a href="#orgfcaaf47">3.2. 第二部分</a></li>
-<li><a href="#org4ad27e8">3.3. 第三部分</a></li>
+<li><a href="#org34e6e5d">3.1. 第一部分</a></li>
+<li><a href="#orga0bb2aa">3.2. 第二部分</a></li>
+<li><a href="#org069586b">3.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orge493d6a">4. get_page_from_freelist</a>
+<li><a href="#org226151c">4. get_page_from_freelist</a>
 <ul>
-<li><a href="#org5f890d4">4.1. 第一部分</a></li>
-<li><a href="#orgebc890c">4.2. 第二部分</a></li>
-<li><a href="#orgdac14e0">4.3. 第三部分</a></li>
+<li><a href="#orgdecc1e5">4.1. 第一部分</a></li>
+<li><a href="#org6da0349">4.2. 第二部分</a></li>
+<li><a href="#orgf85c83c">4.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orgb6de3b2">5. 附节</a>
+<li><a href="#org862f801">5. 附节</a>
 <ul>
-<li><a href="#org7a2acb9">5.1. get_vma_policy生成ilx</a></li>
+<li><a href="#orgba5162f">5.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -72,16 +72,15 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-org1ea93d9" class="outline-2">
-<h2 id="org1ea93d9"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-orgfc1b50a" class="outline-2">
+<h2 id="orgfc1b50a"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">alloc_pages_noprof</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>)
+<pre class="example" id="org003fc65">
+struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 </pre>
-</div>
 <p>
 <b>作用：</b>
 </p>
@@ -97,10 +96,9 @@
 <p>
 参数gfp的类型是gfp_t：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #7CB8BB;">__bitwise</span> gfp_t;
+<pre class="example" id="org50ddc23">
+typedef unsigned int __bitwise gfp_t;
 </pre>
-</div>
 <p>
 __bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和int类型的量进行运算和直接赋值（除非进行了类型强制转换），否则开启了Wall的编译选项时，编译器会报警告，它是编译器支持的一
 个attribute。GFP标志主要用来指明内存应该如何分配，比如典型的由GFP推出内存应该在哪个zone中去分配。GFP这个缩写其实是get_free_pages，__开头这样的GFP标志比较底层，一般的用户应该使用GFP_KERNEL这样的由__开头的标志形成的组合。
@@ -109,23 +107,22 @@ __bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和
 <p>
 该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，alloc_pages_noprof定义如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">alloc_pages_noprof</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>)
+<pre class="example" id="org955de1d">
+struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span> = &amp;default_policy;
+	struct mempolicy *pol = &amp;default_policy;
 
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * No reference counting needed for current-&gt;mempolicy</span>
-<span style="color: #7F9F7F;">         * nor system default_policy</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>in_interrupt() &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>(gfp &amp; __GFP_THISNODE))
-                pol = get_task_policy(current);
+	/*
+	 * No reference counting needed for current-&gt;mempolicy
+	 * nor system default_policy
+	 */
+	if (!in_interrupt() &amp;&amp; !(gfp &amp; __GFP_THISNODE))
+		pol = get_task_policy(current);
 
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> alloc_pages_mpol_noprof(gfp, order, pol, NO_INTERLEAVE_INDEX,
-                                       numa_node_id());
+	return alloc_pages_mpol_noprof(gfp, order, pol, NO_INTERLEAVE_INDEX,
+				       numa_node_id());
 }
 </pre>
-</div>
 <p>
 在不处于中断上下文并且传入的GFP标志位没有__GFP_THISNODE时，内存的NUMA分配策略才会生效。那么如何判定是不是在中断上下文呢，__GFP_THISNODE究竟是什么意思呢，还有其它的NUMA策略标志吗？
 </p>
@@ -133,46 +130,42 @@ __bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和
 <p>
 判断是否在中断上下文中使用in_interrupt：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">in_interrupt</span>()          (irq_count())
+<pre class="example" id="org68307f8">
+#define in_interrupt()		(irq_count())
 </pre>
-</div>
 <p>
 在没有定义CONFIG_PREEMPT_RT的情况下，irq_count被如下定义：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;"># define</span> <span style="color: #93E0E3;">irq_count</span>()            (preempt_count() &amp; (NMI_MASK | HARDIRQ_MASK | SOFTIRQ_MASK))
+<pre class="example" id="orgb7d90ca">
+# define irq_count()		(preempt_count() &amp; (NMI_MASK | HARDIRQ_MASK | SOFTIRQ_MASK))
 </pre>
-</div>
 
 <p>
 preempt_count在通用头文件include/asm-generic/preempt.h与架构头文件arch/x86/include/asm/preempt.h中均有定义，但是一般是架构头文件优先使用，这种优先特性体现在Makefile中对头文件使用-I选项包含头文件的先后上，preempt_count在上述两个头文件中均有实现，但是-I选项只要找到第一个有实现的头文件即停止搜索：
 </p>
-<div class="org-src-container">
-<pre class="src src-makefile"><span style="color: #DFAF8F;">LINUXINCLUDE</span>    := \
-                -I$(<span style="color: #DFAF8F;">srctree</span>)/arch/$(<span style="color: #DFAF8F;">SRCARCH</span>)/include \
-                -I$(<span style="color: #DFAF8F;">objtree</span>)/arch/$(<span style="color: #DFAF8F;">SRCARCH</span>)/include/generated \
-                $(<span style="color: #DFAF8F;">if</span> $(<span style="color: #DFAF8F;">building_out_of_srctree</span>),-I$(<span style="color: #DFAF8F;">srctree</span>)/include) \
-                -I$(<span style="color: #DFAF8F;">objtree</span>)/include \
-                $(<span style="color: #DFAF8F;">USERINCLUDE</span>)
+<pre class="example" id="orgd964095">
+LINUXINCLUDE    := \
+		-I$(srctree)/arch/$(SRCARCH)/include \
+		-I$(objtree)/arch/$(SRCARCH)/include/generated \
+		$(if $(building_out_of_srctree),-I$(srctree)/include) \
+		-I$(objtree)/include \
+		$(USERINCLUDE)
 export KBUILD_CPPFLAGS NOSTDINC_FLAGS LINUXINCLUDE OBJCOPYFLAGS KBUILD_LDFLAGS
 </pre>
-</div>
 
 <p>
 X86架构下，preempt_count被如下定义：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">__always_inline</span> <span style="color: #7CB8BB;">int</span> preempt_count(<span style="color: #7CB8BB;">void</span>)
+<pre class="example" id="org1c22827">
+static __always_inline int preempt_count(void)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> raw_cpu_read_4(pcpu_hot.preempt_count) &amp; ~PREEMPT_NEED_RESCHED;
+	return raw_cpu_read_4(pcpu_hot.preempt_count) &amp; ~PREEMPT_NEED_RESCHED;
 }
 </pre>
-</div>
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="orga24bbb3">
+<pre class="example" id="orgae8e99a">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -182,30 +175,29 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 也就是说最低8个bit（最低1个字节）用来计数抢占，低第二个字节用来表示软中断的计数，依次类推，那么NMI_MASK、HARDIRQ_MASK以及SOFTIRQ_MASK等各种MASK宏用来取出对应字段计数的，就可以按如下代码定出：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">PREEMPT_BITS</span>    8
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SOFTIRQ_BITS</span>    8
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">HARDIRQ_BITS</span>    4
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NMI_BITS</span>        4
+<pre class="example" id="orgea0c22d">
+#define PREEMPT_BITS	8
+#define SOFTIRQ_BITS	8
+#define HARDIRQ_BITS	4
+#define NMI_BITS	4
 
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">PREEMPT_SHIFT</span>   0
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SOFTIRQ_SHIFT</span>   (PREEMPT_SHIFT + PREEMPT_BITS)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">HARDIRQ_SHIFT</span>   (SOFTIRQ_SHIFT + SOFTIRQ_BITS)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NMI_SHIFT</span>       (HARDIRQ_SHIFT + HARDIRQ_BITS)
+#define PREEMPT_SHIFT	0
+#define SOFTIRQ_SHIFT	(PREEMPT_SHIFT + PREEMPT_BITS)
+#define HARDIRQ_SHIFT	(SOFTIRQ_SHIFT + SOFTIRQ_BITS)
+#define NMI_SHIFT	(HARDIRQ_SHIFT + HARDIRQ_BITS)
 
-<span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">__IRQ_MASK</span>(<span style="color: #DFAF8F;">x</span>)   ((1UL &lt;&lt; (x))-1)
+#define __IRQ_MASK(x)	((1UL &lt;&lt; (x))-1)
 
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">PREEMPT_MASK</span>    (__IRQ_MASK(PREEMPT_BITS) &lt;&lt; PREEMPT_SHIFT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SOFTIRQ_MASK</span>    (__IRQ_MASK(SOFTIRQ_BITS) &lt;&lt; SOFTIRQ_SHIFT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">HARDIRQ_MASK</span>    (__IRQ_MASK(HARDIRQ_BITS) &lt;&lt; HARDIRQ_SHIFT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NMI_MASK</span>        (__IRQ_MASK(NMI_BITS)     &lt;&lt; NMI_SHIFT)
+#define PREEMPT_MASK	(__IRQ_MASK(PREEMPT_BITS) &lt;&lt; PREEMPT_SHIFT)
+#define SOFTIRQ_MASK	(__IRQ_MASK(SOFTIRQ_BITS) &lt;&lt; SOFTIRQ_SHIFT)
+#define HARDIRQ_MASK	(__IRQ_MASK(HARDIRQ_BITS) &lt;&lt; HARDIRQ_SHIFT)
+#define NMI_MASK	(__IRQ_MASK(NMI_BITS)     &lt;&lt; NMI_SHIFT)
 </pre>
-</div>
 
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="orgfdfe48b">
+<pre class="example" id="orgccdd67b">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -233,37 +225,35 @@ __GFP_THISNODE标志主要作用是表明从指定的节点上分配内存，禁
 <p>
 当既不在中断上下文gfp参数也没有设置__GFP_THISNODE时，就会调用get_task_policy函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #93E0E3;">get_task_policy</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">task_struct</span> *<span style="color: #DFAF8F;">p</span>)
+<pre class="example" id="org3be317b">
+struct mempolicy *get_task_policy(struct task_struct *p)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span> = p-&gt;mempolicy;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>;
+	struct mempolicy *pol = p-&gt;mempolicy;
+	int node;
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol)
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> pol;
+	if (pol)
+		return pol;
 
-        node = numa_node_id();
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (node != NUMA_NO_NODE) {
-                pol = &amp;preferred_node_policy[node];
-                <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">preferred_node_policy is not initialised early in boot</span><span style="color: #5F7F5F;"> */</span>
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;mode)
-                        <span style="color: #F0DFAF; font-weight: bold;">return</span> pol;
-        }
+	node = numa_node_id();
+	if (node != NUMA_NO_NODE) {
+		pol = &amp;preferred_node_policy[node];
+		/* preferred_node_policy is not initialised early in boot */
+		if (pol-&gt;mode)
+			return pol;
+	}
 
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> &amp;default_policy;
+	return &amp;default_policy;
 }
 </pre>
-</div>
 <p>
 该函数首先获取当前进程的内存分配策略mempolicy，mempolicy可以被关联到一个进程，也可以关联到一个VMA。对于VMA关联的，优先考虑，然后才是进程关联。根据上面get_task_policy函数的定义，内核有一个默认的mempolicy叫default_policy，其定义如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> <span style="color: #DFAF8F;">default_policy</span> = {
-        .refcnt = ATOMIC_INIT(1), <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">never free it</span><span style="color: #5F7F5F;"> */</span>
-        .mode = MPOL_LOCAL,
+<pre class="example" id="org1397242">
+static struct mempolicy default_policy = {
+	.refcnt = ATOMIC_INIT(1), /* never free it */
+	.mode = MPOL_LOCAL,
 };
 </pre>
-</div>
 <p>
 MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允许用户指定在特定节点上进行内存分配的优先级和方式，适用于不同的进程或VMA（虚拟内存区域）。这些策略可以用于优化多节点系统上的内存访问效率。具体有以下方式：
 </p>
@@ -312,41 +302,38 @@ MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允�
 回到get_task_policy函数，如果进程有内存分配策略mempolicy，则返回这个策略。如果进程没有内存策略，那么就会从系统的全局节点策略数组preferrred_node_policy中去获取内存策略，当然在系统启动早期preferred_node_policy里可能是没有数据的，所以需要判断pol-&gt;mode非零，因为preferred_node_policy的定义是static的（被初始化为0）：
 </p>
 
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> <span style="color: #DFAF8F;">preferred_node_policy</span>[MAX_NUMNODES];
+<pre class="example" id="orgabb6e26">
+static struct mempolicy preferred_node_policy[MAX_NUMNODES];
 </pre>
-</div>
 
 <p>
 MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> CONFIG_NODES_SHIFT
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_SHIFT</span>     CONFIG_NODES_SHIFT
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_SHIFT</span>     0
-<span style="color: #94BFF3;">#endif</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">MAX_NUMNODES</span>    (1 &lt;&lt; NODES_SHIFT)
+<pre class="example" id="org7c330f1">
+#ifdef CONFIG_NODES_SHIFT
+#define NODES_SHIFT     CONFIG_NODES_SHIFT
+#else
+#define NODES_SHIFT     0
+#endif
+#define MAX_NUMNODES    (1 &lt;&lt; NODES_SHIFT)
 </pre>
-</div>
 
 <p>
-<a id="org31679cc"></a>
+<a id="orgfcfb1bd"></a>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
+#+begin_exampleonf
+config NODES_SHIFT
+	int "Maximum NUMA Nodes (as a power of 2)" if !MAXSMP
+	range 1 10
+	default "10" if MAXSMP
+	default "6" if X86_64
+	default "3"
+	depends on NUMA
+	help
+	  Specify the maximum number of NUMA Nodes available on the target
+	  system.  Increases memory reserved to accommodate various tables.
+#+end_example
 </p>
-<div class="org-src-container">
-<pre class="src src-conf">config NODES_SHIFT
-        int <span style="color: #CC9393;">"Maximum NUMA Nodes (as a power of 2)"</span> if !MAXSMP
-        range 1 10
-        default <span style="color: #CC9393;">"10"</span> if MAXSMP
-        default <span style="color: #CC9393;">"6"</span> if X86_64
-        default <span style="color: #CC9393;">"3"</span>
-        depends on NUMA
-        help
-          Specify the maximum number of NUMA Nodes available on the target
-          system.  Increases memory reserved to accommodate various tables.
-</pre>
-</div>
 
 <p>
 这样在编译构建时会自动生成，比如CONFIG_NODES_SHIFT在自动生成的头文件include/generated/autoconf.h中被定义为10，那么MAX_NUMNODES = 1 &lt;&lt; 10 = 1024。
@@ -355,50 +342,47 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 <p>
 get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU_NUMA_NODE_ID时该函数定义如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> CONFIG_USE_PERCPU_NUMA_NODE_ID
-<span style="color: #93E0E3;">DECLARE_PER_CPU</span>(<span style="color: #7CB8BB;">int</span>, numa_node);
+<pre class="example" id="orgace8c72">
+#ifdef CONFIG_USE_PERCPU_NUMA_NODE_ID
+DECLARE_PER_CPU(int, numa_node);
 
-<span style="color: #94BFF3;">#if</span><span style="color: #94BFF3; font-weight: bold;">n</span><span style="color: #94BFF3;">def</span> numa_node_id
-<span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Returns the number of the current Node.</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">numa_node_id</span>(<span style="color: #7CB8BB;">void</span>)
+#ifndef numa_node_id
+/* Returns the number of the current Node. */
+static inline int numa_node_id(void)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> raw_cpu_read(numa_node);
+	return raw_cpu_read(numa_node);
 }
-<span style="color: #94BFF3;">#endif</span>
+#endif
 </pre>
-</div>
 <p>
 该值在cpu启动初始化的流程被初始化：
 </p>
-<div class="org-src-container">
-<pre class="src src-c">start_secondary-&gt;cpu_init-&gt;set_numa_node
-<span style="color: #94BFF3;">#if</span><span style="color: #94BFF3; font-weight: bold;">n</span><span style="color: #94BFF3;">def</span> set_numa_node
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">void</span> set_numa_node(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>)
+<pre class="example" id="orga1e5ae6">
+start_secondary-&gt;cpu_init-&gt;set_numa_node
+#ifndef set_numa_node
+static inline void set_numa_node(int node)
 {
-        this_cpu_write(numa_node, node);
+	this_cpu_write(numa_node, node);
 }
-<span style="color: #94BFF3;">#endif</span>
+#endif
 </pre>
 </div>
 </div>
-</div>
 
-<div id="outline-container-org2979eed" class="outline-2">
-<h2 id="org2979eed"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-org3fce3df" class="outline-2">
+<h2 id="org3fce3df"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">alloc_pages_mpol_noprof</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
-                <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span>, <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">ilx</span>, <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>)
+<pre class="example" id="org7184038">
+struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
+		struct mempolicy *pol, pgoff_t ilx, int nid)
 </pre>
-</div>
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org7a2acb9">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#orgba5162f">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -418,17 +402,16 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </p>
 </div>
 
-<div id="outline-container-org0a01645" class="outline-3">
-<h3 id="org0a01645"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-orgca66613" class="outline-3">
+<h3 id="orgca66613"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>;
+<pre class="example" id="org5101d20">
+nodemask_t *nodemask;
 nodemask = policy_nodemask(gfp, pol, ilx, &amp;nid);
 </pre>
-</div>
 <p>
 可以看到主要就是调用了policy_nodemask来确定nodemask以及nid，注意这里的nid是alloc_pages_mpol_noprof的最后一个参数nid的地址，nid的值通过numa_node_id获得代表当前运行CPU所在的节点，这里传入nid的地址，意味着policy_nodemask函数可能会修改nid的值。返回的nodemask表示可以在哪些节点上分配内存，而返回的nid是首选的节点。
 </p>
@@ -436,25 +419,23 @@ nodemask = policy_nodemask(gfp, pol, ilx, &amp;nid);
 <p>
 policy_nodemask根据前面介绍的NUMA内存策略分几种case来给nodemask和nid赋予不同的值，其原型如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #93E0E3;">policy_nodemask</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span>,
-                                   <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">ilx</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">nid</span>)
+<pre class="example" id="org54ab53d">
+static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
+				   pgoff_t ilx, int *nid)
 </pre>
-</div>
 
 <p>
 <b>第一种case MPOL_PREFERRED：</b>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span> = <span style="color: #BFEBBF;">NULL</span>;
+<pre class="example" id="org40db1d6">
+nodemask_t *nodemask = NULL;
 
-<span style="color: #F0DFAF; font-weight: bold;">switch</span> (pol-&gt;mode) {
-<span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_PREFERRED:
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Override input node id</span><span style="color: #5F7F5F;"> */</span>
-        *nid = first_node(pol-&gt;nodes);
-        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+switch (pol-&gt;mode) {
+case MPOL_PREFERRED:
+	/* Override input node id */
+	*nid = first_node(pol-&gt;nodes);
+	break;
 </pre>
-</div>
 <p>
 这种情况只设置了优先使用分配内存的节点号，使用first_node去找到pol-&gt;nodes里第一个置位的bit的序号，从这里也可以看出pol-&gt;nodes这个成员表征了候选的可以用于分配的一些节点，只是说这些节点要按各种不同的策略去选择。
 </p>
@@ -462,14 +443,13 @@ policy_nodemask根据前面介绍的NUMA内存策略分几种case来给nodemask�
 <p>
 <b>第二种case MPOL_PREFERRED_MANY：</b>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_PREFERRED_MANY:
-        nodemask = &amp;pol-&gt;nodes;
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;home_node != NUMA_NO_NODE)
-                *nid = pol-&gt;home_node;
-        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+<pre class="example" id="orgefe52b5">
+case MPOL_PREFERRED_MANY:
+	nodemask = &amp;pol-&gt;nodes;
+	if (pol-&gt;home_node != NUMA_NO_NODE)
+		*nid = pol-&gt;home_node;
+	break;
 </pre>
-</div>
 <p>
 这种情况是有nodemask的，因为perferred many就是在一组优先的节点里分配，并且pol-&gt;home_node是有效值时，返回pol里的home_node号作为优先分配的节点。
 </p>
@@ -477,23 +457,22 @@ policy_nodemask根据前面介绍的NUMA内存策略分几种case来给nodemask�
 <p>
 <b>第三种case MPOL_BIND：</b>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_BIND:
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Restrict to nodemask (but not on lower zones)</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (apply_policy_zone(pol, gfp_zone(gfp)) &amp;&amp;
-            cpuset_nodemask_valid_mems_allowed(&amp;pol-&gt;nodes))
-                nodemask = &amp;pol-&gt;nodes;
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;home_node != NUMA_NO_NODE)
-                *nid = pol-&gt;home_node;
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * __GFP_THISNODE shouldn't even be used with the bind policy</span>
-<span style="color: #7F9F7F;">         * because we might easily break the expectation to stay on the</span>
-<span style="color: #7F9F7F;">         * requested node and not break the policy.</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #93E0E3;">WARN_ON_ONCE</span>(gfp &amp; __GFP_THISNODE);
-        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+<pre class="example" id="org75d9d90">
+case MPOL_BIND:
+	/* Restrict to nodemask (but not on lower zones) */
+	if (apply_policy_zone(pol, gfp_zone(gfp)) &amp;&amp;
+	    cpuset_nodemask_valid_mems_allowed(&amp;pol-&gt;nodes))
+		nodemask = &amp;pol-&gt;nodes;
+	if (pol-&gt;home_node != NUMA_NO_NODE)
+		*nid = pol-&gt;home_node;
+	/*
+	 * __GFP_THISNODE shouldn't even be used with the bind policy
+	 * because we might easily break the expectation to stay on the
+	 * requested node and not break the policy.
+	 */
+	WARN_ON_ONCE(gfp &amp; __GFP_THISNODE);
+	break;
 </pre>
-</div>
 <p>
 对于使用MPOL_BIND的内存策略，要限制内存策略不能应用到较低序号的zone，这个判断逻辑由apply_policy_zone函数实现，它的第二个参数，调用gfp_zone由gfp标志里去获得分配内存的目标zone号，也就是获得的目标zone号要大于apply_policy_zone里的一个特别的zone号，这时内存策略才生效。这里主要详细分析下gfp_zone的实现，它决定了内存从哪个zone去分配，较为关键。至于本case的代码较为简单。
 </p>
@@ -533,54 +512,51 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 
 <p>
 针对笔者目前环境的配置，zone_type的定义如下：
-<a id="orgc8c7a89"></a>
-<a id="orgcd1a045"></a>
+<a id="org214b35b"></a>
+<a id="orgba58bb6"></a>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> {
-        <span style="color: #DFAF8F;">ZONE_DMA</span>,
-        <span style="color: #DFAF8F;">ZONE_DMA32</span>,
-        <span style="color: #DFAF8F;">ZONE_NORMAL</span>,
-        <span style="color: #DFAF8F;">ZONE_MOVABLE</span>,
-        <span style="color: #DFAF8F;">ZONE_DEVICE</span>,
-        <span style="color: #DFAF8F;">__MAX_NR_ZONES</span>
+<pre class="example" id="org83ac6f1">
+enum zone_type {
+        ZONE_DMA,
+        ZONE_DMA32,
+        ZONE_NORMAL,
+        ZONE_MOVABLE,
+        ZONE_DEVICE,
+        __MAX_NR_ZONES
 };
 </pre>
-</div>
 
 <p>
-<a id="org75ee8c3"></a>
+<a id="orgd431c76"></a>
 现在可以介绍gfp_zone函数了，gfp_zone函数的主要作用就是根据传入的gfp标志映射到不同类型的zone，也就是返回zone_type类型的枚举，这些类型前面刚介绍过了。现在看gfp_zone的实现：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #93E0E3;">gfp_zone</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">flags</span>)
+<pre class="example" id="org79a9ce6">
+static inline enum zone_type gfp_zone(gfp_t flags)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">z</span>;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">bit</span> = (__force <span style="color: #7CB8BB;">int</span>) (flags &amp; GFP_ZONEMASK);
+	enum zone_type z;
+	int bit = (__force int) (flags &amp; GFP_ZONEMASK);
 
-        z = (GFP_ZONE_TABLE &gt;&gt; (bit * GFP_ZONES_SHIFT)) &amp;
-                                         ((1 &lt;&lt; GFP_ZONES_SHIFT) - 1);
-        VM_BUG_ON((GFP_ZONE_BAD &gt;&gt; bit) &amp; 1);
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> z;
+	z = (GFP_ZONE_TABLE &gt;&gt; (bit * GFP_ZONES_SHIFT)) &amp;
+					 ((1 &lt;&lt; GFP_ZONES_SHIFT) - 1);
+	VM_BUG_ON((GFP_ZONE_BAD &gt;&gt; bit) &amp; 1);
+	return z;
 }
 </pre>
-</div>
 <p>
 GFP_ZONE_TABLE这个宏类似于一个表（数组），它将不同的GFP标志组合映射到不同的zone_type：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_ZONE_TABLE</span> ( \
-        (ZONE_NORMAL &lt;&lt; 0 * GFP_ZONES_SHIFT)                                   \
-        | (OPT_ZONE_DMA &lt;&lt; ___GFP_DMA * GFP_ZONES_SHIFT)                       \
-        | (OPT_ZONE_HIGHMEM &lt;&lt; ___GFP_HIGHMEM * GFP_ZONES_SHIFT)               \
-        | (OPT_ZONE_DMA32 &lt;&lt; ___GFP_DMA32 * GFP_ZONES_SHIFT)                   \
-        | (ZONE_NORMAL &lt;&lt; ___GFP_MOVABLE * GFP_ZONES_SHIFT)                    \
-        | (OPT_ZONE_DMA &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)    \
-        | (ZONE_MOVABLE &lt;&lt; (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT)\
-        | (OPT_ZONE_DMA32 &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA32) * GFP_ZONES_SHIFT)\
+<pre class="example" id="orgee43ef1">
+#define GFP_ZONE_TABLE ( \
+	(ZONE_NORMAL &lt;&lt; 0 * GFP_ZONES_SHIFT)				       \
+	| (OPT_ZONE_DMA &lt;&lt; ___GFP_DMA * GFP_ZONES_SHIFT)		       \
+	| (OPT_ZONE_HIGHMEM &lt;&lt; ___GFP_HIGHMEM * GFP_ZONES_SHIFT)	       \
+	| (OPT_ZONE_DMA32 &lt;&lt; ___GFP_DMA32 * GFP_ZONES_SHIFT)		       \
+	| (ZONE_NORMAL &lt;&lt; ___GFP_MOVABLE * GFP_ZONES_SHIFT)		       \
+	| (OPT_ZONE_DMA &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)    \
+	| (ZONE_MOVABLE &lt;&lt; (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT)\
+	| (OPT_ZONE_DMA32 &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA32) * GFP_ZONES_SHIFT)\
 )
 </pre>
-</div>
 <p>
 这样定义出来这个GFP_ZONE_TABLE其实就是一个数字，只是这个数字按每GFP_ZONES_SHIFT个数目的bit
 存储一个条目，这个条目通过传入的gfp标志索引，索引出来的是一个zone_type枚举类型的值。
@@ -589,17 +565,15 @@ GFP_ZONE_TABLE这个宏类似于一个表（数组），它将不同的GFP标志
 <p>
 这个宏其实定义了一种zone分配的回退机制，举个例子对于条目：
 </p>
-<div class="org-src-container">
-<pre class="src src-c">ZONE_MOVABLE &lt;&lt; (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT
+<pre class="example" id="org2d43f04">
+ZONE_MOVABLE &lt;&lt; (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT
 </pre>
-</div>
 <p>
 就是说当传入的GFP标志既设置了__GFP_MOVABLE又设置了__GFP_HIGHMEM，那么最多可以回退到ZONE_MOVABLE这种zone_type，又比如：
 </p>
-<div class="org-src-container">
-<pre class="src src-c">(OPT_ZONE_DMA &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)
+<pre class="example" id="org30050a4">
+(OPT_ZONE_DMA &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)
 </pre>
-</div>
 <p>
 同时gfp标志同时设置了___GFP_MOVABLE和___GFP_DMA，那么最多可以回退到ZONE_DMA这种zone_type（假如配置了CONFIG_ZONE_DMA）。
 </p>
@@ -623,101 +597,97 @@ GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个�
 <p>
 在没有定义特殊的内存zone（比如DMA，HIGHMEM等）时，都会退化为ZONE_NORMAL：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> CONFIG_HIGHMEM
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">OPT_ZONE_HIGHMEM</span> ZONE_HIGHMEM
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">OPT_ZONE_HIGHMEM</span> ZONE_NORMAL
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="org3ddaa80">
+#ifdef CONFIG_HIGHMEM
+#define OPT_ZONE_HIGHMEM ZONE_HIGHMEM
+#else
+#define OPT_ZONE_HIGHMEM ZONE_NORMAL
+#endif
 
-<span style="color: #94BFF3;">#ifdef</span> CONFIG_ZONE_DMA
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">OPT_ZONE_DMA</span> ZONE_DMA
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">OPT_ZONE_DMA</span> ZONE_NORMAL
-<span style="color: #94BFF3;">#endif</span>
+#ifdef CONFIG_ZONE_DMA
+#define OPT_ZONE_DMA ZONE_DMA
+#else
+#define OPT_ZONE_DMA ZONE_NORMAL
+#endif
 
-<span style="color: #94BFF3;">#ifdef</span> CONFIG_ZONE_DMA32
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">OPT_ZONE_DMA32</span> ZONE_DMA32
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">OPT_ZONE_DMA32</span> ZONE_NORMAL
-<span style="color: #94BFF3;">#endif</span>
+#ifdef CONFIG_ZONE_DMA32
+#define OPT_ZONE_DMA32 ZONE_DMA32
+#else
+#define OPT_ZONE_DMA32 ZONE_NORMAL
+#endif
 </pre>
-</div>
 <p>
 再来看gpf_zone函数就简单了首先从flags中拿到低4bit的值：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">z</span>;
-<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">bit</span> = (__force <span style="color: #7CB8BB;">int</span>) (flags &amp; GFP_ZONEMASK);
+<pre class="example" id="org5d4ae30">
+enum zone_type z;
+int bit = (__force int) (flags &amp; GFP_ZONEMASK);
 </pre>
-</div>
 <p>
 为什么是低4bit呢，通过GFP_ZONEMASK的定义就知道了：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> {
-        <span style="color: #DFAF8F;">___GFP_DMA_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_HIGHMEM_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_DMA32_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_MOVABLE_BIT</span>,
+<pre class="example" id="org61761c7">
+enum {
+        ___GFP_DMA_BIT,
+        ___GFP_HIGHMEM_BIT,
+        ___GFP_DMA32_BIT,
+        ___GFP_MOVABLE_BIT,
         ...
 };
-<span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">BIT</span>(<span style="color: #DFAF8F;">nr</span>)                 (UL(1) &lt;&lt; (nr))
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">___GFP_DMA</span>              BIT(___GFP_DMA_BIT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">___GFP_HIGHMEM</span>          BIT(___GFP_HIGHMEM_BIT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">___GFP_DMA32</span>            BIT(___GFP_DMA32_BIT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">___GFP_MOVABLE</span>          BIT(___GFP_MOVABLE_BIT)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">__GFP_DMA</span>       ((__force <span style="color: #7CB8BB;">gfp_t</span>)___GFP_DMA)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">__GFP_HIGHMEM</span>   ((__force <span style="color: #7CB8BB;">gfp_t</span>)___GFP_HIGHMEM)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">__GFP_DMA32</span>     ((__force <span style="color: #7CB8BB;">gfp_t</span>)___GFP_DMA32)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">__GFP_MOVABLE</span>   ((__force <span style="color: #7CB8BB;">gfp_t</span>)___GFP_MOVABLE)  <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">ZONE_MOVABLE allowed</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_ZONEMASK</span>    (__GFP_DMA|__GFP_HIGHMEM|__GFP_DMA32|__GFP_MOVABLE)
+#define BIT(nr)			(UL(1) &lt;&lt; (nr))
+#define ___GFP_DMA		BIT(___GFP_DMA_BIT)
+#define ___GFP_HIGHMEM		BIT(___GFP_HIGHMEM_BIT)
+#define ___GFP_DMA32		BIT(___GFP_DMA32_BIT)
+#define ___GFP_MOVABLE		BIT(___GFP_MOVABLE_BIT)
+#define __GFP_DMA	((__force gfp_t)___GFP_DMA)
+#define __GFP_HIGHMEM	((__force gfp_t)___GFP_HIGHMEM)
+#define __GFP_DMA32	((__force gfp_t)___GFP_DMA32)
+#define __GFP_MOVABLE	((__force gfp_t)___GFP_MOVABLE)  /* ZONE_MOVABLE allowed */
+#define GFP_ZONEMASK	(__GFP_DMA|__GFP_HIGHMEM|__GFP_DMA32|__GFP_MOVABLE)
 </pre>
-</div>
 <p>
 这里可以看到低4个bit其实就是zone修饰符，指明了哪些zone用于分配内存。之前介绍过gfp_t本质是个int，但它具有受限的取值，以限制某些int能进行的运算（范围），但是gfp_t不行。比如上面提到了gfp_t可能的四种值，一个完整的gfp_t值列表如下：
-<a id="orgbc442ce"></a>
+<a id="org13d72f5"></a>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">enum</span> {
-        <span style="color: #DFAF8F;">___GFP_DMA_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_HIGHMEM_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_DMA32_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_MOVABLE_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_RECLAIMABLE_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_HIGH_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_IO_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_FS_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_ZERO_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_UNUSED_BIT</span>,      <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">0x200u unused</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #DFAF8F;">___GFP_DIRECT_RECLAIM_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_KSWAPD_RECLAIM_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_WRITE_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_NOWARN_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_RETRY_MAYFAIL_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_NOFAIL_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_NORETRY_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_MEMALLOC_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_COMP_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_NOMEMALLOC_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_HARDWALL_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_THISNODE_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_ACCOUNT_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_ZEROTAGS_BIT</span>,
-<span style="color: #94BFF3;">#ifdef</span> CONFIG_KASAN_HW_TAGS
-        <span style="color: #DFAF8F;">___GFP_SKIP_ZERO_BIT</span>,
-        <span style="color: #DFAF8F;">___GFP_SKIP_KASAN_BIT</span>,
-<span style="color: #94BFF3;">#endif</span>
-<span style="color: #94BFF3;">#ifdef</span> CONFIG_LOCKDEP
-        <span style="color: #DFAF8F;">___GFP_NOLOCKDEP_BIT</span>,
-<span style="color: #94BFF3;">#endif</span>
-<span style="color: #94BFF3;">#ifdef</span> CONFIG_SLAB_OBJ_EXT
-        <span style="color: #DFAF8F;">___GFP_NO_OBJ_EXT_BIT</span>,
-<span style="color: #94BFF3;">#endif</span>
-        <span style="color: #DFAF8F;">___GFP_LAST_BIT</span>
+<pre class="example" id="orge36b0f1">
+enum {
+	___GFP_DMA_BIT,
+	___GFP_HIGHMEM_BIT,
+	___GFP_DMA32_BIT,
+	___GFP_MOVABLE_BIT,
+	___GFP_RECLAIMABLE_BIT,
+	___GFP_HIGH_BIT,
+	___GFP_IO_BIT,
+	___GFP_FS_BIT,
+	___GFP_ZERO_BIT,
+	___GFP_UNUSED_BIT,	/* 0x200u unused */
+	___GFP_DIRECT_RECLAIM_BIT,
+	___GFP_KSWAPD_RECLAIM_BIT,
+	___GFP_WRITE_BIT,
+	___GFP_NOWARN_BIT,
+	___GFP_RETRY_MAYFAIL_BIT,
+	___GFP_NOFAIL_BIT,
+	___GFP_NORETRY_BIT,
+	___GFP_MEMALLOC_BIT,
+	___GFP_COMP_BIT,
+	___GFP_NOMEMALLOC_BIT,
+	___GFP_HARDWALL_BIT,
+	___GFP_THISNODE_BIT,
+	___GFP_ACCOUNT_BIT,
+	___GFP_ZEROTAGS_BIT,
+#ifdef CONFIG_KASAN_HW_TAGS
+	___GFP_SKIP_ZERO_BIT,
+	___GFP_SKIP_KASAN_BIT,
+#endif
+#ifdef CONFIG_LOCKDEP
+	___GFP_NOLOCKDEP_BIT,
+#endif
+#ifdef CONFIG_SLAB_OBJ_EXT
+	___GFP_NO_OBJ_EXT_BIT,
+#endif
+	___GFP_LAST_BIT
 };
 </pre>
-</div>
 <p>
 所有这些gfp_t类型的值，有些是zone修饰符，有些是内存分配行为，比如___GFP_DIRECT_RECLAIM_BIT允许触发直接内存回收，后面的内存管理分析的系列文章还会遇到这些标志，再在具体的代码上下文分析更为形象。
 </p>
@@ -725,11 +695,10 @@ GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个�
 <p>
 继续分析gfp_zone函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c">z = (GFP_ZONE_TABLE &gt;&gt; (bit * GFP_ZONES_SHIFT)) &amp;
-                                 ((1 &lt;&lt; GFP_ZONES_SHIFT) - 1);
+<pre class="example" id="org2f02f5e">
+z = (GFP_ZONE_TABLE &gt;&gt; (bit * GFP_ZONES_SHIFT)) &amp;
+				 ((1 &lt;&lt; GFP_ZONES_SHIFT) - 1);
 </pre>
-</div>
 <p>
 将GFP_ZONE_TABLE右移bit * GFP_ZONES_SHIFT，这正是前面定义GFP_ZONE_TABLE时，存放在bit这种标志组合索引处的zone序号，它用来优先为bit这种gfp标志组合分配内存，注意是以2个比特为一个条目，所以最后做与运算，相当于只取最后两位。
 </p>
@@ -742,35 +711,33 @@ GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个�
 <b>第四种case MPOL_INTERLEAVE：</b><br>
 根据前面的分析，这种情况就是内存分配在一组节点内交错循环分配：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_INTERLEAVE:
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Override input node id</span><span style="color: #5F7F5F;"> */</span>
-        *nid = (ilx == NO_INTERLEAVE_INDEX) ?
-                interleave_nodes(pol) : interleave_nid(pol, ilx);
-        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+<pre class="example" id="org985bde9">
+case MPOL_INTERLEAVE:
+	/* Override input node id */
+	*nid = (ilx == NO_INTERLEAVE_INDEX) ?
+		interleave_nodes(pol) : interleave_nid(pol, ilx);
+	break;
 </pre>
-</div>
 <p>
 可以看到，分两种情况选择使用不同的函数来获得内存分配的优先节点，NO_INTERLEAVE_INDEX主要指示了要不要使用task_struct:il_prev来作为索引选择内存分配的节点，如果使用task_struct:il_prev（也就是ilx参数为-1）则通过interleave_nodes函数来获得内存分配的节点：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">interleave_nodes</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">policy</span>)
+<pre class="example" id="org2470e01">
+static unsigned int interleave_nodes(struct mempolicy *policy)
 {
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>;
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">cpuset_mems_cookie</span>;
+	unsigned int nid;
+	unsigned int cpuset_mems_cookie;
 
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">to prevent miscount, use tsk-&gt;mems_allowed_seq to detect rebind</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">do</span> {
-                cpuset_mems_cookie = read_mems_allowed_begin();
-                nid = next_node_in(current-&gt;il_prev, policy-&gt;nodes);
-        } <span style="color: #F0DFAF; font-weight: bold;">while</span> (read_mems_allowed_retry(cpuset_mems_cookie));
+	/* to prevent miscount, use tsk-&gt;mems_allowed_seq to detect rebind */
+	do {
+		cpuset_mems_cookie = read_mems_allowed_begin();
+		nid = next_node_in(current-&gt;il_prev, policy-&gt;nodes);
+	} while (read_mems_allowed_retry(cpuset_mems_cookie));
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (nid &lt; MAX_NUMNODES)
-                current-&gt;il_prev = nid;
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> nid;
+	if (nid &lt; MAX_NUMNODES)
+		current-&gt;il_prev = nid;
+	return nid;
 }
 </pre>
-</div>
 <p>
 do-while循环主要是处理并发情况，此处不讨论了。该函数主要使用next_node_in来获得合适的节点号，也就是在pol-&gt;nodes中找到第一个置位的bit的序号，并且是在current-&gt;il_prev之后，返回的nid小于MAX_NUMNODES时才会给出nid给调用者。
 </p>
@@ -778,40 +745,38 @@ do-while循环主要是处理并发情况，此处不讨论了。该函数主要
 <p>
 这里需要简单看下next_node_in的实现，该函数主要是要处理一种临界情况，那就是返回的node id的序号等于MAX_NUMNODES，就又要回到参数srcp的第一个置位的bit的序号：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">next_node_in</span>(<span style="color: #DFAF8F;">n</span>, <span style="color: #DFAF8F;">src</span>) __next_node_in((n), &amp;(src))
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">__always_inline</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> __next_node_in(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>, <span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">srcp</span>)
+<pre class="example" id="org9c92558">
+#define next_node_in(n, src) __next_node_in((n), &amp;(src))
+static __always_inline unsigned int __next_node_in(int node, const nodemask_t *srcp)
 {
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">ret</span> = __next_node(node, srcp);
+	unsigned int ret = __next_node(node, srcp);
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (ret == MAX_NUMNODES)
-                ret = __first_node(srcp);
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> ret;
+	if (ret == MAX_NUMNODES)
+		ret = __first_node(srcp);
+	return ret;
 }
 </pre>
-</div>
 <p>
 如果不使用task_struct:il_prev，就会调用interleave_nid来获得内存分配的节点号：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">interleave_nid</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span>, <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">ilx</span>)
+<pre class="example" id="org7c4c441">
+static unsigned int interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
-        <span style="color: #7CB8BB;">nodemask_t</span> <span style="color: #DFAF8F;">nodemask</span>;
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">target</span>, <span style="color: #DFAF8F;">nnodes</span>;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>;
+	nodemask_t nodemask;
+	unsigned int target, nnodes;
+	int i;
+	int nid;
 
-        nnodes = read_once_policy_nodemask(pol, &amp;nodemask);
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>nnodes)
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> numa_node_id();
-        target = ilx % nnodes;
-        nid = first_node(nodemask);
-        <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; target; i++)
-                nid = next_node(nid, nodemask);
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> nid;
+	nnodes = read_once_policy_nodemask(pol, &amp;nodemask);
+	if (!nnodes)
+		return numa_node_id();
+	target = ilx % nnodes;
+	nid = first_node(nodemask);
+	for (i = 0; i &lt; target; i++)
+		nid = next_node(nid, nodemask);
+	return nid;
 }
 </pre>
-</div>
 <p>
 该函数以传入的ilx作为索引来选择内存分配的节点，首先ilx需要对pol-&gt;nodes里置位的节点数目进行取模得到target，然后通过first_node获得nodemask里第一个置位的节点号nid，最后从nid开始循环target次，找到低target个置位的比特的序号，返回。
 </p>
@@ -821,14 +786,13 @@ do-while循环主要是处理并发情况，此处不讨论了。该函数主要
 <b>第五种case MPOL_WEIGHTED_INTERLEAVE：</b> <br>
 该种情况与case 4类似：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">case</span> MPOL_WEIGHTED_INTERLEAVE:
-        *nid = (ilx == NO_INTERLEAVE_INDEX) ?
-                weighted_interleave_nodes(pol) :
-                weighted_interleave_nid(pol, ilx);
-        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
+<pre class="example" id="org9b72ac8">
+case MPOL_WEIGHTED_INTERLEAVE:
+	*nid = (ilx == NO_INTERLEAVE_INDEX) ?
+		weighted_interleave_nodes(pol) :
+		weighted_interleave_nid(pol, ilx);
+	break;
 </pre>
-</div>
 <p>
 依据ilx参数的不同，而调用不同的函数确定nid并返回。当使用task_struct:il_prev时（也就是ilx无效为-1）调用weighted_interleave_nodes来确定分配内存的节点号，当ilx有效时，就会调用weighted_interleave_nid使用ilx来确定，下面依次分析。
 </p>
@@ -836,30 +800,29 @@ do-while循环主要是处理并发情况，此处不讨论了。该函数主要
 <p>
 首先是weighted_interleave_nodes函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">weighted_interleave_nodes</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">policy</span>)
+<pre class="example" id="orgcc93b2c">
+static unsigned int weighted_interleave_nodes(struct mempolicy *policy)
 {
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>;
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">cpuset_mems_cookie</span>;
+	unsigned int node;
+	unsigned int cpuset_mems_cookie;
 
-<span style="color: #BFEBBF;">retry</span>:
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">to prevent miscount use tsk-&gt;mems_allowed_seq to detect rebind</span><span style="color: #5F7F5F;"> */</span>
-        cpuset_mems_cookie = read_mems_allowed_begin();
-        node = current-&gt;il_prev;
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>current-&gt;il_weight || <span style="color: #F0DFAF; font-weight: bold;">!</span>node_isset(node, policy-&gt;nodes)) {
-                node = next_node_in(node, policy-&gt;nodes);
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (read_mems_allowed_retry(cpuset_mems_cookie))
-                        <span style="color: #F0DFAF; font-weight: bold;">goto</span> <span style="color: #BFEBBF;">retry</span>;
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (node == MAX_NUMNODES)
-                        <span style="color: #F0DFAF; font-weight: bold;">return</span> node;
-                current-&gt;il_prev = node;
-                current-&gt;il_weight = get_il_weight(node);
-        }
-        current-&gt;il_weight--;
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> node;
+retry:
+	/* to prevent miscount use tsk-&gt;mems_allowed_seq to detect rebind */
+	cpuset_mems_cookie = read_mems_allowed_begin();
+	node = current-&gt;il_prev;
+	if (!current-&gt;il_weight || !node_isset(node, policy-&gt;nodes)) {
+		node = next_node_in(node, policy-&gt;nodes);
+		if (read_mems_allowed_retry(cpuset_mems_cookie))
+			goto retry;
+		if (node == MAX_NUMNODES)
+			return node;
+		current-&gt;il_prev = node;
+		current-&gt;il_weight = get_il_weight(node);
+	}
+	current-&gt;il_weight--;
+	return node;
 }
 </pre>
-</div>
 
 <p>
 先抛开if条件里的逻辑不谈，每次进入weighted_interleave_nodes函数，就会返回current这个task_struct结构体里的il_prev，它就是记录了当前用于内存分配的节点号，每分配一次，current-&gt;il_weight就会递减，这相当于在il_prev这个内存节点上做了权重，分配il_weight次后就会将这个权重递减为1了。
@@ -872,23 +835,22 @@ do-while循环主要是处理并发情况，此处不讨论了。该函数主要
 <p>
 if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，同时current:il_weight也要更新为当前这个节点的权重，这可以通过get_il_weight去获得：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">u8</span> <span style="color: #93E0E3;">get_il_weight</span>(<span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">node</span>)
+<pre class="example" id="org294b510">
+static u8 get_il_weight(int node)
 {
-        <span style="color: #7CB8BB;">u8</span> *<span style="color: #DFAF8F;">table</span>;
-        <span style="color: #7CB8BB;">u8</span> <span style="color: #DFAF8F;">weight</span>;
+	u8 *table;
+	u8 weight;
 
-        rcu_read_lock();
-        table = rcu_dereference(iw_table);
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">if no iw_table, use system default</span><span style="color: #5F7F5F;"> */</span>
-        weight = table ? table[node] : 1;
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">if value in iw_table is 0, use system default</span><span style="color: #5F7F5F;"> */</span>
-        weight = weight ? weight : 1;
-        rcu_read_unlock();
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> weight;
+	rcu_read_lock();
+	table = rcu_dereference(iw_table);
+	/* if no iw_table, use system default */
+	weight = table ? table[node] : 1;
+	/* if value in iw_table is 0, use system default */
+	weight = weight ? weight : 1;
+	rcu_read_unlock();
+	return weight;
 }
 </pre>
-</div>
 <p>
 从这个函数可以知道weight其实就是来自iw_table里对应节点的权重，它事先通过node_store函数去存放。总结来说，这个函数的功能就是达到前面介绍interleave分配的效果：在一组节点中交错分配内存，并且会按照一定的权重来分配，比如这里体现这点的就是每次进这个函数都会将current-&gt;il_weight权重递减，为非零本次分配内存的节点号不会改变，而当这个值递减为0，就会改变分配内存的节点号。
 </p>
@@ -896,47 +858,46 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 <p>
 当ilx有效时，是weighted_interleave_nid函数用来确定分配内存的节点：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">weighted_interleave_nid</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">mempolicy</span> *<span style="color: #DFAF8F;">pol</span>, <span style="color: #7CB8BB;">pgoff_t</span> <span style="color: #DFAF8F;">ilx</span>)
+<pre class="example" id="org01cac2e">
+static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
-        <span style="color: #7CB8BB;">nodemask_t</span> <span style="color: #DFAF8F;">nodemask</span>;
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">target</span>, <span style="color: #DFAF8F;">nr_nodes</span>;
-        <span style="color: #7CB8BB;">u8</span> *<span style="color: #DFAF8F;">table</span>;
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">weight_total</span> = 0;
-        <span style="color: #7CB8BB;">u8</span> <span style="color: #DFAF8F;">weight</span>;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>;
+	nodemask_t nodemask;
+	unsigned int target, nr_nodes;
+	u8 *table;
+	unsigned int weight_total = 0;
+	u8 weight;
+	int nid;
 
-        nr_nodes = read_once_policy_nodemask(pol, &amp;nodemask);
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>nr_nodes)
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> numa_node_id();
+	nr_nodes = read_once_policy_nodemask(pol, &amp;nodemask);
+	if (!nr_nodes)
+		return numa_node_id();
 
-        rcu_read_lock();
-        table = rcu_dereference(iw_table);
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">calculate the total weight</span><span style="color: #5F7F5F;"> */</span>
-        for_each_node_mask(nid, nodemask) {
-                <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">detect system default usage</span><span style="color: #5F7F5F;"> */</span>
-                weight = table ? table[nid] : 1;
-                weight = weight ? weight : 1;
-                weight_total += weight;
-        }
+	rcu_read_lock();
+	table = rcu_dereference(iw_table);
+	/* calculate the total weight */
+	for_each_node_mask(nid, nodemask) {
+		/* detect system default usage */
+		weight = table ? table[nid] : 1;
+		weight = weight ? weight : 1;
+		weight_total += weight;
+	}
 
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Calculate the node offset based on totals</span><span style="color: #5F7F5F;"> */</span>
-        target = ilx % weight_total;
-        nid = first_node(nodemask);
-        <span style="color: #F0DFAF; font-weight: bold;">while</span> (target) {
-                <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">detect system default usage</span><span style="color: #5F7F5F;"> */</span>
-                weight = table ? table[nid] : 1;
-                weight = weight ? weight : 1;
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (target &lt; weight)
-                        <span style="color: #F0DFAF; font-weight: bold;">break</span>;
-                target -= weight;
-                nid = next_node_in(nid, nodemask);
-        }
-        rcu_read_unlock();
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> nid;
+	/* Calculate the node offset based on totals */
+	target = ilx % weight_total;
+	nid = first_node(nodemask);
+	while (target) {
+		/* detect system default usage */
+		weight = table ? table[nid] : 1;
+		weight = weight ? weight : 1;
+		if (target &lt; weight)
+			break;
+		target -= weight;
+		nid = next_node_in(nid, nodemask);
+	}
+	rcu_read_unlock();
+	return nid;
 }
 </pre>
-</div>
 
 <p>
 该函数首先通过一个循环for_each_node_mask将pol-&gt;nodes里置上的节点的所有权重求和，然后ilx可以作为一个虚拟地址，其要对weight_total进行取余，这样ilx就会落在权重区间[0, weight_total]。
@@ -946,10 +907,9 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 <p>
 最后这个policy_nodemask函数就是返回前面各个case算出的nodemask，注意nodemask是可以为NULL的，而nid通过最后一个参数带出：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">return</span> nodemask;
+<pre class="example" id="org6b71c28">
+return nodemask;
 </pre>
-</div>
 
 <p>
 这样alloc_pages_mpol_noprof函数的第一部分policy_nodemask函数就介绍完了。
@@ -958,8 +918,8 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 </div>
 
 
-<div id="outline-container-org366658e" class="outline-3">
-<h3 id="org366658e"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-orgf6ee536" class="outline-3">
+<h3 id="orgf6ee536"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -972,34 +932,32 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 <p>
 调用alloc_pages_preferred_many函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;mode == MPOL_PREFERRED_MANY)
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> alloc_pages_preferred_many(gfp, order, nid, nodemask);
+<pre class="example" id="orgb0cd593">
+if (pol-&gt;mode == MPOL_PREFERRED_MANY)
+	return alloc_pages_preferred_many(gfp, order, nid, nodemask);
 </pre>
-</div>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">alloc_pages_preferred_many</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
-                                                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nid</span>, <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>)
+<pre class="example" id="org325b10b">
+static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
+						int nid, nodemask_t *nodemask)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>;
-        <span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">preferred_gfp</span>;
+	struct page *page;
+	gfp_t preferred_gfp;
 
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * This is a two pass approach. The first pass will only try the</span>
-<span style="color: #7F9F7F;">         * preferred nodes but skip the direct reclaim and allow the</span>
-<span style="color: #7F9F7F;">         * allocation to fail, while the second pass will try all the</span>
-<span style="color: #7F9F7F;">         * nodes in system.</span>
-<span style="color: #5F7F5F;">         */</span>
-        preferred_gfp = gfp | __GFP_NOWARN;
-        preferred_gfp &amp;= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
-        page = __alloc_pages_noprof(preferred_gfp, order, nid, nodemask);
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>page)
-                page = __alloc_pages_noprof(gfp, order, nid, <span style="color: #BFEBBF;">NULL</span>);
+	/*
+	 * This is a two pass approach. The first pass will only try the
+	 * preferred nodes but skip the direct reclaim and allow the
+	 * allocation to fail, while the second pass will try all the
+	 * nodes in system.
+	 */
+	preferred_gfp = gfp | __GFP_NOWARN;
+	preferred_gfp &amp;= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
+	page = __alloc_pages_noprof(preferred_gfp, order, nid, nodemask);
+	if (!page)
+		page = __alloc_pages_noprof(gfp, order, nid, NULL);
 
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> page;
+	return page;
 }
 </pre>
-</div>
 <p>
 可以看到该种情形通过alloc_pages_preferred_many实现两阶段的页面分配，第一阶段先尝试在nodemask中指定的节点中分配内存，并且不打印分配失败相关的一些信息，也不允许进入直接页面回收，
 如果这种分配方式可以成功分配出页面，就返回页面了。否则就会以NULL参数作为nodemask再次调用__alloc_pages_noprof。所以这里可以看到对于指定在某些节点分配内存的方式，先是尽力在这些节点上分配，分配失败时还是会尝试整个系统的节点都可以分配，这是一种回退，尽量保证分配成功有内存可用的方式。
@@ -1012,41 +970,40 @@ if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，
 <p>
 该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定节点进行分配：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &amp;&amp;
-    <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">filter "hugepage" allocation, unless from alloc_pages()</span><span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="orgc750ff0">
+if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &amp;&amp;
+    /* filter "hugepage" allocation, unless from alloc_pages() */
     order == HPAGE_PMD_ORDER &amp;&amp; ilx != NO_INTERLEAVE_INDEX) {
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * For hugepage allocation and non-interleave policy which</span>
-<span style="color: #7F9F7F;">         * allows the current node (or other explicitly preferred</span>
-<span style="color: #7F9F7F;">         * node) we only try to allocate from the current/preferred</span>
-<span style="color: #7F9F7F;">         * node and don't fall back to other nodes, as the cost of</span>
-<span style="color: #7F9F7F;">         * remote accesses would likely offset THP benefits.</span>
-<span style="color: #7F9F7F;">         *</span>
-<span style="color: #7F9F7F;">         * If the policy is interleave or does not allow the current</span>
-<span style="color: #7F9F7F;">         * node in its nodemask, we allocate the standard way.</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (pol-&gt;mode != MPOL_INTERLEAVE &amp;&amp;
-            pol-&gt;mode != MPOL_WEIGHTED_INTERLEAVE &amp;&amp;
-            (<span style="color: #F0DFAF; font-weight: bold;">!</span>nodemask || node_isset(nid, *nodemask))) {
-                <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">                 * First, try to allocate THP only on local node, but</span>
-<span style="color: #7F9F7F;">                 * don't reclaim unnecessarily, just compact.</span>
-<span style="color: #5F7F5F;">                 */</span>
-                page = __alloc_pages_node_noprof(nid,
-                        gfp | __GFP_THISNODE | __GFP_NORETRY, order);
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (page || <span style="color: #F0DFAF; font-weight: bold;">!</span>(gfp &amp; __GFP_DIRECT_RECLAIM))
-                        <span style="color: #F0DFAF; font-weight: bold;">return</span> page;
-                <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">                 * If hugepage allocations are configured to always</span>
-<span style="color: #7F9F7F;">                 * synchronous compact or the vma has been madvised</span>
-<span style="color: #7F9F7F;">                 * to prefer hugepage backing, retry allowing remote</span>
-<span style="color: #7F9F7F;">                 * memory with both reclaim and compact as well.</span>
-<span style="color: #5F7F5F;">                 */</span>
-        }
+	/*
+	 * For hugepage allocation and non-interleave policy which
+	 * allows the current node (or other explicitly preferred
+	 * node) we only try to allocate from the current/preferred
+	 * node and don't fall back to other nodes, as the cost of
+	 * remote accesses would likely offset THP benefits.
+	 *
+	 * If the policy is interleave or does not allow the current
+	 * node in its nodemask, we allocate the standard way.
+	 */
+	if (pol-&gt;mode != MPOL_INTERLEAVE &amp;&amp;
+	    pol-&gt;mode != MPOL_WEIGHTED_INTERLEAVE &amp;&amp;
+	    (!nodemask || node_isset(nid, *nodemask))) {
+		/*
+		 * First, try to allocate THP only on local node, but
+		 * don't reclaim unnecessarily, just compact.
+		 */
+		page = __alloc_pages_node_noprof(nid,
+			gfp | __GFP_THISNODE | __GFP_NORETRY, order);
+		if (page || !(gfp &amp; __GFP_DIRECT_RECLAIM))
+			return page;
+		/*
+		 * If hugepage allocations are configured to always
+		 * synchronous compact or the vma has been madvised
+		 * to prefer hugepage backing, retry allowing remote
+		 * memory with both reclaim and compact as well.
+		 */
+	}
 }
 </pre>
-</div>
 <p>
 首先判断是开启了透明大页并且分配的页面大小为2MB（笔者的环境amd64，HPAGE_PMD_ORDER = 21-12=
 9，即分配2^9个页面，2MB大小的空间），而随后的条件ilx != NO_INTERLEAVE_INDEX、pol-&gt;mode !=
@@ -1067,46 +1024,43 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 <p>
 该种情形其实没有太多分析的了，就是以前面算好的nodemask和nid，上层函数过来的gfp与order调用__alloc_pages_noprof函数即可：
 </p>
-<div class="org-src-container">
-<pre class="src src-c">page = __alloc_pages_noprof(gfp, order, nid, nodemask);
+<pre class="example" id="org6688a19">
+page = __alloc_pages_noprof(gfp, order, nid, nodemask);
 </pre>
 </div>
 </div>
-</div>
 
 
-<div id="outline-container-org66f9e69" class="outline-3">
-<h3 id="org66f9e69"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-orgcd9c98d" class="outline-3">
+<h3 id="orgcd9c98d"><span class="section-number-3">2.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(pol-&gt;mode == MPOL_INTERLEAVE) &amp;&amp; page) {
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">skip NUMA_INTERLEAVE_HIT update if numa stats is disabled</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (static_branch_likely(&amp;vm_numa_stat_key) &amp;&amp;
-            page_to_nid(page) == nid) {
-                preempt_disable();
-                __count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
-                preempt_enable();
-        }
+<pre class="example" id="org3fa2461">
+if (unlikely(pol-&gt;mode == MPOL_INTERLEAVE) &amp;&amp; page) {
+	/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
+	if (static_branch_likely(&amp;vm_numa_stat_key) &amp;&amp;
+	    page_to_nid(page) == nid) {
+		preempt_disable();
+		__count_numa_event(page_zone(page), NUMA_INTERLEAVE_HIT);
+		preempt_enable();
+	}
 }
 </pre>
-</div>
 
 <p>
 注意这种更新只会对MPOL_INTERLEAVE策略有效，另外numa stat统计信息也是可以不使能的。下面看下__count_numa_event函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">void</span>
-<span style="color: #93E0E3;">__count_numa_event</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> *<span style="color: #DFAF8F;">zone</span>, <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">numa_stat_item</span> <span style="color: #DFAF8F;">item</span>)
+<pre class="example" id="orga24477d">
+static inline void
+__count_numa_event(struct zone *zone, enum numa_stat_item item)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">per_cpu_zonestat</span> <span style="color: #DFAF8F;">__percpu</span> *pzstats = zone-&gt;per_cpu_zonestats;
+	struct per_cpu_zonestat __percpu *pzstats = zone-&gt;per_cpu_zonestats;
 
-        raw_cpu_inc(pzstats-&gt;vm_numa_event[item]);
+	raw_cpu_inc(pzstats-&gt;vm_numa_event[item]);
 }
 </pre>
-</div>
 <p>
 可以清楚的看到，其就是增加了zone里percpu类型的变量per_cpu_zonestats的vm_numa_event数组里对应事件的计数。
 </p>
@@ -1114,55 +1068,51 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 <p>
 这里需要分析下page_to_nid和page_zone这两个函数，这在现代常见的NUMA或SMP架构里是十分常见的。首先是page_to_nid，定义在mm.h里：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> NODE_NOT_IN_PAGE_FLAGS
-<span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">page_to_nid</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>);
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">page_to_nid</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>)
+<pre class="example" id="org6583e8c">
+#ifdef NODE_NOT_IN_PAGE_FLAGS
+int page_to_nid(const struct page *page);
+#else
+static inline int page_to_nid(const struct page *page)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> (PF_POISONED_CHECK(page)-&gt;flags &gt;&gt; NODES_PGSHIFT) &amp; NODES_MASK;
+	return (PF_POISONED_CHECK(page)-&gt;flags &gt;&gt; NODES_PGSHIFT) &amp; NODES_MASK;
 }
-<span style="color: #94BFF3;">#endif</span>
+#endif
 </pre>
-</div>
 <p>
 可以看到依据NODE_NOT_IN_PAGE_FLAGS宏是否定义而分两种版本的实现，如果它定义了，page_to_nid函数实现在sparse.c文件中，就不实现后面的版本了。这个宏其实区分了node id是否要放置在page:flags成员中，因为这个成员其实就是个unsigned long，也就是64个比特位，有可能是没有足够空间来容纳node id的：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#if</span> NODES_SHIFT != 0 &amp;&amp; NODES_WIDTH == 0
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODE_NOT_IN_PAGE_FLAGS</span>  1
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="orgcc4eb0c">
+#if NODES_SHIFT != 0 &amp;&amp; NODES_WIDTH == 0
+#define NODE_NOT_IN_PAGE_FLAGS	1
+#endif
 </pre>
-</div>
 <p>
 要想NODE_NOT_IN_PAGE_FLAGS有定义，那么NODES_SHIFT要非0，而NODES_WIDTH为0：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> CONFIG_NODES_SHIFT
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_SHIFT</span>     CONFIG_NODES_SHIFT
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_SHIFT</span>     0
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="org480c426">
+#ifdef CONFIG_NODES_SHIFT
+#define NODES_SHIFT     CONFIG_NODES_SHIFT
+#else
+#define NODES_SHIFT     0
+#endif
 </pre>
-</div>
 <p>
-现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#org31679cc">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgfcfb1bd">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
 </p>
 
 <p>
 下面就是考虑NODES_WIDTH的值：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#if</span> ZONES_WIDTH + LRU_GEN_WIDTH + SECTIONS_WIDTH + NODES_SHIFT \
-        &lt;= BITS_PER_LONG - NR_PAGEFLAGS
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_WIDTH</span>             NODES_SHIFT
-<span style="color: #94BFF3;">#elif</span> <span style="color: #94BFF3;">defined</span>(CONFIG_SPARSEMEM_VMEMMAP)
-<span style="color: #94BFF3;">#error</span> <span style="color: #CC9393;">"Vmemmap: No space for nodes field in page flags"</span>
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_WIDTH</span>             0
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="org5e1d261">
+#if ZONES_WIDTH + LRU_GEN_WIDTH + SECTIONS_WIDTH + NODES_SHIFT \
+	&lt;= BITS_PER_LONG - NR_PAGEFLAGS
+#define NODES_WIDTH		NODES_SHIFT
+#elif defined(CONFIG_SPARSEMEM_VMEMMAP)
+#error "Vmemmap: No space for nodes field in page flags"
+#else
+#define NODES_WIDTH		0
+#endif
 </pre>
-</div>
 
 <p>
 这里NR_PAGEFLAGS是用于表示页面状态（比如PG_locked、PG_dirty以及PG_uptodate等）占用多少比特位，这会在编译时确定，它其实就是__NR_PAGEFLAGS，在笔者的笔记本上它就是24。而在64位架构下BITS_PER_LONG一般就是64位。
@@ -1171,47 +1121,44 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 <p>
 ZONES_WIDTH定义如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#if</span> MAX_NR_ZONES &lt; 2
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ZONES_SHIFT</span> 0
-<span style="color: #94BFF3;">#elif</span> MAX_NR_ZONES &lt;= 2
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ZONES_SHIFT</span> 1
-<span style="color: #94BFF3;">#elif</span> MAX_NR_ZONES &lt;= 4
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ZONES_SHIFT</span> 2
-<span style="color: #94BFF3;">#elif</span> MAX_NR_ZONES &lt;= 8
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ZONES_SHIFT</span> 3
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#error</span> <span style="color: #CC9393;">ZONES_SHIFT "Too many zones configured"</span>
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="orgd6f397e">
+#if MAX_NR_ZONES &lt; 2
+#define ZONES_SHIFT 0
+#elif MAX_NR_ZONES &lt;= 2
+#define ZONES_SHIFT 1
+#elif MAX_NR_ZONES &lt;= 4
+#define ZONES_SHIFT 2
+#elif MAX_NR_ZONES &lt;= 8
+#define ZONES_SHIFT 3
+#else
+#error ZONES_SHIFT "Too many zones configured"
+#endif
 
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ZONES_WIDTH</span>             ZONES_SHIFT
+#define ZONES_WIDTH		ZONES_SHIFT
 </pre>
-</div>
 <p>
-MAX_NR_ZONES其实就是<a href="#orgc8c7a89">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+MAX_NR_ZONES其实就是<a href="#org214b35b">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
 </p>
 
 <p>
 对于SECTIONS_WIDTH定义如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#if</span> <span style="color: #94BFF3;">defined</span>(CONFIG_SPARSEMEM) &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span><span style="color: #94BFF3;">defined</span>(CONFIG_SPARSEMEM_VMEMMAP)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SECTIONS_WIDTH</span>          SECTIONS_SHIFT
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SECTIONS_WIDTH</span>          0
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="org3df7875">
+#if defined(CONFIG_SPARSEMEM) &amp;&amp; !defined(CONFIG_SPARSEMEM_VMEMMAP)
+#define SECTIONS_WIDTH		SECTIONS_SHIFT
+#else
+#define SECTIONS_WIDTH		0
+#endif
 </pre>
-</div>
 
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#ifdef</span> CONFIG_SPARSEMEM
-<span style="color: #94BFF3;">#include</span> <span style="color: #CC9393;">&lt;asm/sparsemem.h&gt;</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SECTIONS_SHIFT</span>  (MAX_PHYSMEM_BITS - SECTION_SIZE_BITS)
-<span style="color: #94BFF3;">#else</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SECTIONS_SHIFT</span>  0
-<span style="color: #94BFF3;">#endif</span>
+<pre class="example" id="org78a26c3">
+#ifdef CONFIG_SPARSEMEM
+#include &lt;asm/sparsemem.h&gt;
+#define SECTIONS_SHIFT	(MAX_PHYSMEM_BITS - SECTION_SIZE_BITS)
+#else
+#define SECTIONS_SHIFT	0
+#endif
 </pre>
-</div>
 <p>
 CONFIG_SPARSEMEM用于支持物理地址内存布局不连续或稀疏分布的系统，物理地址空间可能存在多个“空洞”（没有内存的区域），这样的系统包括NUMA系统（多节点非均匀内存访问），高端服务器或具有大地址空间的系统。将物理内存按大块划分为多个section（默认大小如128MB，具体取决于SECTION_SIZE_BITS）。每个section的元数据存储在struct mem_section中，用来描述该section的物理内存状态。如果某个section内有物理内存，则分配struct page元数据；否则不分配，节省内存。通过CONFIG_SPARSEMEM，内核能够按section大粒度来管理物理内存，而不是逐页操作，从而减少元数据开销。与稀疏内存模型相对的是平坦（FLATMEM）内存模型，适用于物理内存布局连续且紧凑的系统，例如嵌入式设备或简单的单处理器系统。内存布局是线性的，没有大的稀疏区域。
 </p>
@@ -1233,17 +1180,16 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) &lt;= (64 - 24 = 40)。也就是NODES_WIDTH有值为10，node id就在page:flags中。那么page_to_nid的实现就容易理解了，先将flags右移NODES_PGSHIFT位，这会保证node id所占的比特对齐到最低位，再与上NODES_MASK，只取node id所占的所有bit：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_MASK</span>              ((1UL &lt;&lt; NODES_WIDTH) - 1)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_PGSHIFT</span>           (NODES_PGOFF * (NODES_WIDTH != 0))
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">SECTIONS_PGOFF</span>          ((<span style="color: #F0DFAF; font-weight: bold;">sizeof</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>)*8) - SECTIONS_WIDTH)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">NODES_PGOFF</span>             (SECTIONS_PGOFF - NODES_WIDTH)
+<pre class="example" id="org42be15e">
+#define NODES_MASK		((1UL &lt;&lt; NODES_WIDTH) - 1)
+#define NODES_PGSHIFT		(NODES_PGOFF * (NODES_WIDTH != 0))
+#define SECTIONS_PGOFF		((sizeof(unsigned long)*8) - SECTIONS_WIDTH)
+#define NODES_PGOFF		(SECTIONS_PGOFF - NODES_WIDTH)
 </pre>
-</div>
 <p>
 再用下图总结下page:flags的布局：
 </p>
-<pre class="example" id="orgd4b0c48">
+<pre class="example" id="org04fd9cf">
 | [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
 </pre>
 <p>
@@ -1253,24 +1199,22 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 后面再来理解page_zone就简单了，它通过zone type返回当前节点对应的zone结构体：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> *<span style="color: #93E0E3;">page_zone</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>)
+<pre class="example" id="org7af1cad">
+static inline struct zone *page_zone(const struct page *page)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> &amp;NODE_DATA(page_to_nid(page))-&gt;node_zones[page_zonenum(page)];
+	return &amp;NODE_DATA(page_to_nid(page))-&gt;node_zones[page_zonenum(page)];
 }
 </pre>
-</div>
 <p>
 page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #93E0E3;">page_zonenum</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>)
+<pre class="example" id="org41928ac">
+static inline enum zone_type page_zonenum(const struct page *page)
 {
-        ASSERT_EXCLUSIVE_BITS(page-&gt;flags, ZONES_MASK &lt;&lt; ZONES_PGSHIFT);
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> (page-&gt;flags &gt;&gt; ZONES_PGSHIFT) &amp; ZONES_MASK;
+	ASSERT_EXCLUSIVE_BITS(page-&gt;flags, ZONES_MASK &lt;&lt; ZONES_PGSHIFT);
+	return (page-&gt;flags &gt;&gt; ZONES_PGSHIFT) &amp; ZONES_MASK;
 }
 </pre>
-</div>
 
 <p>
 也是先将flags右移zone id所占的那些bit到最低位，然后和ZONES_MASK相与只取zone id所占的比特，另外pglist_data里node_zones成员表示这个节点所有的zone。注意这里有个ASSERT_EXCLUSIVE_BITS宏，它的主要作用是保证没有并发的写发生在(ZONES_MASK &lt;&lt; ZONES_PGSHIFT)里设置的比特位上，其具体实现原理可以参考kcsan-checks.h。
@@ -1283,17 +1227,16 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </div>
 </div>
 
-<div id="outline-container-orge7d149a" class="outline-2">
-<h2 id="orge7d149a"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
+<div id="outline-container-orgf214e16" class="outline-2">
+<h2 id="orgf214e16"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 <b>原型：</b>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #93E0E3;">__alloc_pages_noprof</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
-                                      <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">preferred_nid</span>, <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>)
+<pre class="example" id="org93a314d">
+struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
+				      int preferred_nid, nodemask_t *nodemask)
 </pre>
-</div>
 
 <p>
 <b>作用：</b>
@@ -1320,47 +1263,45 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 下面逐一分析。
 </p>
 </div>
-<div id="outline-container-orga773949" class="outline-3">
-<h3 id="orga773949"><span class="section-number-3">3.1.</span> 第一部分</h3>
+<div id="outline-container-org34e6e5d" class="outline-3">
+<h3 id="org34e6e5d"><span class="section-number-3">3.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
-<a id="orgc7b4970"></a>
+<a id="org8ad03c1"></a>
 首先介绍一个结构体alloc_context：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">alloc_context</span> {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> *<span style="color: #DFAF8F;">zonelist</span>;
-        <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>;
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #DFAF8F;">preferred_zoneref</span>;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">migratetype</span>;
+<pre class="example" id="org7b62a1f">
+struct alloc_context {
+	struct zonelist *zonelist;
+	nodemask_t *nodemask;
+	struct zoneref *preferred_zoneref;
+	int migratetype;
 
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * highest_zoneidx represents highest usable zone index of</span>
-<span style="color: #7F9F7F;">         * the allocation request. Due to the nature of the zone,</span>
-<span style="color: #7F9F7F;">         * memory on lower zone than the highest_zoneidx will be</span>
-<span style="color: #7F9F7F;">         * protected by lowmem_reserve[highest_zoneidx].</span>
-<span style="color: #7F9F7F;">         *</span>
-<span style="color: #7F9F7F;">         * highest_zoneidx is also used by reclaim/compaction to limit</span>
-<span style="color: #7F9F7F;">         * the target zone since higher zone than this index cannot be</span>
-<span style="color: #7F9F7F;">         * usable for this allocation request.</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">highest_zoneidx</span>;
-        <span style="color: #7CB8BB;">bool</span> <span style="color: #DFAF8F;">spread_dirty_pages</span>;
+	/*
+	 * highest_zoneidx represents highest usable zone index of
+	 * the allocation request. Due to the nature of the zone,
+	 * memory on lower zone than the highest_zoneidx will be
+	 * protected by lowmem_reserve[highest_zoneidx].
+	 *
+	 * highest_zoneidx is also used by reclaim/compaction to limit
+	 * the target zone since higher zone than this index cannot be
+	 * usable for this allocation request.
+	 */
+	enum zone_type highest_zoneidx;
+	bool spread_dirty_pages;
 };
 </pre>
-</div>
 <p>
 它用于保存一些在内核内存管理内部使用的分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
 </p>
 
 <p>
 这里着重解释下highest_zoneidx参数，它通过gfp_zone函数获得zone的编号zoneidx和
-处于<a href="#orgcd1a045">zone_type</a>zondeidx编号越大，所索引的zone_type越低。处于zone_type靠前的所以每个zone里都有一个lowmem_reserve成员：
+处于<a href="#orgba58bb6">zone_type</a>zondeidx编号越大，所索引的zone_type越低。处于zone_type靠前的所以每个zone里都有一个lowmem_reserve成员：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">lowmem_reserve</span>[MAX_NR_ZONES];
+<pre class="example" id="orga0d9ac6">
+long lowmem_reserve[MAX_NR_ZONES];
 </pre>
-</div>
 <p>
 它表示当前的zone需要回退到低区zone分配内存时，它需要查询这个数组，不能分配低于数组元素里存放的内存地址。
 </p>
@@ -1372,67 +1313,65 @@ page_to_nid前面已经介绍了，page_zonenum的实现类似：
 <p>
 第一部分主要就是确定alloc_context参数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">page</span> *<span style="color: #DFAF8F;">page</span>;
-<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">alloc_flags</span> = ALLOC_WMARK_LOW;
-<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">alloc_gfp</span>; <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">The gfp_t that was actually used for allocation</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">alloc_context</span> <span style="color: #DFAF8F;">ac</span> = { };
+<pre class="example" id="orgf880afa">
+struct page *page;
+unsigned int alloc_flags = ALLOC_WMARK_LOW;
+gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
+struct alloc_context ac = { };
 
-<span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * There are several places where we assume that the order value is sane</span>
-<span style="color: #7F9F7F;"> * so bail out early if the request is out of bound.</span>
-<span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">if</span> (WARN_ON_ONCE_GFP(order &gt; MAX_PAGE_ORDER, gfp))
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">NULL</span>;
+/*
+ * There are several places where we assume that the order value is sane
+ * so bail out early if the request is out of bound.
+ */
+if (WARN_ON_ONCE_GFP(order &gt; MAX_PAGE_ORDER, gfp))
+	return NULL;
 
 gfp &amp;= gfp_allowed_mask;
-<span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * Apply scoped allocation constraints. This is mainly about GFP_NOFS</span>
-<span style="color: #7F9F7F;"> * resp. GFP_NOIO which has to be inherited for all allocation requests</span>
-<span style="color: #7F9F7F;"> * from a particular context which has been marked by</span>
-<span style="color: #7F9F7F;"> * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures</span>
-<span style="color: #7F9F7F;"> * movable zones are not used during allocation.</span>
-<span style="color: #5F7F5F;"> */</span>
+/*
+ * Apply scoped allocation constraints. This is mainly about GFP_NOFS
+ * resp. GFP_NOIO which has to be inherited for all allocation requests
+ * from a particular context which has been marked by
+ * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
+ * movable zones are not used during allocation.
+ */
 gfp = current_gfp_context(gfp);
 alloc_gfp = gfp;
-<span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &amp;ac,
-                &amp;alloc_gfp, &amp;alloc_flags))
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">NULL</span>;
+if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &amp;ac,
+		&amp;alloc_gfp, &amp;alloc_flags))
+	return NULL;
 
-<span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * Forbid the first pass from falling back to types that fragment</span>
-<span style="color: #7F9F7F;"> * memory until all local zones are considered.</span>
-<span style="color: #5F7F5F;"> */</span>
+/*
+ * Forbid the first pass from falling back to types that fragment
+ * memory until all local zones are considered.
+ */
 alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 </pre>
-</div>
 
 <p>
 ALLOC_WMARK_LOW代表内存的水位线之一，每个zone都有几种水位线，用于控制空闲内存在不同的水位时，在内存回收方面采取不同程度的措施：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> {
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Read-mostly fields</span><span style="color: #5F7F5F;"> */</span>
-
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">zone watermarks, access with *_wmark_pages(zone) macros</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">_watermark</span>[NR_WMARK];
+<pre class="example" id="org43c19f8">
+struct zone {
+        /* Read-mostly fields */
+ 
+        /* zone watermarks, access with *_wmark_pages(zone) macros */
+        unsigned long _watermark[NR_WMARK];
         ...
 };
-<span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_watermarks</span> {
-        <span style="color: #DFAF8F;">WMARK_MIN</span>,
-        <span style="color: #DFAF8F;">WMARK_LOW</span>,
-        <span style="color: #DFAF8F;">WMARK_HIGH</span>,
-        <span style="color: #DFAF8F;">WMARK_PROMO</span>,
-        <span style="color: #DFAF8F;">NR_WMARK</span>
+enum zone_watermarks {
+        WMARK_MIN,
+        WMARK_LOW,
+        WMARK_HIGH,
+        WMARK_PROMO,
+        NR_WMARK
 };
 
-<span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">The ALLOC_WMARK bits are used as an index to zone-&gt;watermark</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_WMARK_MIN</span>         WMARK_MIN
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_WMARK_LOW</span>         WMARK_LOW
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_WMARK_HIGH</span>        WMARK_HIGH
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">ALLOC_NO_WATERMARKS</span>     0x04 <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">don't check watermarks at all</span><span style="color: #5F7F5F;"> */</span>
+/* The ALLOC_WMARK bits are used as an index to zone-&gt;watermark */
+#define ALLOC_WMARK_MIN		WMARK_MIN
+#define ALLOC_WMARK_LOW		WMARK_LOW
+#define ALLOC_WMARK_HIGH	WMARK_HIGH
+#define ALLOC_NO_WATERMARKS	0x04 /* don't check watermarks at all */
 </pre>
-</div>
 
 <p>
 ALLOC_WMARK_MIN对应的水位线是WMARK_MIN，这是最低的水位线，通常表示内存分配的最低安全阈值。当zone的可用页数低于此值时，分配内存需要特别严格的限制。如果内存低于这个水位线，系统可能会触发直接回收或触发OOM（Out-Of-Memory）杀手。保证系统维持最基本的内存可用性。通常用于高优先级的内存分配，避免耗尽内存。
@@ -1455,26 +1394,25 @@ alloc_gfp是在传进来的分配标志gfp的基础上在本次分配时还会�
 </p>
 
 <p>
-ac参数在<a href="#orgc7b4970">alloc_context</a>介绍过了。
+ac参数在<a href="#org8ad03c1">alloc_context</a>介绍过了。
 </p>
 
 <p>
 接下来的WARN_ON_ONCE_GFP是当order大于MAX_PAGE_ORDER时打印警告，单次分配的内存，不能做到物理上有大于2^MAX_PAGE_ORDER个页面连续，所以这里做了拦截。这里主要想稍微详细的展开WARN_ON_ONCE_GFP宏：
 </p>
 
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">WARN_ON_ONCE_GFP</span>(<span style="color: #DFAF8F;">cond</span>, <span style="color: #DFAF8F;">gfp</span>)     ({                              \
-        <span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">bool</span> <span style="color: #93E0E3;">__section</span>(<span style="color: #CC9393;">".data.once"</span>) __warned;                   \
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__ret_warn_once</span> = <span style="color: #F0DFAF; font-weight: bold;">!</span>!(cond);                                 \
-                                                                        \
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(<span style="color: #F0DFAF; font-weight: bold;">!</span>(gfp &amp; __GFP_NOWARN) &amp;&amp; __ret_warn_once &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>__warned)) { \
-                __warned = <span style="color: #BFEBBF;">true</span>;                                        \
-                WARN_ON(1);                                             \
-        }                                                               \
-        unlikely(__ret_warn_once);                                      \
+<pre class="example" id="orgbd20e8d">
+#define WARN_ON_ONCE_GFP(cond, gfp)	({				\
+	static bool __section(".data.once") __warned;			\
+	int __ret_warn_once = !!(cond);					\
+									\
+	if (unlikely(!(gfp &amp; __GFP_NOWARN) &amp;&amp; __ret_warn_once &amp;&amp; !__warned)) { \
+		__warned = true;					\
+		WARN_ON(1);						\
+	}								\
+	unlikely(__ret_warn_once);					\
 })
 </pre>
-</div>
 <p>
 可以看到，如果gfp里指定了__GFP_NOWARN，那么就不会打印警告，同时这里保证只打印一次的逻辑是在.data.once节里声明一个静态变量__warned，它初始为0，一旦满足条件通过WRAN_ON打印警告，同时全局静态变量__warned被改写为true，那么以后就再也不会打印警告了。
 </p>
@@ -1482,94 +1420,89 @@ ac参数在<a href="#orgc7b4970">alloc_context</a>介绍过了。
 <p>
 另外有一个相对通用的WARN_ON_ONCE实现。针对x86来说，一般配置了CONFIG_GENERIC_BUG、CONFIG_DEBUG_BUGVERBOSE以及宏__WARN_FLAGS，后者是个架构相关的宏，并且在绝大分架构上都有定义，它支持通过主动产生异常的方式，在异常句柄里去打印warning警告信息，对于x86架构来说就是ud2指令（否则就是warn_slowpath_fmt方式打印）：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">__WARN_FLAGS</span>(<span style="color: #DFAF8F;">flags</span>)                                     \
-<span style="color: #F0DFAF; font-weight: bold;">do</span> {                                                            \
-        <span style="color: #7CB8BB;">__auto_type</span> <span style="color: #DFAF8F;">__flags</span> = BUGFLAG_WARNING|(flags);          \
-        instrumentation_begin();                                \
-        _BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);            \
-        instrumentation_end();                                  \
-} <span style="color: #F0DFAF; font-weight: bold;">while</span> (0)
+<pre class="example" id="orge69027d">
+#define __WARN_FLAGS(flags)					\
+do {								\
+	__auto_type __flags = BUGFLAG_WARNING|(flags);		\
+	instrumentation_begin();				\
+	_BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);		\
+	instrumentation_end();					\
+} while (0)
 </pre>
-</div>
 <p>
 这样WARN_ON_ONCE就可以通过__WARN_FLAGS方式实现：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">WARN_ON_ONCE</span>(<span style="color: #DFAF8F;">condition</span>) ({                              \
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">__ret_warn_on</span> = <span style="color: #F0DFAF; font-weight: bold;">!</span>!(condition);                      \
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(__ret_warn_on))                            \
-                __WARN_FLAGS(BUGFLAG_ONCE |                     \
-                             BUGFLAG_TAINT(TAINT_WARN));        \
-        unlikely(__ret_warn_on);                                \
+<pre class="example" id="orga669126">
+#define WARN_ON_ONCE(condition) ({				\
+	int __ret_warn_on = !!(condition);			\
+	if (unlikely(__ret_warn_on))				\
+		__WARN_FLAGS(BUGFLAG_ONCE |			\
+			     BUGFLAG_TAINT(TAINT_WARN));	\
+	unlikely(__ret_warn_on);				\
 })
-<span style="color: #94BFF3;">#endif</span>
+#endif
 </pre>
-</div>
 
 <p>
 可以看到这里传入了BUGFLAG_ONCE标志，__WARN_FLAGS的实现如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #93E0E3;">__WARN_FLAGS</span>(<span style="color: #DFAF8F;">flags</span>)                                     \
-<span style="color: #F0DFAF; font-weight: bold;">do</span> {                                                            \
-        <span style="color: #7CB8BB;">__auto_type</span> <span style="color: #DFAF8F;">__flags</span> = BUGFLAG_WARNING|(flags);          \
-        instrumentation_begin();                                \
-        _BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);            \
-        instrumentation_end();                                  \
-} <span style="color: #F0DFAF; font-weight: bold;">while</span> (0)
+<pre class="example" id="org027364f">
+#define __WARN_FLAGS(flags)					\
+do {								\
+	__auto_type __flags = BUGFLAG_WARNING|(flags);		\
+	instrumentation_begin();				\
+	_BUG_FLAGS(ASM_UD2, __flags, ASM_REACHABLE);		\
+	instrumentation_end();					\
+} while (0)
 </pre>
-</div>
 <p>
 _BUG_FLAGS宏的作用相当于是准备参数并通过ud2指令触发异常，这里就不贴代码了。最后异常的处理会来到__report_bug函数，里面有使用BUGFLAG_ONCE来保证只打印一次：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">bug_entry</span> *<span style="color: #DFAF8F;">bug</span>;
-<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">char</span> *<span style="color: #DFAF8F;">file</span>;
-<span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">line</span>, <span style="color: #DFAF8F;">warning</span>, <span style="color: #DFAF8F;">once</span>, <span style="color: #DFAF8F;">done</span>;
+<pre class="example" id="org45be384">
+struct bug_entry *bug;
+const char *file;
+unsigned line, warning, once, done;
 
-<span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>is_valid_bugaddr(bugaddr))
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> BUG_TRAP_TYPE_NONE;
+if (!is_valid_bugaddr(bugaddr))
+	return BUG_TRAP_TYPE_NONE;
 
 bug = find_bug(bugaddr);
-<span style="color: #F0DFAF; font-weight: bold;">if</span> (<span style="color: #F0DFAF; font-weight: bold;">!</span>bug)
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> BUG_TRAP_TYPE_NONE;
+if (!bug)
+	return BUG_TRAP_TYPE_NONE;
 
-<span style="color: #93E0E3;">disable_trace_on_warning</span>();
+disable_trace_on_warning();
 
-<span style="color: #93E0E3;">bug_get_file_line</span>(bug, &amp;file, &amp;line);
+bug_get_file_line(bug, &amp;file, &amp;line);
 
 warning = (bug-&gt;flags &amp; BUGFLAG_WARNING) != 0;
 once = (bug-&gt;flags &amp; BUGFLAG_ONCE) != 0;
 done = (bug-&gt;flags &amp; BUGFLAG_DONE) != 0;
 
-<span style="color: #F0DFAF; font-weight: bold;">if</span> (warning &amp;&amp; once) {
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (done)
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> BUG_TRAP_TYPE_WARN;
+if (warning &amp;&amp; once) {
+	if (done)
+		return BUG_TRAP_TYPE_WARN;
 
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * Since this is the only store, concurrency is not an issue.</span>
-<span style="color: #5F7F5F;">         */</span>
-        bug-&gt;flags |= BUGFLAG_DONE;
+	/*
+	 * Since this is the only store, concurrency is not an issue.
+	 */
+	bug-&gt;flags |= BUGFLAG_DONE;
 }
 </pre>
-</div>
 <p>
 可以看到，只要设置了BUGFLAG_ONCE和BUGFLAG_WARNING，就是要打印warning且只打印一次的话，就会将BUGFLAG_DONE标志置上给bug-&gt;flags。这个bug类型是bug_entry，它是从bug table里通过bugaddr作为索引找到的：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">bug_entry</span> *<span style="color: #93E0E3;">find_bug</span>(<span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span> <span style="color: #DFAF8F;">bugaddr</span>)
+<pre class="example" id="orgf6e1c5c">
+struct bug_entry *find_bug(unsigned long bugaddr)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">bug_entry</span> *<span style="color: #DFAF8F;">bug</span>;
+	struct bug_entry *bug;
 
-        <span style="color: #F0DFAF; font-weight: bold;">for</span> (bug = __start___bug_table; bug &lt; __stop___bug_table; ++bug)
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (bugaddr == bug_addr(bug))
-                        <span style="color: #F0DFAF; font-weight: bold;">return</span> bug;
+	for (bug = __start___bug_table; bug &lt; __stop___bug_table; ++bug)
+		if (bugaddr == bug_addr(bug))
+			return bug;
 
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> module_find_bug(bugaddr);
+	return module_find_bug(bugaddr);
 }
 </pre>
-</div>
 <p>
 而bug_addr就是在_BUG_FLAGS宏里当作参数传入的，它一般就是WARN_ON_ONCE调用处。另外如果从内核的bug table里找不到，还可以从module的bug table里去找。
 </p>
@@ -1590,43 +1523,39 @@ done = (bug-&gt;flags &amp; BUGFLAG_DONE) != 0;
 <p>
 回到__alloc_pages_noprof函数的第一部分继续看代码：
 </p>
-<div class="org-src-container">
-<pre class="src src-c">gfp &amp;= gfp_allowed_mask;
-<span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * Apply scoped allocation constraints. This is mainly about GFP_NOFS</span>
-<span style="color: #7F9F7F;"> * resp. GFP_NOIO which has to be inherited for all allocation requests</span>
-<span style="color: #7F9F7F;"> * from a particular context which has been marked by</span>
-<span style="color: #7F9F7F;"> * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures</span>
-<span style="color: #7F9F7F;"> * movable zones are not used during allocation.</span>
-<span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="orge6e9279">
+gfp &amp;= gfp_allowed_mask;
+/*
+ * Apply scoped allocation constraints. This is mainly about GFP_NOFS
+ * resp. GFP_NOIO which has to be inherited for all allocation requests
+ * from a particular context which has been marked by
+ * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
+ * movable zones are not used during allocation.
+ */
 gfp = current_gfp_context(gfp);
 alloc_gfp = gfp;
 </pre>
-</div>
 <p>
 这一部分对本次内存分配实际使用的gfp再次进行了一些调整并给到alloc_gfp。gfp_allowed_mask主要是用于解决启动早期不能使用一些gfp标志的问题，它初始定义如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_BOOT_MASK</span> (__GFP_BITS_MASK &amp; ~(__GFP_RECLAIM|__GFP_IO|__GFP_FS))
-gfp_t <span style="color: #7CB8BB;">gfp_allowed_mask</span> <span style="color: #DFAF8F;">__read_mostly</span> = GFP_BOOT_MASK;
+<pre class="example" id="org9702549">
+#define GFP_BOOT_MASK (__GFP_BITS_MASK &amp; ~(__GFP_RECLAIM|__GFP_IO|__GFP_FS))
+gfp_t gfp_allowed_mask __read_mostly = GFP_BOOT_MASK;
 </pre>
-</div>
 <p>
 可以看到初始的时候，清除了这三个标志，意味着在启动阶段，这三个标志涉及到的功能内核还没有准备好，比如说磁盘IO或者文件操作还没有就绪。而在kernel_init_freeable函数里会解开这些限制：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">noinline</span> <span style="color: #7CB8BB;">void</span> __init kernel_init_freeable(<span style="color: #7CB8BB;">void</span>)
+<pre class="example" id="org06ce99f">
+static noinline void __init kernel_init_freeable(void)
 {
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Now the scheduler is fully set up and can do blocking allocations</span><span style="color: #5F7F5F;"> */</span>
-        gfp_allowed_mask = __GFP_BITS_MASK;
+	/* Now the scheduler is fully set up and can do blocking allocations */
+	gfp_allowed_mask = __GFP_BITS_MASK;
     ...
 }
 </pre>
-</div>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">__GFP_BITS_MASK</span> ((__force <span style="color: #7CB8BB;">gfp_t</span>)((1 &lt;&lt; __GFP_BITS_SHIFT) - 1))
+<pre class="example" id="org94da7d5">
+#define __GFP_BITS_MASK ((__force gfp_t)((1 &lt;&lt; __GFP_BITS_SHIFT) - 1))
 </pre>
-</div>
 <p>
 __GFP_BITS_SHIFT就是最后一个gfp标志所占的比特，也就是所有gfp标志都可以使用了。
 </p>
@@ -1634,140 +1563,133 @@ __GFP_BITS_SHIFT就是最后一个gfp标志所占的比特，也就是所有gfp�
 <p>
 current_gfp_context主要是结合上Per-Process Flags，进程级别也可以设置gfp标志，存放于task_struct:flags域，比如进程可以设置PF_MEMALLOC_PIN标志，页面可以pin住，这时gfp flags需要清除__GFP_MOVABLE标志，也就是分配的页面是不能移动的了：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">gfp_t</span> <span style="color: #93E0E3;">current_gfp_context</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">flags</span>)
+<pre class="example" id="orgd73c66d">
+static inline gfp_t current_gfp_context(gfp_t flags)
 {
-        <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">pflags</span> = READ_ONCE(current-&gt;flags);
+	unsigned int pflags = READ_ONCE(current-&gt;flags);
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(pflags &amp; (PF_MEMALLOC_NOIO | PF_MEMALLOC_NOFS | PF_MEMALLOC_PIN))) {
-                <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">                 * NOIO implies both NOIO and NOFS and it is a weaker context</span>
-<span style="color: #7F9F7F;">                 * so always make sure it makes precedence</span>
-<span style="color: #5F7F5F;">                 */</span>
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (pflags &amp; PF_MEMALLOC_NOIO)
-                        flags &amp;= ~(__GFP_IO | __GFP_FS);
-                <span style="color: #F0DFAF; font-weight: bold;">else</span> <span style="color: #F0DFAF; font-weight: bold;">if</span> (pflags &amp; PF_MEMALLOC_NOFS)
-                        flags &amp;= ~__GFP_FS;
+	if (unlikely(pflags &amp; (PF_MEMALLOC_NOIO | PF_MEMALLOC_NOFS | PF_MEMALLOC_PIN))) {
+		/*
+		 * NOIO implies both NOIO and NOFS and it is a weaker context
+		 * so always make sure it makes precedence
+		 */
+		if (pflags &amp; PF_MEMALLOC_NOIO)
+			flags &amp;= ~(__GFP_IO | __GFP_FS);
+		else if (pflags &amp; PF_MEMALLOC_NOFS)
+			flags &amp;= ~__GFP_FS;
 
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (pflags &amp; PF_MEMALLOC_PIN)
-                        flags &amp;= ~__GFP_MOVABLE;
-        }
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> flags;
+		if (pflags &amp; PF_MEMALLOC_PIN)
+			flags &amp;= ~__GFP_MOVABLE;
+	}
+	return flags;
 }
 </pre>
-</div>
 <p>
 接下来继续分析prepare_alloc_pages函数，该函数最终敲定alloc_context参数，较为关键：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">bool</span> <span style="color: #93E0E3;">prepare_alloc_pages</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp_mask</span>, <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">order</span>,
-                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">preferred_nid</span>, <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodemask</span>,
-                <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">alloc_context</span> *<span style="color: #DFAF8F;">ac</span>, <span style="color: #7CB8BB;">gfp_t</span> *<span style="color: #DFAF8F;">alloc_gfp</span>,
-                <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">alloc_flags</span>)
+<pre class="example" id="orgcd5cefa">
+static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask,
+		struct alloc_context *ac, gfp_t *alloc_gfp,
+		unsigned int *alloc_flags)
 {
-        ac-&gt;highest_zoneidx = gfp_zone(gfp_mask);
-        ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
-        ac-&gt;nodemask = nodemask;
-        ac-&gt;migratetype = gfp_migratetype(gfp_mask);
+	ac-&gt;highest_zoneidx = gfp_zone(gfp_mask);
+	ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
+	ac-&gt;nodemask = nodemask;
+	ac-&gt;migratetype = gfp_migratetype(gfp_mask);
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (cpusets_enabled()) {
-                *alloc_gfp |= __GFP_HARDWALL;
-                <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">                 * When we are in the interrupt context, it is irrelevant</span>
-<span style="color: #7F9F7F;">                 * to the current task context. It means that any node ok.</span>
-<span style="color: #5F7F5F;">                 */</span>
-                <span style="color: #F0DFAF; font-weight: bold;">if</span> (in_task() &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>ac-&gt;nodemask)
-                        ac-&gt;nodemask = &amp;cpuset_current_mems_allowed;
-                <span style="color: #F0DFAF; font-weight: bold;">else</span>
-                        *alloc_flags |= ALLOC_CPUSET;
-        }
+	if (cpusets_enabled()) {
+		*alloc_gfp |= __GFP_HARDWALL;
+		/*
+		 * When we are in the interrupt context, it is irrelevant
+		 * to the current task context. It means that any node ok.
+		 */
+		if (in_task() &amp;&amp; !ac-&gt;nodemask)
+			ac-&gt;nodemask = &amp;cpuset_current_mems_allowed;
+		else
+			*alloc_flags |= ALLOC_CPUSET;
+	}
 
-        might_alloc(gfp_mask);
+	might_alloc(gfp_mask);
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (should_fail_alloc_page(gfp_mask, order))
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">false</span>;
+	if (should_fail_alloc_page(gfp_mask, order))
+		return false;
 
-        *alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, *alloc_flags);
+	*alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, *alloc_flags);
 
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Dirty zone balancing only done in the fast path</span><span style="color: #5F7F5F;"> */</span>
-        ac-&gt;spread_dirty_pages = (gfp_mask &amp; __GFP_WRITE);
+	/* Dirty zone balancing only done in the fast path */
+	ac-&gt;spread_dirty_pages = (gfp_mask &amp; __GFP_WRITE);
 
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * The preferred zone is used for statistics but crucially it is</span>
-<span style="color: #7F9F7F;">         * also used as the starting point for the zonelist iterator. It</span>
-<span style="color: #7F9F7F;">         * may get reset for allocations that ignore memory policies.</span>
-<span style="color: #5F7F5F;">         */</span>
-        ac-&gt;preferred_zoneref = first_zones_zonelist(ac-&gt;zonelist,
-                                        ac-&gt;highest_zoneidx, ac-&gt;nodemask);
+	/*
+	 * The preferred zone is used for statistics but crucially it is
+	 * also used as the starting point for the zonelist iterator. It
+	 * may get reset for allocations that ignore memory policies.
+	 */
+	ac-&gt;preferred_zoneref = first_zones_zonelist(ac-&gt;zonelist,
+					ac-&gt;highest_zoneidx, ac-&gt;nodemask);
 
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> <span style="color: #BFEBBF;">true</span>;
+	return true;
 }
 </pre>
-</div>
 <p>
-第一行确定最高可以分配的zone_type（idx），通过gfp_zone得到，该函数（宏）在前面已经<a href="#org75ee8c3">详细</a>介绍了。
+第一行确定最高可以分配的zone_type（idx），通过gfp_zone得到，该函数（宏）在前面已经<a href="#orgd431c76">详细</a>介绍了。
 第二行代码比较关键：
-<a id="orgd616429"></a>
+<a id="org8495ec0"></a>
 </p>
-<div class="org-src-container">
-<pre class="src src-c">ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
+<pre class="example" id="orged8d33f">
+ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
 </pre>
-</div>
 <p>
 这里就要引入内核内存管理的一个关键数据结构了：zonelist。在NUMA系统里每个内存节点由pglist_data数据结构表示，该结构体里有一个zonelist类型的数组成员名为node_zonelists：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"> <span style="color: #F0DFAF; font-weight: bold;">typedef</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">pglist_data</span> {
+<pre class="example" id="org523ddec">
+ typedef struct pglist_data {
      ...;
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * node_zonelists contains references to all zones in all nodes.</span>
-<span style="color: #7F9F7F;">         * Generally the first zones will be references to this node's</span>
-<span style="color: #7F9F7F;">         * node_zones.</span>
-<span style="color: #5F7F5F;">         */</span>
-    <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> <span style="color: #DFAF8F;">node_zonelists</span>[MAX_ZONELISTS];
+  	/*
+	 * node_zonelists contains references to all zones in all nodes.
+	 * Generally the first zones will be references to this node's
+	 * node_zones.
+	 */
+    struct zonelist node_zonelists[MAX_ZONELISTS];
     ...
-} <span style="color: #7CB8BB;">pg_data_t</span>;
+} pg_data_t;
 </pre>
-</div>
 <p>
-<a id="org5c0fcf2"></a>
+<a id="org3f88715"></a>
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * One allocation request operates on a zonelist. A zonelist</span>
-<span style="color: #7F9F7F;"> * is a list of zones, the first one is the 'goal' of the</span>
-<span style="color: #7F9F7F;"> * allocation, the other zones are fallback zones, in decreasing</span>
-<span style="color: #7F9F7F;"> * priority.</span>
-<span style="color: #7F9F7F;"> *</span>
-<span style="color: #7F9F7F;"> * To speed the reading of the zonelist, the zonerefs contain the zone index</span>
-<span style="color: #7F9F7F;"> * of the entry being read. Helper functions to access information given</span>
-<span style="color: #7F9F7F;"> * a struct zoneref are</span>
-<span style="color: #7F9F7F;"> *</span>
-<span style="color: #7F9F7F;"> * zonelist_zone()      - Return the struct zone * for an entry in _zonerefs</span>
-<span style="color: #7F9F7F;"> * zonelist_zone_idx()  - Return the index of the zone for an entry</span>
-<span style="color: #7F9F7F;"> * zonelist_node_idx()  - Return the index of the node for an entry</span>
-<span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> <span style="color: #DFAF8F;">_zonerefs</span>[MAX_ZONES_PER_ZONELIST + 1];
+<pre class="example" id="org325588c">
+/*
+ * One allocation request operates on a zonelist. A zonelist
+ * is a list of zones, the first one is the 'goal' of the
+ * allocation, the other zones are fallback zones, in decreasing
+ * priority.
+ *
+ * To speed the reading of the zonelist, the zonerefs contain the zone index
+ * of the entry being read. Helper functions to access information given
+ * a struct zoneref are
+ *
+ * zonelist_zone()	- Return the struct zone * for an entry in _zonerefs
+ * zonelist_zone_idx()	- Return the index of the zone for an entry
+ * zonelist_node_idx()	- Return the index of the node for an entry
+ */
+struct zonelist {
+	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
 };
 </pre>
-</div>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * This struct contains information about a zone in a zonelist. It is stored</span>
-<span style="color: #7F9F7F;"> * here to avoid dereferences into large structures and lookups of tables</span>
-<span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zone</span> *<span style="color: #DFAF8F;">zone</span>;      <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Pointer to actual zone</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">zone_idx</span>;           <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">zone_idx(zoneref-&gt;zone)</span><span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="org157c205">
+/*
+ * This struct contains information about a zone in a zonelist. It is stored
+ * here to avoid dereferences into large structures and lookups of tables
+ */
+struct zoneref {
+	struct zone *zone;	/* Pointer to actual zone */
+	int zone_idx;		/* zone_idx(zoneref-&gt;zone) */
 };
 </pre>
-</div>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Maximum number of zones on a zonelist</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">MAX_ZONES_PER_ZONELIST</span> (MAX_NUMNODES * MAX_NR_ZONES)
+<pre class="example" id="org6a5aa2b">
+/* Maximum number of zones on a zonelist */
+#define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
 </pre>
-</div>
 <p>
 从上面这些代码就可以看出引入zonelist的缘由了，一个zonelist包含所有节点上的所有zone，一次分配就在一个zonelist上去操作（也就是所有的zone都是有可能去分配的）。zonelist里的zone按顺序依次向后具有较低的优先级用于分配内存，而排在最前面的zone就是最优先的zone要从里面分配内存。从MAX_ZONES_PER_ZONELIST宏的定义可以看出来所有内存其实就是按一种层次化组织，对于多节点的NUMA架构来说，就是分若干节点，每个节点又分若干zone。另外对于NUMA架构来说，node_zonelists成员实际分两条，一条是可以fallback的：ZONELIST_FALLBACK，也就是这里面有所有节点的所有zone，另外一条是：ZONELIST_NOFALLBACK，是内存分配标志gfp在指明了__GFP_THISNODE不允许回退时使用的zonelist，也就是只能从指定节点的zone里分配内存。
 </p>
@@ -1777,19 +1699,18 @@ zoneref是具体存在一个zonelist里元素，它主要是加速访问zonelist
 </p>
 
 <p>
-有了这些背景知识再来理解<a href="#orgd616429">node_zonelist</a>的实现就简单了，gfp_zonelist主要是看gfp标志里是否设置了__GFP_THISNODE依据不同的情况返回是fallback还是nofallback的zonelist索引：
+有了这些背景知识再来理解<a href="#org8495ec0">node_zonelist</a>的实现就简单了，gfp_zonelist主要是看gfp标志里是否设置了__GFP_THISNODE依据不同的情况返回是fallback还是nofallback的zonelist索引：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">gfp_zonelist</span>(<span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">flags</span>)
+<pre class="example" id="org58bb99f">
+static inline int gfp_zonelist(gfp_t flags)
 {
-<span style="color: #94BFF3;">#ifdef</span> CONFIG_NUMA
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(flags &amp; __GFP_THISNODE))
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> ZONELIST_NOFALLBACK;
-<span style="color: #94BFF3;">#endif</span>
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> ZONELIST_FALLBACK;
+#ifdef CONFIG_NUMA
+	if (unlikely(flags &amp; __GFP_THISNODE))
+		return ZONELIST_NOFALLBACK;
+#endif
+	return ZONELIST_FALLBACK;
 }
 </pre>
-</div>
 <p>
 返回的索引再加上node_zonelists就得到目标zonelist了，并存放到alloc_context的zonelist成员，后续会用来索引目标zone。
 </p>
@@ -1801,131 +1722,187 @@ zoneref是具体存在一个zonelist里元素，它主要是加速访问zonelist
 <p>
 对于多节点NUMA架构来说主要通过如下流程去初始化zonelist：
 </p>
-<pre class="example" id="org7cb3f5f">
+<pre class="example" id="org1e648b2">
 __build_all_zonelists-&gt;build_zonelists-&gt;build_zonelists_in_node_order-&gt;build_zonerefs_node-&gt;zoneref_set_zone
 </pre>
 
 <p>
 __build_all_zonelists里有如下代码循环针对所有的node去构建zonelist：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #93E0E3;">for_each_node</span>(nid) {
-        <span style="color: #7CB8BB;">pg_data_t</span> *<span style="color: #DFAF8F;">pgdat</span> = NODE_DATA(nid);
-        build_zonelists(pgdat);
+<pre class="example" id="org64ce9ba">
+for_each_node(nid) {
+	pg_data_t *pgdat = NODE_DATA(nid);
+	build_zonelists(pgdat);
 }
 </pre>
-</div>
 <p>
 build_zonelists里有关键代码如下：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">while</span> ((node = find_next_best_node(local_node, &amp;used_mask)) &gt;= 0) {
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * We don't want to pressure a particular node.</span>
-<span style="color: #7F9F7F;">         * So adding penalty to the first node in same</span>
-<span style="color: #7F9F7F;">         * distance group to make it round-robin.</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (node_distance(local_node, node) !=
-            node_distance(local_node, prev_node))
-                node_load[node] += 1;
+<pre class="example" id="org44498a6">
+while ((node = find_next_best_node(local_node, &amp;used_mask)) &gt;= 0) {
+	/*
+	 * We don't want to pressure a particular node.
+	 * So adding penalty to the first node in same
+	 * distance group to make it round-robin.
+	 */
+	if (node_distance(local_node, node) !=
+	    node_distance(local_node, prev_node))
+		node_load[node] += 1;
 
-        node_order[nr_nodes++] = node;
-        prev_node = node;
+	node_order[nr_nodes++] = node;
+	prev_node = node;
 }
 
-<span style="color: #93E0E3;">build_zonelists_in_node_order</span>(pgdat, node_order, nr_nodes);
+build_zonelists_in_node_order(pgdat, node_order, nr_nodes);
 </pre>
-</div>
 <p>
 就是说通过node_distance确定的节点间的距离，生成了一个node_order数组，这个数组里的元素是node的标号，数组里越靠后的元素表示的节点距离当前处理的节点越远，node_distance可以根据下层硬件的实际拓扑通过ACPI表传上来，这方面的细节参见笔者其它文章。node_order生成好了之后，它又作为参数调用了build_zonelists_in_node_order函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * Build zonelists ordered by node and zones within node.</span>
-<span style="color: #7F9F7F;"> * This results in maximum locality--normal zone overflows into local</span>
-<span style="color: #7F9F7F;"> * DMA zone, if any--but risks exhausting DMA zone.</span>
-<span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">void</span> <span style="color: #93E0E3;">build_zonelists_in_node_order</span>(<span style="color: #7CB8BB;">pg_data_t</span> *<span style="color: #DFAF8F;">pgdat</span>, <span style="color: #7CB8BB;">int</span> *<span style="color: #DFAF8F;">node_order</span>,
-                <span style="color: #7CB8BB;">unsigned</span> <span style="color: #DFAF8F;">nr_nodes</span>)
+<pre class="example" id="orgfce6db7">
+/*
+ * Build zonelists ordered by node and zones within node.
+ * This results in maximum locality--normal zone overflows into local
+ * DMA zone, if any--but risks exhausting DMA zone.
+ */
+static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
+		unsigned nr_nodes)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #DFAF8F;">zonerefs</span>;
-        <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">i</span>;
+	struct zoneref *zonerefs;
+	int i;
 
-        zonerefs = pgdat-&gt;node_zonelists[ZONELIST_FALLBACK]._zonerefs;
+	zonerefs = pgdat-&gt;node_zonelists[ZONELIST_FALLBACK]._zonerefs;
 
-        <span style="color: #F0DFAF; font-weight: bold;">for</span> (i = 0; i &lt; nr_nodes; i++) {
-                <span style="color: #7CB8BB;">int</span> <span style="color: #DFAF8F;">nr_zones</span>;
+	for (i = 0; i &lt; nr_nodes; i++) {
+		int nr_zones;
 
-                <span style="color: #7CB8BB;">pg_data_t</span> *<span style="color: #DFAF8F;">node</span> = NODE_DATA(node_order[i]);
+		pg_data_t *node = NODE_DATA(node_order[i]);
 
-                nr_zones = build_zonerefs_node(node, zonerefs);
-                zonerefs += nr_zones;
-        }
-        zonerefs-&gt;zone = <span style="color: #BFEBBF;">NULL</span>;
-        zonerefs-&gt;zone_idx = 0;
+		nr_zones = build_zonerefs_node(node, zonerefs);
+		zonerefs += nr_zones;
+	}
+	zonerefs-&gt;zone = NULL;
+	zonerefs-&gt;zone_idx = 0;
 }
 </pre>
-</div>
 <p>
-从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出调用build_zonerefs_node，更多的细节本文不再赘述了。
+从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出node作为参数，调用build_zonerefs_node，这样自然的效果就是距离当前处理节点（需要填充当前节点的node_zonelists）越近的节点，其里面的zone(s)排在zoneref（zonelist：_zonerefs）数组元素的前面。
 </p>
 
 <p>
-由上面初始化zonelist的简单分析也就可以更加深刻的理解<a href="#org5c0fcf2">前面代码</a>里对zonelist的注释了：
+这里再稍微看下build_zonerefs_node函数的实现：
 </p>
-<pre class="example" id="orgec28f19">
+<pre class="example" id="orge107ca1">
+static int build_zonerefs_node(pg_data_t *pgdat, struct zoneref *zonerefs)
+{
+	struct zone *zone;
+	enum zone_type zone_type = MAX_NR_ZONES;
+	int nr_zones = 0;
+
+	do {
+		zone_type--;
+		zone = pgdat-&gt;node_zones + zone_type;
+		if (populated_zone(zone)) {
+			zoneref_set_zone(zone, &amp;zonerefs[nr_zones++]);
+			check_highest_zone(zone_type);
+		}
+	} while (zone_type);
+
+	return nr_zones;
+}
+</pre>
+<pre class="example" id="orge98bd51">
+static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
+{
+	zoneref-&gt;zone = zone;
+	zoneref-&gt;zone_idx = zone_idx(zone);
+}
+</pre>
+<pre class="example" id="org47aa948">
+/*
+ * zone_idx() returns 0 for the ZONE_DMA zone, 1 for the ZONE_NORMAL zone, etc.
+ */
+#define zone_idx(zone)		((zone) - (zone)-&gt;zone_pgdat-&gt;node_zones)
+</pre>
+<p>
+从zone_idx的实现知道，zone_type里的枚举类型也就是表示了zone的编号，比如ZONE_DMA的idx为0，ZONE_DMA32为1，依次类推。分析build_zonerefs_node函数的循环体可以知道，zonerefs数组里的元素，靠前的元素存放的zone其idx越大，因为zone_type的初始值为MAX_NR_ZONES，从较大的zone idx开始，针对某个具体的配置，这最终导致一个效果可能如下：
+</p>
+<pre class="example" id="org80c65b0">
+            zone_type    idx
+
+zonerefs[0] ZONE_MOVABLE 3
+
+zonerefs[1] ZONE_NORMAL  2
+
+zonerefs[2] ZONE_DMA32   1
+
+zonerefs[3] ZONE_DMA     0
+</pre>
+<p>
+最后pgdat-&gt;node_zones成员表示了仅属于当前节点的所有zone，所以拿它作为基址偏移zone_type就可以得到相应zone_type的zone结构体了。
+</p>
+
+<p>
+这里需要详细理解这一点，因为<a href="#org47df382">后面的</a>分配需要确定alloc_context: preferred_zoneref。
+</p>
+
+<p>
+更多关于zone初始化的细节本文不再赘述了，参见笔者其它文章分析。
+</p>
+
+<p>
+由上面初始化zonelist的简单分析也就可以更加深刻的理解<a href="#org3f88715">前面代码</a>里对zonelist的注释了：
+</p>
+<pre class="example" id="orgfc01f73">
 the first one is the 'goal' of the allocation, the other zones are fallback zones, in decreasing priority.
 </pre>
 
 <p>
 回到prepare_alloc_pages继续分析，gfp_migratetype主要是用来从gfp标志中提取出页面的迁移类型，一种是可移动__GFP_MOVABLE，一种是可回收__GFP_RECLAIMABLE：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Convert GFP flags to their corresponding migrate type</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_MOVABLE_MASK</span> (__GFP_RECLAIMABLE|__GFP_MOVABLE)
-<span style="color: #94BFF3;">#define</span> <span style="color: #DFAF8F;">GFP_MOVABLE_SHIFT</span> 3
+<pre class="example" id="org098aa57">
+/* Convert GFP flags to their corresponding migrate type */
+#define GFP_MOVABLE_MASK (__GFP_RECLAIMABLE|__GFP_MOVABLE)
+#define GFP_MOVABLE_SHIFT 3
 
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #7CB8BB;">int</span> <span style="color: #93E0E3;">gfp_migratetype</span>(<span style="color: #F0DFAF; font-weight: bold;">const</span> <span style="color: #7CB8BB;">gfp_t</span> <span style="color: #DFAF8F;">gfp_flags</span>)
+static inline int gfp_migratetype(const gfp_t gfp_flags)
 {
-        VM_WARN_ON((gfp_flags &amp; GFP_MOVABLE_MASK) == GFP_MOVABLE_MASK);
-        BUILD_BUG_ON((1UL &lt;&lt; GFP_MOVABLE_SHIFT) != ___GFP_MOVABLE);
-        BUILD_BUG_ON((___GFP_MOVABLE &gt;&gt; GFP_MOVABLE_SHIFT) != MIGRATE_MOVABLE);
-        BUILD_BUG_ON((___GFP_RECLAIMABLE &gt;&gt; GFP_MOVABLE_SHIFT) != MIGRATE_RECLAIMABLE);
-        BUILD_BUG_ON(((___GFP_MOVABLE | ___GFP_RECLAIMABLE) &gt;&gt;
-                      GFP_MOVABLE_SHIFT) != MIGRATE_HIGHATOMIC);
+	VM_WARN_ON((gfp_flags &amp; GFP_MOVABLE_MASK) == GFP_MOVABLE_MASK);
+	BUILD_BUG_ON((1UL &lt;&lt; GFP_MOVABLE_SHIFT) != ___GFP_MOVABLE);
+	BUILD_BUG_ON((___GFP_MOVABLE &gt;&gt; GFP_MOVABLE_SHIFT) != MIGRATE_MOVABLE);
+	BUILD_BUG_ON((___GFP_RECLAIMABLE &gt;&gt; GFP_MOVABLE_SHIFT) != MIGRATE_RECLAIMABLE);
+	BUILD_BUG_ON(((___GFP_MOVABLE | ___GFP_RECLAIMABLE) &gt;&gt;
+		      GFP_MOVABLE_SHIFT) != MIGRATE_HIGHATOMIC);
 
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(page_group_by_mobility_disabled))
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> MIGRATE_UNMOVABLE;
+	if (unlikely(page_group_by_mobility_disabled))
+		return MIGRATE_UNMOVABLE;
 
-        <span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Group based on mobility</span><span style="color: #5F7F5F;"> */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> (__force <span style="color: #7CB8BB;">unsigned</span> <span style="color: #7CB8BB;">long</span>)(gfp_flags &amp; GFP_MOVABLE_MASK) &gt;&gt; GFP_MOVABLE_SHIFT;
+	/* Group based on mobility */
+	return (__force unsigned long)(gfp_flags &amp; GFP_MOVABLE_MASK) &gt;&gt; GFP_MOVABLE_SHIFT;
 }
-<span style="color: #94BFF3;">#undef</span> GFP_MOVABLE_MASK
-<span style="color: #94BFF3;">#undef</span> GFP_MOVABLE_SHIFT
+#undef GFP_MOVABLE_MASK
+#undef GFP_MOVABLE_SHIFT
 </pre>
-</div>
 <p>
-这个函数前面先进行了一些检查，比如第一行的检查代表__GFP_RECLAIMABLE和__GFP_MOVABLE不能同时被设置，其它行实际是检查在<a href="#orgbc442ce">这个</a>enum中，满足第3位是___GFP_MOVABLE_BIT，第四位是___GFP_RECLAIMABLE_BIT，从0开始计数。
+这个函数前面先进行了一些检查，比如第一行的检查代表__GFP_RECLAIMABLE和__GFP_MOVABLE不能同时被设置，其它行实际是检查在<a href="#org13d72f5">这个</a>enum中，满足第3位是___GFP_MOVABLE_BIT，第四位是___GFP_RECLAIMABLE_BIT，从0开始计数。
 </p>
 
 <p>
-<a id="org10e3385"></a>
+<a id="org0f646d7"></a>
 接下来的代码主要是处理cpuset内存资源组的限制，这种限制主要针对进程上下文并且没有设置nodemask的时候，cpuset_current_mems_allowed在设置了CONFIG_CPUSETS后，就是当前进程（current）的mems_allowed成员限制的node。
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #F0DFAF; font-weight: bold;">if</span> (cpusets_enabled()) {
-        *alloc_gfp |= __GFP_HARDWALL;
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * When we are in the interrupt context, it is irrelevant</span>
-<span style="color: #7F9F7F;">         * to the current task context. It means that any node ok.</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (in_task() &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>ac-&gt;nodemask)
-                ac-&gt;nodemask = &amp;cpuset_current_mems_allowed;
-        <span style="color: #F0DFAF; font-weight: bold;">else</span>
-                *alloc_flags |= ALLOC_CPUSET;
+<pre class="example" id="org6a802d7">
+if (cpusets_enabled()) {
+	*alloc_gfp |= __GFP_HARDWALL;
+	/*
+	 * When we are in the interrupt context, it is irrelevant
+	 * to the current task context. It means that any node ok.
+	 */
+	if (in_task() &amp;&amp; !ac-&gt;nodemask)
+		ac-&gt;nodemask = &amp;cpuset_current_mems_allowed;
+	else
+		*alloc_flags |= ALLOC_CPUSET;
 }
 </pre>
-</div>
 <p>
 在should_fail_alloc_page主要用于处理错误注入。
 </p>
@@ -1933,106 +1910,102 @@ the first one is the 'goal' of the allocation, the other zones are fallback zone
 <p>
 __GFP_WRITE代表内存的申请者将会写页面，这样内存分配的时候就会尽量将其分散在不同zone中：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Dirty zone balancing only done in the fast path</span><span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="orgd544ab0">
+/* Dirty zone balancing only done in the fast path */
 ac-&gt;spread_dirty_pages = (gfp_mask &amp; __GFP_WRITE);
 </pre>
-</div>
 
 <p>
+<a id="org47df382"></a>
 最后一行代码也是比较关键的：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * The preferred zone is used for statistics but crucially it is</span>
-<span style="color: #7F9F7F;"> * also used as the starting point for the zonelist iterator. It</span>
-<span style="color: #7F9F7F;"> * may get reset for allocations that ignore memory policies.</span>
-<span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="org2dff8bc">
+/*
+ * The preferred zone is used for statistics but crucially it is
+ * also used as the starting point for the zonelist iterator. It
+ * may get reset for allocations that ignore memory policies.
+ */
 ac-&gt;preferred_zoneref = first_zones_zonelist(ac-&gt;zonelist,
-                                ac-&gt;highest_zoneidx, ac-&gt;nodemask);
+				ac-&gt;highest_zoneidx, ac-&gt;nodemask);
 </pre>
-</div>
 <p>
-通过first_zones_zonelist去获得目标zone，后面将使用这个目标zone去分配内存，ac-&gt;zonelist<a href="#orgd616429">前面</a>分析过了如何得到。获得的目标zone其序号应当是小于或等于第二个参数ac-&gt;highest_zoneidx的，如果第三个参数ac-&gt;nodemask有值，还应当保证分出来的zone在ac-&gt;nodemask指明的节点里，下面是其实现：
+通过first_zones_zonelist去获得目标zone，后面将使用这个目标zone去分配内存，ac-&gt;zonelist<a href="#org8495ec0">前面</a>分析过了如何得到。获得的目标zone其序号应当是小于或等于第二个参数ac-&gt;highest_zoneidx的，如果第三个参数ac-&gt;nodemask有值，还应当保证分出来的zone在ac-&gt;nodemask指明的节点里，下面是其实现：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #9FC59F;">/**</span>
-<span style="color: #9FC59F;"> * first_zones_zonelist - Returns the first zone at or below highest_zoneidx within the allowed nodemask in a zonelist</span>
-<span style="color: #9FC59F;"> * </span><span style="color: #BFEBBF;">@zonelist</span><span style="color: #9FC59F;">: The zonelist to search for a suitable zone</span>
-<span style="color: #9FC59F;"> * </span><span style="color: #BFEBBF;">@highest_zoneidx</span><span style="color: #9FC59F;">: The zone index of the highest zone to return</span>
-<span style="color: #9FC59F;"> * </span><span style="color: #BFEBBF;">@nodes</span><span style="color: #9FC59F;">: An optional nodemask to filter the zonelist with</span>
-<span style="color: #9FC59F;"> *</span>
-<span style="color: #9FC59F;"> * This function returns the first zone at or below a given zone index that is</span>
-<span style="color: #9FC59F;"> * within the allowed nodemask. The zoneref returned is a cursor that can be</span>
-<span style="color: #9FC59F;"> * used to iterate the zonelist with next_zones_zonelist by advancing it by</span>
-<span style="color: #9FC59F;"> * one before calling.</span>
-<span style="color: #9FC59F;"> *</span>
-<span style="color: #9FC59F;"> * When no eligible zone is found, zoneref-&gt;zone is NULL (zoneref itself is</span>
-<span style="color: #9FC59F;"> * never NULL). This may happen either genuinely, or due to concurrent nodemask</span>
-<span style="color: #9FC59F;"> * update due to cpuset modification.</span>
-<span style="color: #9FC59F;"> *</span>
-<span style="color: #9FC59F;"> * Return: Zoneref pointer for the first suitable zone found</span>
-<span style="color: #9FC59F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #F0DFAF; font-weight: bold;">inline</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #93E0E3;">first_zones_zonelist</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zonelist</span> *<span style="color: #DFAF8F;">zonelist</span>,
-                                        <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">highest_zoneidx</span>,
-                                        <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodes</span>)
+<pre class="example" id="orgaf61007">
+/**
+ * first_zones_zonelist - Returns the first zone at or below highest_zoneidx within the allowed nodemask in a zonelist
+ * @zonelist: The zonelist to search for a suitable zone
+ * @highest_zoneidx: The zone index of the highest zone to return
+ * @nodes: An optional nodemask to filter the zonelist with
+ *
+ * This function returns the first zone at or below a given zone index that is
+ * within the allowed nodemask. The zoneref returned is a cursor that can be
+ * used to iterate the zonelist with next_zones_zonelist by advancing it by
+ * one before calling.
+ *
+ * When no eligible zone is found, zoneref-&gt;zone is NULL (zoneref itself is
+ * never NULL). This may happen either genuinely, or due to concurrent nodemask
+ * update due to cpuset modification.
+ *
+ * Return: Zoneref pointer for the first suitable zone found
+ */
+static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> next_zones_zonelist(zonelist-&gt;_zonerefs,
-                                                        highest_zoneidx, nodes);
+	return next_zones_zonelist(zonelist-&gt;_zonerefs,
+							highest_zoneidx, nodes);
 }
 </pre>
-</div>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #9FC59F;">/**</span>
-<span style="color: #9FC59F;"> * next_zones_zonelist - Returns the next zone at or below highest_zoneidx within the allowed nodemask using a cursor within a zonelist as a starting point</span>
-<span style="color: #9FC59F;"> * </span><span style="color: #BFEBBF;">@z</span><span style="color: #9FC59F;">: The cursor used as a starting point for the search</span>
-<span style="color: #9FC59F;"> * </span><span style="color: #BFEBBF;">@highest_zoneidx</span><span style="color: #9FC59F;">: The zone index of the highest zone to return</span>
-<span style="color: #9FC59F;"> * </span><span style="color: #BFEBBF;">@nodes</span><span style="color: #9FC59F;">: An optional nodemask to filter the zonelist with</span>
-<span style="color: #9FC59F;"> *</span>
-<span style="color: #9FC59F;"> * This function returns the next zone at or below a given zone index that is</span>
-<span style="color: #9FC59F;"> * within the allowed nodemask using a cursor as the starting point for the</span>
-<span style="color: #9FC59F;"> * search. The zoneref returned is a cursor that represents the current zone</span>
-<span style="color: #9FC59F;"> * being examined. It should be advanced by one before calling</span>
-<span style="color: #9FC59F;"> * next_zones_zonelist again.</span>
-<span style="color: #9FC59F;"> *</span>
-<span style="color: #9FC59F;"> * Return: the next zone at or below highest_zoneidx within the allowed</span>
-<span style="color: #9FC59F;"> * nodemask using a cursor within a zonelist as a starting point</span>
-<span style="color: #9FC59F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">static</span> <span style="color: #7CB8BB;">__always_inline</span> <span style="color: #F0DFAF; font-weight: bold;">struct</span> zoneref *next_zones_zonelist(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #DFAF8F;">z</span>,
-                                        <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">highest_zoneidx</span>,
-                                        <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodes</span>)
+<pre class="example" id="org934aaab">
+/**
+ * next_zones_zonelist - Returns the next zone at or below highest_zoneidx within the allowed nodemask using a cursor within a zonelist as a starting point
+ * @z: The cursor used as a starting point for the search
+ * @highest_zoneidx: The zone index of the highest zone to return
+ * @nodes: An optional nodemask to filter the zonelist with
+ *
+ * This function returns the next zone at or below a given zone index that is
+ * within the allowed nodemask using a cursor as the starting point for the
+ * search. The zoneref returned is a cursor that represents the current zone
+ * being examined. It should be advanced by one before calling
+ * next_zones_zonelist again.
+ *
+ * Return: the next zone at or below highest_zoneidx within the allowed
+ * nodemask using a cursor within a zonelist as a starting point
+ */
+static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
 {
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (likely(<span style="color: #F0DFAF; font-weight: bold;">!</span>nodes &amp;&amp; zonelist_zone_idx(z) &lt;= highest_zoneidx))
-                <span style="color: #F0DFAF; font-weight: bold;">return</span> z;
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> __next_zones_zonelist(z, highest_zoneidx, nodes);
+	if (likely(!nodes &amp;&amp; zonelist_zone_idx(z) &lt;= highest_zoneidx))
+		return z;
+	return __next_zones_zonelist(z, highest_zoneidx, nodes);
 }
 </pre>
-</div>
 <p>
-可以看到一般最优可能的就是首选传进来的zone就满足条件了，如果不满足条件通过__next_zones_zonelist继续获取目标zone。从这个highest_zoneidx的<a href="#org75ee8c3">获得过程</a>可以知道其最大就是<a href="#orgcd1a045">zone_type</a>里定义的，也就是它是来自一个节点里的zone。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
+可以看到一般最优可能的就是首选传进来的zone就满足条件了，如果不满足条件通过__next_zones_zonelist继续获取目标zone。从这个highest_zoneidx的<a href="#orgd431c76">获得过程</a>可以知道其最大就是<a href="#orgba58bb6">zone_type</a>里定义的，也就是它是来自一个节点里的zone。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">Returns the next zone at or below highest_zoneidx in a zonelist</span><span style="color: #5F7F5F;"> */</span>
-<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #93E0E3;">__next_zones_zonelist</span>(<span style="color: #F0DFAF; font-weight: bold;">struct</span> <span style="color: #7CB8BB;">zoneref</span> *<span style="color: #DFAF8F;">z</span>,
-                                        <span style="color: #F0DFAF; font-weight: bold;">enum</span> <span style="color: #7CB8BB;">zone_type</span> <span style="color: #DFAF8F;">highest_zoneidx</span>,
-                                        <span style="color: #7CB8BB;">nodemask_t</span> *<span style="color: #DFAF8F;">nodes</span>)
+<pre class="example" id="org49cb960">
+/* Returns the next zone at or below highest_zoneidx in a zonelist */
+struct zoneref *__next_zones_zonelist(struct zoneref *z,
+					enum zone_type highest_zoneidx,
+					nodemask_t *nodes)
 {
-        <span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;">         * Find the next suitable zone to use for the allocation.</span>
-<span style="color: #7F9F7F;">         * Only filter based on nodemask if it's set</span>
-<span style="color: #5F7F5F;">         */</span>
-        <span style="color: #F0DFAF; font-weight: bold;">if</span> (unlikely(nodes == <span style="color: #BFEBBF;">NULL</span>))
-                <span style="color: #F0DFAF; font-weight: bold;">while</span> (zonelist_zone_idx(z) &gt; highest_zoneidx)
-                        z++;
-        <span style="color: #F0DFAF; font-weight: bold;">else</span>
-                <span style="color: #F0DFAF; font-weight: bold;">while</span> (zonelist_zone_idx(z) &gt; highest_zoneidx ||
-                                (zonelist_zone(z) &amp;&amp; <span style="color: #F0DFAF; font-weight: bold;">!</span>zref_in_nodemask(z, nodes)))
-                        z++;
+	/*
+	 * Find the next suitable zone to use for the allocation.
+	 * Only filter based on nodemask if it's set
+	 */
+	if (unlikely(nodes == NULL))
+		while (zonelist_zone_idx(z) &gt; highest_zoneidx)
+			z++;
+	else
+		while (zonelist_zone_idx(z) &gt; highest_zoneidx ||
+				(zonelist_zone(z) &amp;&amp; !zref_in_nodemask(z, nodes)))
+			z++;
 
-        <span style="color: #F0DFAF; font-weight: bold;">return</span> z;
+	return z;
 }
 </pre>
-</div>
 <p>
 在这里看到了z自增的语句，假如没有给定目标节点的限制，那么就只需要循环到zoneref:zone_idx小于或等于highest_zoneidx就行。如果限定了node，那么还需要满足zone:node指明的节点号在参数nodes中被设置才行。这里zonelist里的zoneref有所有节点的所有zone，循环里是可能都用到的一直寻找到一个满足条件的zone。
 </p>
@@ -2040,14 +2013,13 @@ ac-&gt;preferred_zoneref = first_zones_zonelist(ac-&gt;zonelist,
 <p>
 下面接续分析：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * Forbid the first pass from falling back to types that fragment</span>
-<span style="color: #7F9F7F;"> * memory until all local zones are considered.</span>
-<span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="orge33a394">
+/*
+ * Forbid the first pass from falling back to types that fragment
+ * memory until all local zones are considered.
+ */
 alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 </pre>
-</div>
 
 <p>
 这段代码主要就是禁止在第一次分配时造成内存碎片，细节不赘述了，比较简单。
@@ -2058,59 +2030,58 @@ alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 </p>
 </div>
 </div>
-<div id="outline-container-orgfcaaf47" class="outline-3">
-<h3 id="orgfcaaf47"><span class="section-number-3">3.2.</span> 第二部分</h3>
+<div id="outline-container-orga0bb2aa" class="outline-3">
+<h3 id="orga0bb2aa"><span class="section-number-3">3.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 第二部分主要就是分配页面的动作，这主要分两个路径，一是快速路径通过get_page_from_freelist，二是慢速路径通过__alloc_pages_slowpath，本文主要介绍快速路径的流程，慢速路径参见作者其它文章。当快速路径不能分配页面时，就会走慢速路径了：
 </p>
-<div class="org-src-container">
-<pre class="src src-c"><span style="color: #5F7F5F;">/* </span><span style="color: #7F9F7F;">First allocation attempt</span><span style="color: #5F7F5F;"> */</span>
+<pre class="example" id="org0efc49a">
+/* First allocation attempt */
 page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &amp;ac);
-<span style="color: #F0DFAF; font-weight: bold;">if</span> (likely(page))
-        <span style="color: #F0DFAF; font-weight: bold;">goto</span> <span style="color: #BFEBBF;">out</span>;
+if (likely(page))
+	goto out;
 
 alloc_gfp = gfp;
-ac.spread_dirty_pages = <span style="color: #BFEBBF;">false</span>;
+ac.spread_dirty_pages = false;
 
-<span style="color: #5F7F5F;">/*</span>
-<span style="color: #7F9F7F;"> * Restore the original nodemask if it was potentially replaced with</span>
-<span style="color: #7F9F7F;"> * &amp;cpuset_current_mems_allowed to optimize the fast-path attempt.</span>
-<span style="color: #5F7F5F;"> */</span>
+/*
+ * Restore the original nodemask if it was potentially replaced with
+ * &amp;cpuset_current_mems_allowed to optimize the fast-path attempt.
+ */
 ac.nodemask = nodemask;
 
 page = __alloc_pages_slowpath(alloc_gfp, order, &amp;ac);
 </pre>
-</div>
 <p>
 可以看到当快速路径不能分配页面时，就会调整alloc_gfp，因为alloc_gfp在快速路径分配页面时可能施加了额外的限制，比如前面分析过的current_gfp_context里可能施加不能进行IO或文件系统相关的
-操作，在<a href="#org10e3385">prepare_alloc_pages</a>里施加的__GFP_HARDWALL标志以严格遵循cpuset的策略，这些限制在慢速路径时都会解除，以提高内存分配的成功率。
+操作，在<a href="#org0f646d7">prepare_alloc_pages</a>里施加的__GFP_HARDWALL标志以严格遵循cpuset的策略，这些限制在慢速路径时都会解除，以提高内存分配的成功率。
 </p>
 
 <p>
-另外spread_dirty_pages也是作为一种分散脏页面的限制在慢速路径也会解开。此外用于分配内存的ac-&gt;nodemask在<a href="#org10e3385">prepare_alloc_pages</a>里也可能因为cpuset内存组限制为cpuset_current_mems_allowed，在慢速路径时这种限制也没有了，用于分配内存的节点来自传进来的参数就可以了。
+另外spread_dirty_pages也是作为一种分散脏页面的限制在慢速路径也会解开。此外用于分配内存的ac-&gt;nodemask在<a href="#org0f646d7">prepare_alloc_pages</a>里也可能因为cpuset内存组限制为cpuset_current_mems_allowed，在慢速路径时这种限制也没有了，用于分配内存的节点来自传进来的参数就可以了。
 </p>
 
 <p>
-后面的<a href="#orgc498fa5">节</a>还会详细介绍快速路径的下一个核心函数get_page_from_freelist。
+后面的<a href="#org360c9b1">节</a>还会详细介绍快速路径的下一个核心函数get_page_from_freelist。
 </p>
 </div>
 </div>
-<div id="outline-container-org4ad27e8" class="outline-3">
-<h3 id="org4ad27e8"><span class="section-number-3">3.3.</span> 第三部分</h3>
+<div id="outline-container-org069586b" class="outline-3">
+<h3 id="org069586b"><span class="section-number-3">3.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 这一部分主要是做分配内存成功后的初始化或检测，比如不满足mem cgroup的限制时，还要通过__free_pages释放页面，详细细节之于本文主题就不介绍了。
 </p>
 
 <p>
-<a id="orgc498fa5"></a>
+<a id="org360c9b1"></a>
 </p>
 </div>
 </div>
 </div>
-<div id="outline-container-orge493d6a" class="outline-2">
-<h2 id="orge493d6a"><span class="section-number-2">4.</span> get_page_from_freelist</h2>
+<div id="outline-container-org226151c" class="outline-2">
+<h2 id="org226151c"><span class="section-number-2">4.</span> get_page_from_freelist</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 该函数会进一步进行快速页面的分配流程，也是分三个部分来分析这个函数。
@@ -2121,22 +2092,46 @@ page = __alloc_pages_slowpath(alloc_gfp, order, &amp;ac);
 <li>第三部分是进一步调用rmqueue函数去获取页面。</li>
 </ul>
 </div>
-<div id="outline-container-org5f890d4" class="outline-3">
-<h3 id="org5f890d4"><span class="section-number-3">4.1.</span> 第一部分</h3>
+<div id="outline-container-orgdecc1e5" class="outline-3">
+<h3 id="orgdecc1e5"><span class="section-number-3">4.1.</span> 第一部分</h3>
+<div class="outline-text-3" id="text-4-1">
+<p>
+这里首先介绍一个宏循环，get_page_from_freelist函数的函数体基本都是在这个宏循环里完成，这个宏循环就是for_next_zone_zonelist_nodemask：
+</p>
+<pre class="example" id="orgd7c579a">
+#define for_next_zone_zonelist_nodemask(zone, z, highidx, nodemask) \
+	for (zone = zonelist_zone(z);	\
+		zone;							\
+		z = next_zones_zonelist(++z, highidx, nodemask),	\
+			zone = zonelist_zone(z))
+</pre>
+<p>
+这个宏传入四个参数，其中第一个参数zone是zone类型的指针，它会随着循环的进行而更新，get_page_from_freelist主要的逻辑就可以使用这个更新了的zone，循环退出的条件也就是zone为NULL时。zone通过zonelist_zone获得：
+</p>
+<pre class="example" id="org930d0df">
+static inline struct zone *zonelist_zone(struct zoneref *zoneref)
+{
+	return zoneref-&gt;zone;
+}
+</pre>
+<p>
+可以看出来，
+</p>
 </div>
-<div id="outline-container-orgebc890c" class="outline-3">
-<h3 id="orgebc890c"><span class="section-number-3">4.2.</span> 第二部分</h3>
 </div>
-<div id="outline-container-orgdac14e0" class="outline-3">
-<h3 id="orgdac14e0"><span class="section-number-3">4.3.</span> 第三部分</h3>
+<div id="outline-container-org6da0349" class="outline-3">
+<h3 id="org6da0349"><span class="section-number-3">4.2.</span> 第二部分</h3>
+</div>
+<div id="outline-container-orgf85c83c" class="outline-3">
+<h3 id="orgf85c83c"><span class="section-number-3">4.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-orgb6de3b2" class="outline-2">
-<h2 id="orgb6de3b2"><span class="section-number-2">5.</span> 附节</h2>
+<div id="outline-container-org862f801" class="outline-2">
+<h2 id="org862f801"><span class="section-number-2">5.</span> 附节</h2>
 <div class="outline-text-2" id="text-5">
 </div>
-<div id="outline-container-org7a2acb9" class="outline-3">
-<h3 id="org7a2acb9"><span class="section-number-3">5.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-orgba5162f" class="outline-3">
+<h3 id="orgba5162f"><span class="section-number-3">5.1.</span> get_vma_policy生成ilx</h3>
 <div class="outline-text-3" id="text-5-1">
 </div>
 </div>
@@ -2144,7 +2139,7 @@ page = __alloc_pages_slowpath(alloc_gfp, order, &amp;ac);
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-29 Fri 23:09</p>
+<p class="date">Created: 2024-12-01 Sun 00:30</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
