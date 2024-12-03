@@ -952,14 +952,12 @@ struct alloc_context {
 #+end_example
 它用于保存一些在内核内存管理内部使用的分配参数。nodemask、migratetype以及highest_zoneidx在分配流程中一旦初始化就不会改变。zonelist、preferred_zone以及highest_zoneidx第一次在快速路径中设置后，可能在后面的慢速路径中发生改变，可能会回退到其它zone中分配。
 
-这里着重解释下highest_zoneidx参数，它通过gfp_zone函数获得zone的编号zoneidx和
-处于[[zone_type][zone_type]]zondeidx编号越大，所索引的zone_type越低。处于zone_type靠前的所以每个zone里都有一个lowmem_reserve成员：
+这里着重解释下highest_zoneidx参数，它通过gfp_zone函数获得，为zone的编号，就是一个zone_type枚举类型值。每个zone里都有一个lowmem_reserve成员：
 #+begin_example
 	long lowmem_reserve[MAX_NR_ZONES];
 #+end_example
-它表示当前的zone需要回退到低区zone分配内存时，它需要查询这个数组，不能分配低于数组元素里存放的内存地址。
 
-另外由于highest_zoneidx也限制了内存分配最高可用的zone，那么在慢速路径中针对高于highest_zoneidx的zone就没有必要做回收或压缩了，因为即使回收/压缩出空闲内存了也会因为内存位于高highest_zoneidx的zone而不会使用，这相当于是内存回收/压缩的一种优化。
+另外由于highest_zoneidx也限制了内存分配最高可用的zone，那么在慢速路径中针对高于highest_zoneidx的zone就没有必要做回收或压缩了，因为即使回收/压缩出空闲内存了也会因为内存位于高于highest_zoneidx的zone而不会使用，这相当于是内存回收/压缩的一种优化。
 
 第一部分主要就是确定alloc_context参数：
 #+begin_example
@@ -1361,9 +1359,9 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
 	zonerefs->zone_idx = 0;
 }
 #+end_example
-从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出node作为参数，调用build_zonerefs_node，这样自然的效果就是距离当前处理节点（需要填充当前节点的node_zonelists）越近的节点，其里面的zone(s)排在zoneref（zonelist：_zonerefs）数组元素的前面。
+从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出node作为参数，调用build_zonerefs_node，这样自然的效果就是距离当前处理节点（需要填充当前节点的node_zonelists）越近的节点，其里面的zone(s)排在zoneref（zonelist：_zonerefs）数组元素的前面。有个小细节提下，最后一个zonerefs的zone为NULL，它会作为[[first_zones_zonelist][first_zones_zonelist]]函数没有找到符合条件的zone时的返回值。
 
-这里再稍微看下build_zonerefs_node函数的实现：
+这里再稍微详细看下build_zonerefs_node函数的实现：
 #+begin_example
 static int build_zonerefs_node(pg_data_t *pgdat, struct zoneref *zonerefs)
 {
@@ -1396,6 +1394,7 @@ static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
  */
 #define zone_idx(zone)		((zone) - (zone)->zone_pgdat->node_zones)
 #+end_example
+<<zoneref-table>>
 从zone_idx的实现知道，zone_type里的枚举类型也就是表示了zone的编号，比如ZONE_DMA的idx为0，ZONE_DMA32为1，依次类推。分析build_zonerefs_node函数的循环体可以知道，zonerefs数组里的元素，靠前的元素存放的zone其idx越大，因为zone_type的初始值为MAX_NR_ZONES，从较大的zone idx开始，针对某个具体的配置，这最终导致一个效果可能如下：
 #+begin_example
             zone_type    idx
@@ -1410,7 +1409,7 @@ zonerefs[3] ZONE_DMA     0
 #+end_example
 最后pgdat->node_zones成员表示了仅属于当前节点的所有zone，所以拿它作为基址偏移zone_type就可以得到相应zone_type的zone结构体了。
 
-这里需要详细理解这一点，因为[[ac-preferred_zoneref][后面的]]分配需要确定alloc_context: preferred_zoneref。
+这里之所以需要详细理解这一点，因为[[ac-preferred_zoneref][后面的]]分配需要确定alloc_context: preferred_zoneref。
 
 更多关于zone初始化的细节本文不再赘述了，参见笔者其它文章分析。
 
@@ -1479,6 +1478,7 @@ ac->spread_dirty_pages = (gfp_mask & __GFP_WRITE);
 	ac->preferred_zoneref = first_zones_zonelist(ac->zonelist,
 					ac->highest_zoneidx, ac->nodemask);
 #+end_example
+<<first_zones_zonelist>>
 通过first_zones_zonelist去获得目标zone，后面将使用这个目标zone去分配内存，ac->zonelist[[node_zonelist][前面]]分析过了如何得到。获得的目标zone其序号应当是小于或等于第二个参数ac->highest_zoneidx的，如果第三个参数ac->nodemask有值，还应当保证分出来的zone在ac->nodemask指明的节点里，下面是其实现：
 #+begin_example
 /**
@@ -1506,6 +1506,7 @@ static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
 							highest_zoneidx, nodes);
 }
 #+end_example
+<<next_zones_zonelist>>
 #+begin_example
 /**
  * next_zones_zonelist - Returns the next zone at or below highest_zoneidx within the allowed nodemask using a cursor within a zonelist as a starting point
@@ -1531,7 +1532,7 @@ static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
 	return __next_zones_zonelist(z, highest_zoneidx, nodes);
 }
 #+end_example
-可以看到一般最优可能的就是首选传进来的zone就满足条件了，如果不满足条件通过__next_zones_zonelist继续获取目标zone。从这个highest_zoneidx的[[gfp_zone][获得过程]]可以知道其最大就是[[zone_type][zone_type]]里定义的，也就是它是来自一个节点里的zone。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
+可以看到一般最优可能的就是首选传进来的zone就满足条件了，也就是_zonerefs的第一个元素就满足条件，[[zoneref-table][前面]]有介绍过，_zonerefs中排在前面的zone具有较大的zoneidx，这里也可以看到这些具有较大zoneidx的zone优先用于分配内存。如果不满足条件通过__next_zones_zonelist继续获取目标zone。在first_zones_zonelist里使用_zonerefs作为迭代寻找合适zoneref的开始位置。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
 #+begin_example
 /* Returns the next zone at or below highest_zoneidx in a zonelist */
 struct zoneref *__next_zones_zonelist(struct zoneref *z,
@@ -1605,7 +1606,7 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 这里首先介绍一个宏循环，get_page_from_freelist函数的函数体基本都是在这个宏循环里完成，这个宏循环就是for_next_zone_zonelist_nodemask：
 #+begin_example
 #define for_next_zone_zonelist_nodemask(zone, z, highidx, nodemask) \
-	for (zone = zonelist_zone(z);	\
+	for (zone = zonelist_zone(z);	                                \
 		zone;							\
 		z = next_zones_zonelist(++z, highidx, nodemask),	\
 			zone = zonelist_zone(z))
@@ -1617,7 +1618,56 @@ static inline struct zone *zonelist_zone(struct zoneref *zoneref)
 	return zoneref->zone;
 }
 #+end_example
-可以看出来，
+[[next_zones_zonelist][next_zones_zonelist]]函数前面已经分析过了。继续往下分析第一部分的代码：
+#+begin_example
+if (cpusets_enabled() &&
+        (alloc_flags & ALLOC_CPUSET) &&
+        !__cpuset_zone_allowed(zone, gfp_mask))
+                continue;
+#+end_example
+之前分析过，只要cpuset使能，并且当前这里继续分析下__cpuset_zone_allowed函数：
+#+begin_example
+static inline bool __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
+{
+	return cpuset_node_allowed(zone_to_nid(z), gfp_mask);
+}
+#+end_example
+#+begin_example
+bool cpuset_node_allowed(int node, gfp_t gfp_mask)
+{
+	struct cpuset *cs;		/* current cpuset ancestors */
+	bool allowed;			/* is allocation in zone z allowed? */
+	unsigned long flags;
+
+	if (in_interrupt())
+		return true;
+	if (node_isset(node, current->mems_allowed))
+		return true;
+	/*
+	 * Allow tasks that have access to memory reserves because they have
+	 * been OOM killed to get memory anywhere.
+	 */
+	if (unlikely(tsk_is_oom_victim(current)))
+		return true;
+	if (gfp_mask & __GFP_HARDWALL)	/* If hardwall request, stop here */
+		return false;
+
+	if (current->flags & PF_EXITING) /* Let dying task have memory */
+		return true;
+
+	/* Not hardwall and node outside mems_allowed: scan up cpusets */
+	spin_lock_irqsave(&callback_lock, flags);
+
+	rcu_read_lock();
+	cs = nearest_hardwall_ancestor(task_cs(current));
+	allowed = node_isset(node, cs->mems_allowed);
+	rcu_read_unlock();
+
+	spin_unlock_irqrestore(&callback_lock, flags);
+	return allowed;
+}
+#+end_example
+可以看到cpuset_node_allowed函数是这段代码的主题逻辑
 ** 第二部分
 ** 第三部分
 * 附节
