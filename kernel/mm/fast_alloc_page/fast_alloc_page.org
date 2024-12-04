@@ -1684,7 +1684,20 @@ static inline void zone_set_nid(struct zone *zone, int nid)
 
 再往后判断gfp标志是否设置了__GFP_HARDWALL，这个标志被设置，就要求内存必须来自current->mems_allowed，但是前面的node_isset并没有返回，那这说明不能满足__GFP_HARDWALL的语义了，返回false，表示不能在当前的内存节点（zone所在的结点）进行内存分配。再往后正在退出的进程的情况，也是返回true可以在当前zone分配内存，因为它退出了自然就有内存了。
 
-最后的情况才是检查cpuset内存资源组的设置，关于cpuset参见笔者其它文章。
+最后的情况才是检查cpuset内存资源组的设置，关于cpuset参见笔者其它文章。这里只是简单提一下，
+引用cgroup sub sys时通过的id是通过##拼起来的，比如如下使用的cpuset_cgrp_id：
+#+begin_example
+/* Retrieve the cpuset for a task */
+static inline struct cpuset *task_cs(struct task_struct *task)
+{
+	return css_cs(task_css(task, cpuset_cgrp_id));
+}
+#+end_example
+其拼接代码如下位置定义：
+#+begin_example
+./include/linux/cgroup-defs.h:42:#define SUBSYS(_x) _x ## _cgrp_id
+#+end_example
+
 
 ** 第二部分
 ** 第三部分
