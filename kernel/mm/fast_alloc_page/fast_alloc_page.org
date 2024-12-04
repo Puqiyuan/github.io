@@ -1625,7 +1625,6 @@ if (cpusets_enabled() &&
         !__cpuset_zone_allowed(zone, gfp_mask))
                 continue;
 #+end_example
-之前分析过，只要cpuset使能，并且当前这里继续分析下__cpuset_zone_allowed函数：
 #+begin_example
 static inline bool __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
 {
@@ -1667,7 +1666,26 @@ bool cpuset_node_allowed(int node, gfp_t gfp_mask)
 	return allowed;
 }
 #+end_example
-可以看到cpuset_node_allowed函数是这段代码的主题逻辑
+首先通过zone_to_nid去获得zone所在的节点号：
+#+begin_example
+static inline int zone_to_nid(struct zone *zone)
+{
+	return zone->node;
+}
+#+end_example
+zone的node成员表示了zone所在的节点号，在初始化的时候通过zone_set_nid去设置：
+#+begin_example
+static inline void zone_set_nid(struct zone *zone, int nid)
+{
+	zone->node = nid;
+}
+#+end_example
+可以看到cpuset_node_allowed函数是这段代码的主体逻辑。通过in_terrupt判断出当前是在中断上下文的话返回true，代表任何节点分配内存都可以，中断上下文使用内存主要满足可用性，所以所有节点都可以。另外zone所在的节点在当前进程设置的mems_allowed节点里时也返回true，这是优先判断的。如果当前进程是oom选中的victim进程时，也返回true进行内存分配，因为victim进程很快会被杀死而释放出更多的内存。
+
+再往后判断gfp标志是否设置了__GFP_HARDWALL，这个标志被设置，就要求内存必须来自current->mems_allowed，但是前面的node_isset并没有返回，那这说明不能满足__GFP_HARDWALL的语义了，返回false，表示不能在当前的内存节点（zone所在的结点）进行内存分配。再往后正在退出的进程的情况，也是返回true可以在当前zone分配内存，因为它退出了自然就有内存了。
+
+最后的情况才是检查cpuset内存资源组的设置，关于cpuset参见笔者其它文章。
+
 ** 第二部分
 ** 第三部分
 * 附节

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-12-03 Tue 21:06 -->
+<!-- 2024-12-04 Wed 23:06 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>物理页面分配之快速路径</title>
@@ -38,31 +38,31 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org0653694">1. alloc_pages_noprof</a></li>
-<li><a href="#org003361e">2. alloc_pages_mpol_noprof</a>
+<li><a href="#org2959abc">1. alloc_pages_noprof</a></li>
+<li><a href="#org6ae394e">2. alloc_pages_mpol_noprof</a>
 <ul>
-<li><a href="#orgbcf9dfe">2.1. 第一部分</a></li>
-<li><a href="#orge350766">2.2. 第二部分</a></li>
-<li><a href="#orgbfa673f">2.3. 第三部分</a></li>
+<li><a href="#org5a003aa">2.1. 第一部分</a></li>
+<li><a href="#orgc35b031">2.2. 第二部分</a></li>
+<li><a href="#org54d4242">2.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org84f7f7c">3. __alloc_pages_noprof</a>
+<li><a href="#orgcfc62ca">3. __alloc_pages_noprof</a>
 <ul>
-<li><a href="#org46c7824">3.1. 第一部分</a></li>
-<li><a href="#orgf62a47e">3.2. 第二部分</a></li>
-<li><a href="#org0aeea25">3.3. 第三部分</a></li>
+<li><a href="#org6c7d554">3.1. 第一部分</a></li>
+<li><a href="#org2cb8408">3.2. 第二部分</a></li>
+<li><a href="#org7912ab9">3.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#org36676d2">4. get_page_from_freelist</a>
+<li><a href="#orgb428098">4. get_page_from_freelist</a>
 <ul>
-<li><a href="#orgfcfb8e0">4.1. 第一部分</a></li>
-<li><a href="#orga85a742">4.2. 第二部分</a></li>
-<li><a href="#org151874c">4.3. 第三部分</a></li>
+<li><a href="#org280a6f6">4.1. 第一部分</a></li>
+<li><a href="#org42cb55d">4.2. 第二部分</a></li>
+<li><a href="#org6b115e8">4.3. 第三部分</a></li>
 </ul>
 </li>
-<li><a href="#orgc76393c">5. 附节</a>
+<li><a href="#org6f9e132">5. 附节</a>
 <ul>
-<li><a href="#org2362ee1">5.1. get_vma_policy生成ilx</a></li>
+<li><a href="#org1ca7a58">5.1. get_vma_policy生成ilx</a></li>
 </ul>
 </li>
 </ul>
@@ -72,13 +72,13 @@
 本文分析在理想情况下，也就是没有内存短缺时内核通过伙伴系统分配物理页面的流程。物理页面分配的接口包括alloc_pages，这个函数在成功分配时返回的是第一个页面的page数据结构。另外一类接口是__get_free_pages，返回的是内核空间的虚拟地址。本文主要以alloc_pages为入口，分析内核是如何在理想情况下经过快速路径去分配物理页面的，alloc_pages就是一个简单的宏定义，主要调用alloc_pages_noprof。
 </p>
 
-<div id="outline-container-org0653694" class="outline-2">
-<h2 id="org0653694"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
+<div id="outline-container-org2959abc" class="outline-2">
+<h2 id="org2959abc"><span class="section-number-2">1.</span> alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 <b>原型：</b>
 </p>
-<pre class="example" id="org96b93c0">
+<pre class="example" id="org612ef64">
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 </pre>
 <p>
@@ -96,7 +96,7 @@ struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 <p>
 参数gfp的类型是gfp_t：
 </p>
-<pre class="example" id="orgb0c1b1e">
+<pre class="example" id="org0f6cb7f">
 typedef unsigned int __bitwise gfp_t;
 </pre>
 <p>
@@ -107,7 +107,7 @@ __bitwise主要是为了类型安全而存在，比如gfp_t类型的量不能和
 <p>
 该函数会根据当前上下文是进程上下文还是中断上下文，分不同的情况传入不同的参数pol（类型为mempolicy）去调用alloc_pages_mpol_noprof函数，alloc_pages_noprof定义如下：
 </p>
-<pre class="example" id="orge4073ad">
+<pre class="example" id="orgb139d2a">
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 {
 	struct mempolicy *pol = &amp;default_policy;
@@ -130,20 +130,20 @@ struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order)
 <p>
 判断是否在中断上下文中使用in_interrupt：
 </p>
-<pre class="example" id="org9d19cb5">
+<pre class="example" id="org57990b2">
 #define in_interrupt()		(irq_count())
 </pre>
 <p>
 在没有定义CONFIG_PREEMPT_RT的情况下，irq_count被如下定义：
 </p>
-<pre class="example" id="orgfa6d704">
+<pre class="example" id="org026bfc7">
 # define irq_count()		(preempt_count() &amp; (NMI_MASK | HARDIRQ_MASK | SOFTIRQ_MASK))
 </pre>
 
 <p>
 preempt_count在通用头文件include/asm-generic/preempt.h与架构头文件arch/x86/include/asm/preempt.h中均有定义，但是一般是架构头文件优先使用，这种优先特性体现在Makefile中对头文件使用-I选项包含头文件的先后上，preempt_count在上述两个头文件中均有实现，但是-I选项只要找到第一个有实现的头文件即停止搜索：
 </p>
-<pre class="example" id="orgacb9223">
+<pre class="example" id="org1ab9e70">
 LINUXINCLUDE    := \
 		-I$(srctree)/arch/$(SRCARCH)/include \
 		-I$(objtree)/arch/$(SRCARCH)/include/generated \
@@ -156,7 +156,7 @@ export KBUILD_CPPFLAGS NOSTDINC_FLAGS LINUXINCLUDE OBJCOPYFLAGS KBUILD_LDFLAGS
 <p>
 X86架构下，preempt_count被如下定义：
 </p>
-<pre class="example" id="orgee7e894">
+<pre class="example" id="org235a3f9">
 static __always_inline int preempt_count(void)
 {
 	return raw_cpu_read_4(pcpu_hot.preempt_count) &amp; ~PREEMPT_NEED_RESCHED;
@@ -165,7 +165,7 @@ static __always_inline int preempt_count(void)
 <p>
 也就是说每个CPU都有一个4字节的int量preempt_count表征现在的抢占计数，这32个bit按如下划分：
 </p>
-<pre class="example" id="org5c0bf66">
+<pre class="example" id="org820847b">
         PREEMPT_MASK:	0x000000ff
         SOFTIRQ_MASK:	0x0000ff00
         HARDIRQ_MASK:	0x000f0000
@@ -175,7 +175,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 也就是说最低8个bit（最低1个字节）用来计数抢占，低第二个字节用来表示软中断的计数，依次类推，那么NMI_MASK、HARDIRQ_MASK以及SOFTIRQ_MASK等各种MASK宏用来取出对应字段计数的，就可以按如下代码定出：
 </p>
-<pre class="example" id="org3fdff45">
+<pre class="example" id="org88effbb">
 #define PREEMPT_BITS	8
 #define SOFTIRQ_BITS	8
 #define HARDIRQ_BITS	4
@@ -197,7 +197,7 @@ PREEMPT_NEED_RESCHED:	0x80000000
 <p>
 所以回到前面irq_count的定义以及回答如何判定是不是在中断上下文中：只要不可屏蔽中断、硬中断以及软中断三者有其一即可认为当前处于中断上下文中。而一般在进入中断上下文时会对preempt_count相应的字段进行自增：
 </p>
-<pre class="example" id="org088f74d">
+<pre class="example" id="orgc9b0807">
 __irq_enter-&gt;preempt_count_add-&gt;__preempt_count_add
 </pre>
 
@@ -225,7 +225,7 @@ __GFP_THISNODE标志主要作用是表明从指定的节点上分配内存，禁
 <p>
 当既不在中断上下文gfp参数也没有设置__GFP_THISNODE时，就会调用get_task_policy函数：
 </p>
-<pre class="example" id="org6ab5c5b">
+<pre class="example" id="orgfc87d3d">
 struct mempolicy *get_task_policy(struct task_struct *p)
 {
 	struct mempolicy *pol = p-&gt;mempolicy;
@@ -248,7 +248,7 @@ struct mempolicy *get_task_policy(struct task_struct *p)
 <p>
 该函数首先获取当前进程的内存分配策略mempolicy，mempolicy可以被关联到一个进程，也可以关联到一个VMA。对于VMA关联的，优先考虑，然后才是进程关联。根据上面get_task_policy函数的定义，内核有一个默认的mempolicy叫default_policy，其定义如下：
 </p>
-<pre class="example" id="org393b43c">
+<pre class="example" id="orgd9311b1">
 static struct mempolicy default_policy = {
 	.refcnt = ATOMIC_INIT(1), /* never free it */
 	.mode = MPOL_LOCAL,
@@ -302,14 +302,14 @@ MPOL_LOCAL是NUMA内存策略的默认方式，所谓NUMA内存策略可以允�
 回到get_task_policy函数，如果进程有内存分配策略mempolicy，则返回这个策略。如果进程没有内存策略，那么就会从系统的全局节点策略数组preferrred_node_policy中去获取内存策略，当然在系统启动早期preferred_node_policy里可能是没有数据的，所以需要判断pol-&gt;mode非零，因为preferred_node_policy的定义是static的（被初始化为0）：
 </p>
 
-<pre class="example" id="org7f235a7">
+<pre class="example" id="org84651a2">
 static struct mempolicy preferred_node_policy[MAX_NUMNODES];
 </pre>
 
 <p>
 MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </p>
-<pre class="example" id="orga3209a6">
+<pre class="example" id="orgee0d098">
 #ifdef CONFIG_NODES_SHIFT
 #define NODES_SHIFT     CONFIG_NODES_SHIFT
 #else
@@ -319,7 +319,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 </pre>
 
 <p>
-<a id="orgc96599a"></a>
+<a id="orge9e3033"></a>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
 #+begin_exampleonf
 config NODES_SHIFT
@@ -342,7 +342,7 @@ config NODES_SHIFT
 <p>
 get_task_policy中还使用了numa_node_id函数，在定义了CONFIG_USE_PERCPU_NUMA_NODE_ID时该函数定义如下：
 </p>
-<pre class="example" id="orga6073b5">
+<pre class="example" id="org0b35ccc">
 #ifdef CONFIG_USE_PERCPU_NUMA_NODE_ID
 DECLARE_PER_CPU(int, numa_node);
 
@@ -357,7 +357,7 @@ static inline int numa_node_id(void)
 <p>
 该值在cpu启动初始化的流程被初始化：
 </p>
-<pre class="example" id="org3c624b3">
+<pre class="example" id="org86d9c3f">
 start_secondary-&gt;cpu_init-&gt;set_numa_node
 #ifndef set_numa_node
 static inline void set_numa_node(int node)
@@ -369,20 +369,20 @@ static inline void set_numa_node(int node)
 </div>
 </div>
 
-<div id="outline-container-org003361e" class="outline-2">
-<h2 id="org003361e"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
+<div id="outline-container-org6ae394e" class="outline-2">
+<h2 id="org6ae394e"><span class="section-number-2">2.</span> alloc_pages_mpol_noprof</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 <b>原型：</b>
 </p>
-<pre class="example" id="org1a25d4f">
+<pre class="example" id="orgbf13ef2">
 struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *pol, pgoff_t ilx, int nid)
 </pre>
 
 <p>
 <b>作用：</b><br>
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org2362ee1">附节: get_vma_policy生成ilx</a>中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文<a href="#org1ca7a58">附节: get_vma_policy生成ilx</a>中有介绍。
 </p>
 
 <p>
@@ -402,13 +402,13 @@ alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
 </p>
 </div>
 
-<div id="outline-container-orgbcf9dfe" class="outline-3">
-<h3 id="orgbcf9dfe"><span class="section-number-3">2.1.</span> 第一部分</h3>
+<div id="outline-container-org5a003aa" class="outline-3">
+<h3 id="org5a003aa"><span class="section-number-3">2.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-2-1">
 <p>
 这部分代码确定分配的节点mask以及目标节点的节点号，代码如下：
 </p>
-<pre class="example" id="org6e57401">
+<pre class="example" id="org3db5bc3">
 nodemask_t *nodemask;
 nodemask = policy_nodemask(gfp, pol, ilx, &amp;nid);
 </pre>
@@ -419,7 +419,7 @@ nodemask = policy_nodemask(gfp, pol, ilx, &amp;nid);
 <p>
 policy_nodemask根据前面介绍的NUMA内存策略分几种case来给nodemask和nid赋予不同的值，其原型如下：
 </p>
-<pre class="example" id="org3b80770">
+<pre class="example" id="org236aca8">
 static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 				   pgoff_t ilx, int *nid)
 </pre>
@@ -427,7 +427,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
 <p>
 <b>第一种case MPOL_PREFERRED：</b>
 </p>
-<pre class="example" id="orgd090c09">
+<pre class="example" id="org0e7d22c">
 nodemask_t *nodemask = NULL;
 
 switch (pol-&gt;mode) {
@@ -443,7 +443,7 @@ case MPOL_PREFERRED:
 <p>
 <b>第二种case MPOL_PREFERRED_MANY：</b>
 </p>
-<pre class="example" id="org549a3cd">
+<pre class="example" id="org6012b6e">
 case MPOL_PREFERRED_MANY:
 	nodemask = &amp;pol-&gt;nodes;
 	if (pol-&gt;home_node != NUMA_NO_NODE)
@@ -457,7 +457,7 @@ case MPOL_PREFERRED_MANY:
 <p>
 <b>第三种case MPOL_BIND：</b>
 </p>
-<pre class="example" id="org919dd3b">
+<pre class="example" id="org184b874">
 case MPOL_BIND:
 	/* Restrict to nodemask (but not on lower zones) */
 	if (apply_policy_zone(pol, gfp_zone(gfp)) &amp;&amp;
@@ -512,10 +512,10 @@ ZONE_DEVICE主要用于特殊的内存设备，如NVDIMM（非易失性双列直
 
 <p>
 针对笔者目前环境的配置，zone_type的定义如下：
-<a id="org0f2b8bc"></a>
-<a id="org85b1f00"></a>
+<a id="orga223e40"></a>
+<a id="orge80bab8"></a>
 </p>
-<pre class="example" id="orgf2f1ac4">
+<pre class="example" id="org223248a">
 enum zone_type {
         ZONE_DMA,
         ZONE_DMA32,
@@ -527,10 +527,10 @@ enum zone_type {
 </pre>
 
 <p>
-<a id="orgdc77b2b"></a>
+<a id="orgc04d1be"></a>
 现在可以介绍gfp_zone函数了，gfp_zone函数的主要作用就是根据传入的gfp标志映射到不同类型的zone，也就是返回zone_type类型的枚举，这些类型前面刚介绍过了。现在看gfp_zone的实现：
 </p>
-<pre class="example" id="org92f6fd3">
+<pre class="example" id="org6d3e925">
 static inline enum zone_type gfp_zone(gfp_t flags)
 {
 	enum zone_type z;
@@ -545,7 +545,7 @@ static inline enum zone_type gfp_zone(gfp_t flags)
 <p>
 GFP_ZONE_TABLE这个宏类似于一个表（数组），它将不同的GFP标志组合映射到不同的zone_type：
 </p>
-<pre class="example" id="orgf2469fc">
+<pre class="example" id="org71a3863">
 #define GFP_ZONE_TABLE ( \
 	(ZONE_NORMAL &lt;&lt; 0 * GFP_ZONES_SHIFT)				       \
 	| (OPT_ZONE_DMA &lt;&lt; ___GFP_DMA * GFP_ZONES_SHIFT)		       \
@@ -565,13 +565,13 @@ GFP_ZONE_TABLE这个宏类似于一个表（数组），它将不同的GFP标志
 <p>
 这个宏其实定义了一种zone分配的回退机制，举个例子对于条目：
 </p>
-<pre class="example" id="orgd811a4a">
+<pre class="example" id="org77a761c">
 ZONE_MOVABLE &lt;&lt; (___GFP_MOVABLE | ___GFP_HIGHMEM) * GFP_ZONES_SHIFT
 </pre>
 <p>
 就是说当传入的GFP标志既设置了__GFP_MOVABLE又设置了__GFP_HIGHMEM，那么最多可以回退到ZONE_MOVABLE这种zone_type，又比如：
 </p>
-<pre class="example" id="orgc69c39f">
+<pre class="example" id="orgf0e5e33">
 (OPT_ZONE_DMA &lt;&lt; (___GFP_MOVABLE | ___GFP_DMA) * GFP_ZONES_SHIFT)
 </pre>
 <p>
@@ -597,7 +597,7 @@ GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个�
 <p>
 在没有定义特殊的内存zone（比如DMA，HIGHMEM等）时，都会退化为ZONE_NORMAL：
 </p>
-<pre class="example" id="org03172d7">
+<pre class="example" id="org7e1dd1c">
 #ifdef CONFIG_HIGHMEM
 #define OPT_ZONE_HIGHMEM ZONE_HIGHMEM
 #else
@@ -619,14 +619,14 @@ GFP_ZONES_SHIFT在笔者的环境就是2，也就是说GFP_ZONE_TABLE中每2个�
 <p>
 再来看gpf_zone函数就简单了首先从flags中拿到低4bit的值：
 </p>
-<pre class="example" id="org18bb4bd">
+<pre class="example" id="orgd3413e6">
 enum zone_type z;
 int bit = (__force int) (flags &amp; GFP_ZONEMASK);
 </pre>
 <p>
 为什么是低4bit呢，通过GFP_ZONEMASK的定义就知道了：
 </p>
-<pre class="example" id="orga8a4866">
+<pre class="example" id="org6061d51">
 enum {
         ___GFP_DMA_BIT,
         ___GFP_HIGHMEM_BIT,
@@ -647,9 +647,9 @@ enum {
 </pre>
 <p>
 这里可以看到低4个bit其实就是zone修饰符，指明了哪些zone用于分配内存。之前介绍过gfp_t本质是个int，但它具有受限的取值，以限制某些int能进行的运算（范围），但是gfp_t不行。比如上面提到了gfp_t可能的四种值，一个完整的gfp_t值列表如下：
-<a id="org63f09bd"></a>
+<a id="org58d4b54"></a>
 </p>
-<pre class="example" id="org024f41a">
+<pre class="example" id="orgcb6400c">
 enum {
 	___GFP_DMA_BIT,
 	___GFP_HIGHMEM_BIT,
@@ -695,7 +695,7 @@ enum {
 <p>
 继续分析gfp_zone函数：
 </p>
-<pre class="example" id="org17af3e0">
+<pre class="example" id="orgf93e879">
 z = (GFP_ZONE_TABLE &gt;&gt; (bit * GFP_ZONES_SHIFT)) &amp;
 				 ((1 &lt;&lt; GFP_ZONES_SHIFT) - 1);
 </pre>
@@ -711,7 +711,7 @@ z = (GFP_ZONE_TABLE &gt;&gt; (bit * GFP_ZONES_SHIFT)) &amp;
 <b>第四种case MPOL_INTERLEAVE：</b><br>
 根据前面的分析，这种情况就是内存分配在一组节点内交错循环分配：
 </p>
-<pre class="example" id="org31c8944">
+<pre class="example" id="orgf4dd088">
 case MPOL_INTERLEAVE:
 	/* Override input node id */
 	*nid = (ilx == NO_INTERLEAVE_INDEX) ?
@@ -721,7 +721,7 @@ case MPOL_INTERLEAVE:
 <p>
 可以看到，分两种情况选择使用不同的函数来获得内存分配的优先节点，NO_INTERLEAVE_INDEX主要指示了要不要使用task_struct:il_prev来作为索引选择内存分配的节点，如果使用task_struct:il_prev（也就是ilx参数为-1）则通过interleave_nodes函数来获得内存分配的节点：
 </p>
-<pre class="example" id="orga516466">
+<pre class="example" id="org41d865e">
 static unsigned int interleave_nodes(struct mempolicy *policy)
 {
 	unsigned int nid;
@@ -745,7 +745,7 @@ do-while循环主要是处理并发情况，此处不讨论了。该函数主要
 <p>
 这里需要简单看下next_node_in的实现，该函数主要是要处理一种临界情况，那就是返回的node id的序号等于MAX_NUMNODES，就又要回到参数srcp的第一个置位的bit的序号：
 </p>
-<pre class="example" id="orgd721ac1">
+<pre class="example" id="org4e214ca">
 #define next_node_in(n, src) __next_node_in((n), &amp;(src))
 static __always_inline unsigned int __next_node_in(int node, const nodemask_t *srcp)
 {
@@ -759,7 +759,7 @@ static __always_inline unsigned int __next_node_in(int node, const nodemask_t *s
 <p>
 如果不使用task_struct:il_prev，就会调用interleave_nid来获得内存分配的节点号：
 </p>
-<pre class="example" id="org46a6689">
+<pre class="example" id="orgaa83dea">
 static unsigned int interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
 	nodemask_t nodemask;
@@ -786,7 +786,7 @@ static unsigned int interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 <b>第五种case MPOL_WEIGHTED_INTERLEAVE：</b> <br>
 该种情况与case 4类似：
 </p>
-<pre class="example" id="orgd6d7642">
+<pre class="example" id="org140b9bb">
 case MPOL_WEIGHTED_INTERLEAVE:
 	*nid = (ilx == NO_INTERLEAVE_INDEX) ?
 		weighted_interleave_nodes(pol) :
@@ -800,7 +800,7 @@ case MPOL_WEIGHTED_INTERLEAVE:
 <p>
 首先是weighted_interleave_nodes函数：
 </p>
-<pre class="example" id="org11e0eed">
+<pre class="example" id="orge44f547">
 static unsigned int weighted_interleave_nodes(struct mempolicy *policy)
 {
 	unsigned int node;
@@ -835,7 +835,7 @@ retry:
 <p>
 if里的逻辑主要是更新下一个使用的节点，由next_node_in获得，同时current:il_weight也要更新为当前这个节点的权重，这可以通过get_il_weight去获得：
 </p>
-<pre class="example" id="org1129c51">
+<pre class="example" id="orgc01451e">
 static u8 get_il_weight(int node)
 {
 	u8 *table;
@@ -858,7 +858,7 @@ static u8 get_il_weight(int node)
 <p>
 当ilx有效时，是weighted_interleave_nid函数用来确定分配内存的节点：
 </p>
-<pre class="example" id="org946f12c">
+<pre class="example" id="org6546299">
 static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 {
 	nodemask_t nodemask;
@@ -907,7 +907,7 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 <p>
 最后这个policy_nodemask函数就是返回前面各个case算出的nodemask，注意nodemask是可以为NULL的，而nid通过最后一个参数带出：
 </p>
-<pre class="example" id="orgc9fed9d">
+<pre class="example" id="org004a96c">
 return nodemask;
 </pre>
 
@@ -918,8 +918,8 @@ return nodemask;
 </div>
 
 
-<div id="outline-container-orge350766" class="outline-3">
-<h3 id="orge350766"><span class="section-number-3">2.2.</span> 第二部分</h3>
+<div id="outline-container-orgc35b031" class="outline-3">
+<h3 id="orgc35b031"><span class="section-number-3">2.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-2-2">
 <p>
 下面介绍alloc_pages_mpol_noprof函数的第二部分，本部分依据不同的情况而调用不同的分配函数。
@@ -932,11 +932,11 @@ return nodemask;
 <p>
 调用alloc_pages_preferred_many函数：
 </p>
-<pre class="example" id="org3764581">
+<pre class="example" id="org2e7ef0b">
 if (pol-&gt;mode == MPOL_PREFERRED_MANY)
 	return alloc_pages_preferred_many(gfp, order, nid, nodemask);
 </pre>
-<pre class="example" id="org78426ed">
+<pre class="example" id="orgd86f48c">
 static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 						int nid, nodemask_t *nodemask)
 {
@@ -970,7 +970,7 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 <p>
 该情形实际是对大页内存分配的一个优化，即保证页面在一个指定的固定节点进行分配：
 </p>
-<pre class="example" id="orgdfd3e7a">
+<pre class="example" id="org9231f11">
 if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &amp;&amp;
     /* filter "hugepage" allocation, unless from alloc_pages() */
     order == HPAGE_PMD_ORDER &amp;&amp; ilx != NO_INTERLEAVE_INDEX) {
@@ -1024,20 +1024,20 @@ __GFP_THISNODE指明内存分配应该在nid指明的节点上固定分配，调
 <p>
 该种情形其实没有太多分析的了，就是以前面算好的nodemask和nid，上层函数过来的gfp与order调用__alloc_pages_noprof函数即可：
 </p>
-<pre class="example" id="org1b6f8db">
+<pre class="example" id="org15d5e51">
 page = __alloc_pages_noprof(gfp, order, nid, nodemask);
 </pre>
 </div>
 </div>
 
 
-<div id="outline-container-orgbfa673f" class="outline-3">
-<h3 id="orgbfa673f"><span class="section-number-3">2.3.</span> 第三部分</h3>
+<div id="outline-container-org54d4242" class="outline-3">
+<h3 id="org54d4242"><span class="section-number-3">2.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-2-3">
 <p>
 这部分代码主要是对numa页面的命中情况进行统计，分配出的页面如果确实和要求的nid一致，则增加zone:per_cpu_zonestats:vm_numa_event相应命中事件的计数：
 </p>
-<pre class="example" id="org8d5630a">
+<pre class="example" id="orga418a2a">
 if (unlikely(pol-&gt;mode == MPOL_INTERLEAVE) &amp;&amp; page) {
 	/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */
 	if (static_branch_likely(&amp;vm_numa_stat_key) &amp;&amp;
@@ -1052,7 +1052,7 @@ if (unlikely(pol-&gt;mode == MPOL_INTERLEAVE) &amp;&amp; page) {
 <p>
 注意这种更新只会对MPOL_INTERLEAVE策略有效，另外numa stat统计信息也是可以不使能的。下面看下__count_numa_event函数：
 </p>
-<pre class="example" id="orga44f097">
+<pre class="example" id="org13dedb1">
 static inline void
 __count_numa_event(struct zone *zone, enum numa_stat_item item)
 {
@@ -1068,7 +1068,7 @@ __count_numa_event(struct zone *zone, enum numa_stat_item item)
 <p>
 这里需要分析下page_to_nid和page_zone这两个函数，这在现代常见的NUMA或SMP架构里是十分常见的。首先是page_to_nid，定义在mm.h里：
 </p>
-<pre class="example" id="org0138327">
+<pre class="example" id="org1e3e961">
 #ifdef NODE_NOT_IN_PAGE_FLAGS
 int page_to_nid(const struct page *page);
 #else
@@ -1081,7 +1081,7 @@ static inline int page_to_nid(const struct page *page)
 <p>
 可以看到依据NODE_NOT_IN_PAGE_FLAGS宏是否定义而分两种版本的实现，如果它定义了，page_to_nid函数实现在sparse.c文件中，就不实现后面的版本了。这个宏其实区分了node id是否要放置在page:flags成员中，因为这个成员其实就是个unsigned long，也就是64个比特位，有可能是没有足够空间来容纳node id的：
 </p>
-<pre class="example" id="org3405b4a">
+<pre class="example" id="org17c531c">
 #if NODES_SHIFT != 0 &amp;&amp; NODES_WIDTH == 0
 #define NODE_NOT_IN_PAGE_FLAGS	1
 #endif
@@ -1089,7 +1089,7 @@ static inline int page_to_nid(const struct page *page)
 <p>
 要想NODE_NOT_IN_PAGE_FLAGS有定义，那么NODES_SHIFT要非0，而NODES_WIDTH为0：
 </p>
-<pre class="example" id="orgfc4aa5b">
+<pre class="example" id="orgeda0ed7">
 #ifdef CONFIG_NODES_SHIFT
 #define NODES_SHIFT     CONFIG_NODES_SHIFT
 #else
@@ -1097,13 +1097,13 @@ static inline int page_to_nid(const struct page *page)
 #endif
 </pre>
 <p>
-现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orgc96599a">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
+现代NUMA架构里一般CONFIG_NODES_SHIFT都是有值的，比如为10或3，这在前面的<a href="#orge9e3033">CONFIG_NODES_SHIFT</a>有介绍，也就是说第一个条件一般是满足的。
 </p>
 
 <p>
 下面就是考虑NODES_WIDTH的值：
 </p>
-<pre class="example" id="org40b52c6">
+<pre class="example" id="org356a3f8">
 #if ZONES_WIDTH + LRU_GEN_WIDTH + SECTIONS_WIDTH + NODES_SHIFT \
 	&lt;= BITS_PER_LONG - NR_PAGEFLAGS
 #define NODES_WIDTH		NODES_SHIFT
@@ -1121,7 +1121,7 @@ static inline int page_to_nid(const struct page *page)
 <p>
 ZONES_WIDTH定义如下：
 </p>
-<pre class="example" id="org5549f84">
+<pre class="example" id="orgc873d4f">
 #if MAX_NR_ZONES &lt; 2
 #define ZONES_SHIFT 0
 #elif MAX_NR_ZONES &lt;= 2
@@ -1137,13 +1137,13 @@ ZONES_WIDTH定义如下：
 #define ZONES_WIDTH		ZONES_SHIFT
 </pre>
 <p>
-MAX_NR_ZONES其实就是<a href="#org0f2b8bc">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
+MAX_NR_ZONES其实就是<a href="#orga223e40">__MAX_NR_ZONES</a>，在笔者的环境它被定义为5，所以ZONES_SHIFT就是3，ZONES_WIDTH亦为3。LRU_GEN_WIDTH定义为3，LRU的一种优化实现会用到，参见内核文档multigen_lru.rst。
 </p>
 
 <p>
 对于SECTIONS_WIDTH定义如下：
 </p>
-<pre class="example" id="orgb954564">
+<pre class="example" id="orgb3db969">
 #if defined(CONFIG_SPARSEMEM) &amp;&amp; !defined(CONFIG_SPARSEMEM_VMEMMAP)
 #define SECTIONS_WIDTH		SECTIONS_SHIFT
 #else
@@ -1151,7 +1151,7 @@ MAX_NR_ZONES其实就是<a href="#org0f2b8bc">__MAX_NR_ZONES</a>，在笔者的�
 #endif
 </pre>
 
-<pre class="example" id="org3e531b1">
+<pre class="example" id="org2d65919">
 #ifdef CONFIG_SPARSEMEM
 #include &lt;asm/sparsemem.h&gt;
 #define SECTIONS_SHIFT	(MAX_PHYSMEM_BITS - SECTION_SIZE_BITS)
@@ -1180,7 +1180,7 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) &lt;= (64 - 24 = 40)。也就是NODES_WIDTH有值为10，node id就在page:flags中。那么page_to_nid的实现就容易理解了，先将flags右移NODES_PGSHIFT位，这会保证node id所占的比特对齐到最低位，再与上NODES_MASK，只取node id所占的所有bit：
 </p>
-<pre class="example" id="org398af5f">
+<pre class="example" id="orgf24a64e">
 #define NODES_MASK		((1UL &lt;&lt; NODES_WIDTH) - 1)
 #define NODES_PGSHIFT		(NODES_PGOFF * (NODES_WIDTH != 0))
 #define SECTIONS_PGOFF		((sizeof(unsigned long)*8) - SECTIONS_WIDTH)
@@ -1189,7 +1189,7 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 再用下图总结下page:flags的布局：
 </p>
-<pre class="example" id="org28923c6">
+<pre class="example" id="orgb56f60d">
 | [SECTION] | [NODE] | ZONE | [LAST_CPUPID] | ... | FLAGS |
 </pre>
 <p>
@@ -1199,7 +1199,7 @@ mem_section，struct page并不是直接按物理地址或其他逻辑地址存�
 <p>
 后面再来理解page_zone就简单了，它通过zone type返回当前节点对应的zone结构体：
 </p>
-<pre class="example" id="org685d2f1">
+<pre class="example" id="orgfa225e4">
 static inline struct zone *page_zone(const struct page *page)
 {
 	return &amp;NODE_DATA(page_to_nid(page))-&gt;node_zones[page_zonenum(page)];
@@ -1208,7 +1208,7 @@ static inline struct zone *page_zone(const struct page *page)
 <p>
 page_to_nid前面已经介绍了，page_zonenum的实现类似：
 </p>
-<pre class="example" id="orgf45b5db">
+<pre class="example" id="orgc21651f">
 static inline enum zone_type page_zonenum(const struct page *page)
 {
 	ASSERT_EXCLUSIVE_BITS(page-&gt;flags, ZONES_MASK &lt;&lt; ZONES_PGSHIFT);
@@ -1227,13 +1227,13 @@ static inline enum zone_type page_zonenum(const struct page *page)
 </div>
 </div>
 
-<div id="outline-container-org84f7f7c" class="outline-2">
-<h2 id="org84f7f7c"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
+<div id="outline-container-orgcfc62ca" class="outline-2">
+<h2 id="orgcfc62ca"><span class="section-number-2">3.</span> __alloc_pages_noprof</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 <b>原型：</b>
 </p>
-<pre class="example" id="orga6cb7bb">
+<pre class="example" id="orgc2d2abc">
 struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
 				      int preferred_nid, nodemask_t *nodemask)
 </pre>
@@ -1263,14 +1263,14 @@ struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
 下面逐一分析。
 </p>
 </div>
-<div id="outline-container-org46c7824" class="outline-3">
-<h3 id="org46c7824"><span class="section-number-3">3.1.</span> 第一部分</h3>
+<div id="outline-container-org6c7d554" class="outline-3">
+<h3 id="org6c7d554"><span class="section-number-3">3.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-3-1">
 <p>
-<a id="org3c16215"></a>
+<a id="orgba39ef5"></a>
 首先介绍一个结构体alloc_context：
 </p>
-<pre class="example" id="org8aa0d99">
+<pre class="example" id="orgd2586a6">
 struct alloc_context {
 	struct zonelist *zonelist;
 	nodemask_t *nodemask;
@@ -1298,7 +1298,7 @@ struct alloc_context {
 <p>
 这里着重解释下highest_zoneidx参数，它通过gfp_zone函数获得，为zone的编号，就是一个zone_type枚举类型值。每个zone里都有一个lowmem_reserve成员：
 </p>
-<pre class="example" id="org34f4c4c">
+<pre class="example" id="org308e6d8">
 long lowmem_reserve[MAX_NR_ZONES];
 </pre>
 
@@ -1309,7 +1309,7 @@ long lowmem_reserve[MAX_NR_ZONES];
 <p>
 第一部分主要就是确定alloc_context参数：
 </p>
-<pre class="example" id="orgafa1e54">
+<pre class="example" id="org0467f3a">
 struct page *page;
 unsigned int alloc_flags = ALLOC_WMARK_LOW;
 gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
@@ -1346,7 +1346,7 @@ alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 <p>
 ALLOC_WMARK_LOW代表内存的水位线之一，每个zone都有几种水位线，用于控制空闲内存在不同的水位时，在内存回收方面采取不同程度的措施：
 </p>
-<pre class="example" id="orgef190b7">
+<pre class="example" id="org53d984e">
 struct zone {
         /* Read-mostly fields */
  
@@ -1390,14 +1390,14 @@ alloc_gfp是在传进来的分配标志gfp的基础上在本次分配时还会�
 </p>
 
 <p>
-ac参数在<a href="#org3c16215">alloc_context</a>介绍过了。
+ac参数在<a href="#orgba39ef5">alloc_context</a>介绍过了。
 </p>
 
 <p>
 接下来的WARN_ON_ONCE_GFP是当order大于MAX_PAGE_ORDER时打印警告，单次分配的内存，不能做到物理上有大于2^MAX_PAGE_ORDER个页面连续，所以这里做了拦截。这里主要想稍微详细的展开WARN_ON_ONCE_GFP宏：
 </p>
 
-<pre class="example" id="orgb447548">
+<pre class="example" id="org761de96">
 #define WARN_ON_ONCE_GFP(cond, gfp)	({				\
 	static bool __section(".data.once") __warned;			\
 	int __ret_warn_once = !!(cond);					\
@@ -1416,7 +1416,7 @@ ac参数在<a href="#org3c16215">alloc_context</a>介绍过了。
 <p>
 另外有一个相对通用的WARN_ON_ONCE实现。针对x86来说，一般配置了CONFIG_GENERIC_BUG、CONFIG_DEBUG_BUGVERBOSE以及宏__WARN_FLAGS，后者是个架构相关的宏，并且在绝大分架构上都有定义，它支持通过主动产生异常的方式，在异常句柄里去打印warning警告信息，对于x86架构来说就是ud2指令（否则就是warn_slowpath_fmt方式打印）：
 </p>
-<pre class="example" id="org3fe21ba">
+<pre class="example" id="orge5d58b3">
 #define __WARN_FLAGS(flags)					\
 do {								\
 	__auto_type __flags = BUGFLAG_WARNING|(flags);		\
@@ -1428,7 +1428,7 @@ do {								\
 <p>
 这样WARN_ON_ONCE就可以通过__WARN_FLAGS方式实现：
 </p>
-<pre class="example" id="org24e32ae">
+<pre class="example" id="org4ea15ef">
 #define WARN_ON_ONCE(condition) ({				\
 	int __ret_warn_on = !!(condition);			\
 	if (unlikely(__ret_warn_on))				\
@@ -1442,7 +1442,7 @@ do {								\
 <p>
 可以看到这里传入了BUGFLAG_ONCE标志，__WARN_FLAGS的实现如下：
 </p>
-<pre class="example" id="org3ceb71c">
+<pre class="example" id="org911e205">
 #define __WARN_FLAGS(flags)					\
 do {								\
 	__auto_type __flags = BUGFLAG_WARNING|(flags);		\
@@ -1454,7 +1454,7 @@ do {								\
 <p>
 _BUG_FLAGS宏的作用相当于是准备参数并通过ud2指令触发异常，这里就不贴代码了。最后异常的处理会来到__report_bug函数，里面有使用BUGFLAG_ONCE来保证只打印一次：
 </p>
-<pre class="example" id="org7c287ad">
+<pre class="example" id="org3a1e92b">
 struct bug_entry *bug;
 const char *file;
 unsigned line, warning, once, done;
@@ -1487,7 +1487,7 @@ if (warning &amp;&amp; once) {
 <p>
 可以看到，只要设置了BUGFLAG_ONCE和BUGFLAG_WARNING，就是要打印warning且只打印一次的话，就会将BUGFLAG_DONE标志置上给bug-&gt;flags。这个bug类型是bug_entry，它是从bug table里通过bugaddr作为索引找到的：
 </p>
-<pre class="example" id="orgc05c26c">
+<pre class="example" id="org5bf6997">
 struct bug_entry *find_bug(unsigned long bugaddr)
 {
 	struct bug_entry *bug;
@@ -1519,7 +1519,7 @@ struct bug_entry *find_bug(unsigned long bugaddr)
 <p>
 回到__alloc_pages_noprof函数的第一部分继续看代码：
 </p>
-<pre class="example" id="orgcf551e4">
+<pre class="example" id="org73aee92">
 gfp &amp;= gfp_allowed_mask;
 /*
  * Apply scoped allocation constraints. This is mainly about GFP_NOFS
@@ -1534,14 +1534,14 @@ alloc_gfp = gfp;
 <p>
 这一部分对本次内存分配实际使用的gfp再次进行了一些调整并给到alloc_gfp。gfp_allowed_mask主要是用于解决启动早期不能使用一些gfp标志的问题，它初始定义如下：
 </p>
-<pre class="example" id="org7911d24">
+<pre class="example" id="org2490190">
 #define GFP_BOOT_MASK (__GFP_BITS_MASK &amp; ~(__GFP_RECLAIM|__GFP_IO|__GFP_FS))
 gfp_t gfp_allowed_mask __read_mostly = GFP_BOOT_MASK;
 </pre>
 <p>
 可以看到初始的时候，清除了这三个标志，意味着在启动阶段，这三个标志涉及到的功能内核还没有准备好，比如说磁盘IO或者文件操作还没有就绪。而在kernel_init_freeable函数里会解开这些限制：
 </p>
-<pre class="example" id="org910606e">
+<pre class="example" id="orge90fed6">
 static noinline void __init kernel_init_freeable(void)
 {
 	/* Now the scheduler is fully set up and can do blocking allocations */
@@ -1549,7 +1549,7 @@ static noinline void __init kernel_init_freeable(void)
     ...
 }
 </pre>
-<pre class="example" id="org75f8dec">
+<pre class="example" id="orge6a022b">
 #define __GFP_BITS_MASK ((__force gfp_t)((1 &lt;&lt; __GFP_BITS_SHIFT) - 1))
 </pre>
 <p>
@@ -1559,7 +1559,7 @@ __GFP_BITS_SHIFT就是最后一个gfp标志所占的比特，也就是所有gfp�
 <p>
 current_gfp_context主要是结合上Per-Process Flags，进程级别也可以设置gfp标志，存放于task_struct:flags域，比如进程可以设置PF_MEMALLOC_PIN标志，页面可以pin住，这时gfp flags需要清除__GFP_MOVABLE标志，也就是分配的页面是不能移动的了：
 </p>
-<pre class="example" id="org93a59cb">
+<pre class="example" id="org554973b">
 static inline gfp_t current_gfp_context(gfp_t flags)
 {
 	unsigned int pflags = READ_ONCE(current-&gt;flags);
@@ -1583,7 +1583,7 @@ static inline gfp_t current_gfp_context(gfp_t flags)
 <p>
 接下来继续分析prepare_alloc_pages函数，该函数最终敲定alloc_context参数，较为关键：
 </p>
-<pre class="example" id="org3a4dcfb">
+<pre class="example" id="orgf2cb16f">
 static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 		int preferred_nid, nodemask_t *nodemask,
 		struct alloc_context *ac, gfp_t *alloc_gfp,
@@ -1628,17 +1628,17 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 }
 </pre>
 <p>
-第一行确定最高可以分配的zone_type（idx），通过gfp_zone得到，该函数（宏）在前面已经<a href="#orgdc77b2b">详细</a>介绍了。
+第一行确定最高可以分配的zone_type（idx），通过gfp_zone得到，该函数（宏）在前面已经<a href="#orgc04d1be">详细</a>介绍了。
 第二行代码比较关键：
-<a id="orga4c4a0d"></a>
+<a id="org0c40ba2"></a>
 </p>
-<pre class="example" id="org5e69c12">
+<pre class="example" id="orgfd9c1ce">
 ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
 </pre>
 <p>
 这里就要引入内核内存管理的一个关键数据结构了：zonelist。在NUMA系统里每个内存节点由pglist_data数据结构表示，该结构体里有一个zonelist类型的数组成员名为node_zonelists：
 </p>
-<pre class="example" id="orgab4ab37">
+<pre class="example" id="org6c4d773">
  typedef struct pglist_data {
      ...;
   	/*
@@ -1651,9 +1651,9 @@ ac-&gt;zonelist = node_zonelist(preferred_nid, gfp_mask);
 } pg_data_t;
 </pre>
 <p>
-<a id="org2529776"></a>
+<a id="org002fcc2"></a>
 </p>
-<pre class="example" id="orgd4947fd">
+<pre class="example" id="org6603fe1">
 /*
  * One allocation request operates on a zonelist. A zonelist
  * is a list of zones, the first one is the 'goal' of the
@@ -1672,7 +1672,7 @@ struct zonelist {
 	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
 };
 </pre>
-<pre class="example" id="org7d18d83">
+<pre class="example" id="org324abe8">
 /*
  * This struct contains information about a zone in a zonelist. It is stored
  * here to avoid dereferences into large structures and lookups of tables
@@ -1682,7 +1682,7 @@ struct zoneref {
 	int zone_idx;		/* zone_idx(zoneref-&gt;zone) */
 };
 </pre>
-<pre class="example" id="orgf164db6">
+<pre class="example" id="orgb639785">
 /* Maximum number of zones on a zonelist */
 #define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
 </pre>
@@ -1695,9 +1695,9 @@ zoneref是具体存在一个zonelist里元素，它主要是加速访问zonelist
 </p>
 
 <p>
-有了这些背景知识再来理解<a href="#orga4c4a0d">node_zonelist</a>的实现就简单了，gfp_zonelist主要是看gfp标志里是否设置了__GFP_THISNODE依据不同的情况返回是fallback还是nofallback的zonelist索引：
+有了这些背景知识再来理解<a href="#org0c40ba2">node_zonelist</a>的实现就简单了，gfp_zonelist主要是看gfp标志里是否设置了__GFP_THISNODE依据不同的情况返回是fallback还是nofallback的zonelist索引：
 </p>
-<pre class="example" id="org94c01fc">
+<pre class="example" id="org5718bab">
 static inline int gfp_zonelist(gfp_t flags)
 {
 #ifdef CONFIG_NUMA
@@ -1718,14 +1718,14 @@ static inline int gfp_zonelist(gfp_t flags)
 <p>
 对于多节点NUMA架构来说主要通过如下流程去初始化zonelist：
 </p>
-<pre class="example" id="org27487e4">
+<pre class="example" id="orga5e3f2d">
 __build_all_zonelists-&gt;build_zonelists-&gt;build_zonelists_in_node_order-&gt;build_zonerefs_node-&gt;zoneref_set_zone
 </pre>
 
 <p>
 __build_all_zonelists里有如下代码循环针对所有的node去构建zonelist：
 </p>
-<pre class="example" id="org73a35ec">
+<pre class="example" id="orga007df6">
 for_each_node(nid) {
 	pg_data_t *pgdat = NODE_DATA(nid);
 	build_zonelists(pgdat);
@@ -1734,7 +1734,7 @@ for_each_node(nid) {
 <p>
 build_zonelists里有关键代码如下：
 </p>
-<pre class="example" id="orga11eef2">
+<pre class="example" id="org89a1382">
 while ((node = find_next_best_node(local_node, &amp;used_mask)) &gt;= 0) {
 	/*
 	 * We don't want to pressure a particular node.
@@ -1754,7 +1754,7 @@ build_zonelists_in_node_order(pgdat, node_order, nr_nodes);
 <p>
 就是说通过node_distance确定的节点间的距离，生成了一个node_order数组，这个数组里的元素是node的标号，数组里越靠后的元素表示的节点距离当前处理的节点越远，node_distance可以根据下层硬件的实际拓扑通过ACPI表传上来，这方面的细节参见笔者其它文章。node_order生成好了之后，它又作为参数调用了build_zonelists_in_node_order函数：
 </p>
-<pre class="example" id="org0a59c2e">
+<pre class="example" id="org136f07b">
 /*
  * Build zonelists ordered by node and zones within node.
  * This results in maximum locality--normal zone overflows into local
@@ -1781,13 +1781,13 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
 }
 </pre>
 <p>
-从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出node作为参数，调用build_zonerefs_node，这样自然的效果就是距离当前处理节点（需要填充当前节点的node_zonelists）越近的节点，其里面的zone(s)排在zoneref（zonelist：_zonerefs）数组元素的前面。有个小细节提下，最后一个zonerefs的zone为NULL，它会作为<a href="#org66b27ba">first_zones_zonelist</a>函数没有找到符合条件的zone时的返回值。
+从这个函数可以看出填充zonerefs的一个顺序：就是按照node_order里指明的节点依次取出node作为参数，调用build_zonerefs_node，这样自然的效果就是距离当前处理节点（需要填充当前节点的node_zonelists）越近的节点，其里面的zone(s)排在zoneref（zonelist：_zonerefs）数组元素的前面。有个小细节提下，最后一个zonerefs的zone为NULL，它会作为<a href="#org46c7318">first_zones_zonelist</a>函数没有找到符合条件的zone时的返回值。
 </p>
 
 <p>
 这里再稍微详细看下build_zonerefs_node函数的实现：
 </p>
-<pre class="example" id="org23fe813">
+<pre class="example" id="org846f18a">
 static int build_zonerefs_node(pg_data_t *pgdat, struct zoneref *zonerefs)
 {
 	struct zone *zone;
@@ -1806,24 +1806,24 @@ static int build_zonerefs_node(pg_data_t *pgdat, struct zoneref *zonerefs)
 	return nr_zones;
 }
 </pre>
-<pre class="example" id="org45ab1ff">
+<pre class="example" id="orgf2e079e">
 static void zoneref_set_zone(struct zone *zone, struct zoneref *zoneref)
 {
 	zoneref-&gt;zone = zone;
 	zoneref-&gt;zone_idx = zone_idx(zone);
 }
 </pre>
-<pre class="example" id="org8589a84">
+<pre class="example" id="org8b98b94">
 /*
  * zone_idx() returns 0 for the ZONE_DMA zone, 1 for the ZONE_NORMAL zone, etc.
  */
 #define zone_idx(zone)		((zone) - (zone)-&gt;zone_pgdat-&gt;node_zones)
 </pre>
 <p>
-<a id="orgdd917d0"></a>
+<a id="org1641260"></a>
 从zone_idx的实现知道，zone_type里的枚举类型也就是表示了zone的编号，比如ZONE_DMA的idx为0，ZONE_DMA32为1，依次类推。分析build_zonerefs_node函数的循环体可以知道，zonerefs数组里的元素，靠前的元素存放的zone其idx越大，因为zone_type的初始值为MAX_NR_ZONES，从较大的zone idx开始，针对某个具体的配置，这最终导致一个效果可能如下：
 </p>
-<pre class="example" id="orga640d84">
+<pre class="example" id="org7a5c0dd">
             zone_type    idx
 
 zonerefs[0] ZONE_MOVABLE 3
@@ -1839,7 +1839,7 @@ zonerefs[3] ZONE_DMA     0
 </p>
 
 <p>
-这里之所以需要详细理解这一点，因为<a href="#org4be2616">后面的</a>分配需要确定alloc_context: preferred_zoneref。
+这里之所以需要详细理解这一点，因为<a href="#org43c8de7">后面的</a>分配需要确定alloc_context: preferred_zoneref。
 </p>
 
 <p>
@@ -1847,16 +1847,16 @@ zonerefs[3] ZONE_DMA     0
 </p>
 
 <p>
-由上面初始化zonelist的简单分析也就可以更加深刻的理解<a href="#org2529776">前面代码</a>里对zonelist的注释了：
+由上面初始化zonelist的简单分析也就可以更加深刻的理解<a href="#org002fcc2">前面代码</a>里对zonelist的注释了：
 </p>
-<pre class="example" id="org84446a6">
+<pre class="example" id="orgf8cc3f4">
 the first one is the 'goal' of the allocation, the other zones are fallback zones, in decreasing priority.
 </pre>
 
 <p>
 回到prepare_alloc_pages继续分析，gfp_migratetype主要是用来从gfp标志中提取出页面的迁移类型，一种是可移动__GFP_MOVABLE，一种是可回收__GFP_RECLAIMABLE：
 </p>
-<pre class="example" id="orgfbfec3d">
+<pre class="example" id="org8b59180">
 /* Convert GFP flags to their corresponding migrate type */
 #define GFP_MOVABLE_MASK (__GFP_RECLAIMABLE|__GFP_MOVABLE)
 #define GFP_MOVABLE_SHIFT 3
@@ -1880,14 +1880,14 @@ static inline int gfp_migratetype(const gfp_t gfp_flags)
 #undef GFP_MOVABLE_SHIFT
 </pre>
 <p>
-这个函数前面先进行了一些检查，比如第一行的检查代表__GFP_RECLAIMABLE和__GFP_MOVABLE不能同时被设置，其它行实际是检查在<a href="#org63f09bd">这个</a>enum中，满足第3位是___GFP_MOVABLE_BIT，第四位是___GFP_RECLAIMABLE_BIT，从0开始计数。
+这个函数前面先进行了一些检查，比如第一行的检查代表__GFP_RECLAIMABLE和__GFP_MOVABLE不能同时被设置，其它行实际是检查在<a href="#org58d4b54">这个</a>enum中，满足第3位是___GFP_MOVABLE_BIT，第四位是___GFP_RECLAIMABLE_BIT，从0开始计数。
 </p>
 
 <p>
-<a id="org1c5c9ce"></a>
+<a id="orgcbee414"></a>
 接下来的代码主要是处理cpuset内存资源组的限制，这种限制主要针对进程上下文并且没有设置nodemask的时候，cpuset_current_mems_allowed在设置了CONFIG_CPUSETS后，就是当前进程（current）的mems_allowed成员限制的node。
 </p>
-<pre class="example" id="org4607bf1">
+<pre class="example" id="org9b5d5d8">
 if (cpusets_enabled()) {
 	*alloc_gfp |= __GFP_HARDWALL;
 	/*
@@ -1907,16 +1907,16 @@ if (cpusets_enabled()) {
 <p>
 __GFP_WRITE代表内存的申请者将会写页面，这样内存分配的时候就会尽量将其分散在不同zone中：
 </p>
-<pre class="example" id="org6a068df">
+<pre class="example" id="org45b20f2">
 /* Dirty zone balancing only done in the fast path */
 ac-&gt;spread_dirty_pages = (gfp_mask &amp; __GFP_WRITE);
 </pre>
 
 <p>
-<a id="org4be2616"></a>
+<a id="org43c8de7"></a>
 最后一行代码也是比较关键的：
 </p>
-<pre class="example" id="orgdd80b82">
+<pre class="example" id="org9e3fefb">
 /*
  * The preferred zone is used for statistics but crucially it is
  * also used as the starting point for the zonelist iterator. It
@@ -1926,10 +1926,10 @@ ac-&gt;preferred_zoneref = first_zones_zonelist(ac-&gt;zonelist,
 				ac-&gt;highest_zoneidx, ac-&gt;nodemask);
 </pre>
 <p>
-<a id="org66b27ba"></a>
-通过first_zones_zonelist去获得目标zone，后面将使用这个目标zone去分配内存，ac-&gt;zonelist<a href="#orga4c4a0d">前面</a>分析过了如何得到。获得的目标zone其序号应当是小于或等于第二个参数ac-&gt;highest_zoneidx的，如果第三个参数ac-&gt;nodemask有值，还应当保证分出来的zone在ac-&gt;nodemask指明的节点里，下面是其实现：
+<a id="org46c7318"></a>
+通过first_zones_zonelist去获得目标zone，后面将使用这个目标zone去分配内存，ac-&gt;zonelist<a href="#org0c40ba2">前面</a>分析过了如何得到。获得的目标zone其序号应当是小于或等于第二个参数ac-&gt;highest_zoneidx的，如果第三个参数ac-&gt;nodemask有值，还应当保证分出来的zone在ac-&gt;nodemask指明的节点里，下面是其实现：
 </p>
-<pre class="example" id="orgc7e89f9">
+<pre class="example" id="org5be9165">
 /**
  * first_zones_zonelist - Returns the first zone at or below highest_zoneidx within the allowed nodemask in a zonelist
  * @zonelist: The zonelist to search for a suitable zone
@@ -1956,9 +1956,9 @@ static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
 }
 </pre>
 <p>
-<a id="orge0ec8e0"></a>
+<a id="orga307aea"></a>
 </p>
-<pre class="example" id="org08b4d95">
+<pre class="example" id="org24d2119">
 /**
  * next_zones_zonelist - Returns the next zone at or below highest_zoneidx within the allowed nodemask using a cursor within a zonelist as a starting point
  * @z: The cursor used as a starting point for the search
@@ -1984,9 +1984,9 @@ static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
 }
 </pre>
 <p>
-可以看到一般最优可能的就是首选传进来的zone就满足条件了，也就是_zonerefs的第一个元素就满足条件，<a href="#orgdd917d0">前面</a>有介绍过，_zonerefs中排在前面的zone具有较大的zoneidx，这里也可以看到这些具有较大zoneidx的zone优先用于分配内存。如果不满足条件通过__next_zones_zonelist继续获取目标zone。在first_zones_zonelist里使用_zonerefs作为迭代寻找合适zoneref的开始位置。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
+可以看到一般最优可能的就是首选传进来的zone就满足条件了，也就是_zonerefs的第一个元素就满足条件，<a href="#org1641260">前面</a>有介绍过，_zonerefs中排在前面的zone具有较大的zoneidx，这里也可以看到这些具有较大zoneidx的zone优先用于分配内存。如果不满足条件通过__next_zones_zonelist继续获取目标zone。在first_zones_zonelist里使用_zonerefs作为迭代寻找合适zoneref的开始位置。这里也可以看到要想往前递进zone，其实就是下次传入第一个参数z往前自加一就行，继续看__next_zones_zonelist函数：
 </p>
-<pre class="example" id="org1cd1702">
+<pre class="example" id="org9b6b560">
 /* Returns the next zone at or below highest_zoneidx in a zonelist */
 struct zoneref *__next_zones_zonelist(struct zoneref *z,
 					enum zone_type highest_zoneidx,
@@ -2014,7 +2014,7 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 <p>
 下面接续分析：
 </p>
-<pre class="example" id="org16fffb3">
+<pre class="example" id="org28c72f7">
 /*
  * Forbid the first pass from falling back to types that fragment
  * memory until all local zones are considered.
@@ -2031,13 +2031,13 @@ alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
 </p>
 </div>
 </div>
-<div id="outline-container-orgf62a47e" class="outline-3">
-<h3 id="orgf62a47e"><span class="section-number-3">3.2.</span> 第二部分</h3>
+<div id="outline-container-org2cb8408" class="outline-3">
+<h3 id="org2cb8408"><span class="section-number-3">3.2.</span> 第二部分</h3>
 <div class="outline-text-3" id="text-3-2">
 <p>
 第二部分主要就是分配页面的动作，这主要分两个路径，一是快速路径通过get_page_from_freelist，二是慢速路径通过__alloc_pages_slowpath，本文主要介绍快速路径的流程，慢速路径参见作者其它文章。当快速路径不能分配页面时，就会走慢速路径了：
 </p>
-<pre class="example" id="org395d040">
+<pre class="example" id="org75ead91">
 /* First allocation attempt */
 page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &amp;ac);
 if (likely(page))
@@ -2056,33 +2056,33 @@ page = __alloc_pages_slowpath(alloc_gfp, order, &amp;ac);
 </pre>
 <p>
 可以看到当快速路径不能分配页面时，就会调整alloc_gfp，因为alloc_gfp在快速路径分配页面时可能施加了额外的限制，比如前面分析过的current_gfp_context里可能施加不能进行IO或文件系统相关的
-操作，在<a href="#org1c5c9ce">prepare_alloc_pages</a>里施加的__GFP_HARDWALL标志以严格遵循cpuset的策略，这些限制在慢速路径时都会解除，以提高内存分配的成功率。
+操作，在<a href="#orgcbee414">prepare_alloc_pages</a>里施加的__GFP_HARDWALL标志以严格遵循cpuset的策略，这些限制在慢速路径时都会解除，以提高内存分配的成功率。
 </p>
 
 <p>
-另外spread_dirty_pages也是作为一种分散脏页面的限制在慢速路径也会解开。此外用于分配内存的ac-&gt;nodemask在<a href="#org1c5c9ce">prepare_alloc_pages</a>里也可能因为cpuset内存组限制为cpuset_current_mems_allowed，在慢速路径时这种限制也没有了，用于分配内存的节点来自传进来的参数就可以了。
+另外spread_dirty_pages也是作为一种分散脏页面的限制在慢速路径也会解开。此外用于分配内存的ac-&gt;nodemask在<a href="#orgcbee414">prepare_alloc_pages</a>里也可能因为cpuset内存组限制为cpuset_current_mems_allowed，在慢速路径时这种限制也没有了，用于分配内存的节点来自传进来的参数就可以了。
 </p>
 
 <p>
-后面的<a href="#org43d5444">节</a>还会详细介绍快速路径的下一个核心函数get_page_from_freelist。
+后面的<a href="#org3f328b1">节</a>还会详细介绍快速路径的下一个核心函数get_page_from_freelist。
 </p>
 </div>
 </div>
-<div id="outline-container-org0aeea25" class="outline-3">
-<h3 id="org0aeea25"><span class="section-number-3">3.3.</span> 第三部分</h3>
+<div id="outline-container-org7912ab9" class="outline-3">
+<h3 id="org7912ab9"><span class="section-number-3">3.3.</span> 第三部分</h3>
 <div class="outline-text-3" id="text-3-3">
 <p>
 这一部分主要是做分配内存成功后的初始化或检测，比如不满足mem cgroup的限制时，还要通过__free_pages释放页面，详细细节之于本文主题就不介绍了。
 </p>
 
 <p>
-<a id="org43d5444"></a>
+<a id="org3f328b1"></a>
 </p>
 </div>
 </div>
 </div>
-<div id="outline-container-org36676d2" class="outline-2">
-<h2 id="org36676d2"><span class="section-number-2">4.</span> get_page_from_freelist</h2>
+<div id="outline-container-orgb428098" class="outline-2">
+<h2 id="orgb428098"><span class="section-number-2">4.</span> get_page_from_freelist</h2>
 <div class="outline-text-2" id="text-4">
 <p>
 该函数会进一步进行快速页面的分配流程，也是分三个部分来分析这个函数。
@@ -2093,13 +2093,13 @@ page = __alloc_pages_slowpath(alloc_gfp, order, &amp;ac);
 <li>第三部分是进一步调用rmqueue函数去获取页面。</li>
 </ul>
 </div>
-<div id="outline-container-orgfcfb8e0" class="outline-3">
-<h3 id="orgfcfb8e0"><span class="section-number-3">4.1.</span> 第一部分</h3>
+<div id="outline-container-org280a6f6" class="outline-3">
+<h3 id="org280a6f6"><span class="section-number-3">4.1.</span> 第一部分</h3>
 <div class="outline-text-3" id="text-4-1">
 <p>
 这里首先介绍一个宏循环，get_page_from_freelist函数的函数体基本都是在这个宏循环里完成，这个宏循环就是for_next_zone_zonelist_nodemask：
 </p>
-<pre class="example" id="org17ba420">
+<pre class="example" id="orgf46a839">
 #define for_next_zone_zonelist_nodemask(zone, z, highidx, nodemask) \
 	for (zone = zonelist_zone(z);	                                \
 		zone;							\
@@ -2109,37 +2109,107 @@ page = __alloc_pages_slowpath(alloc_gfp, order, &amp;ac);
 <p>
 这个宏传入四个参数，其中第一个参数zone是zone类型的指针，它会随着循环的进行而更新，get_page_from_freelist主要的逻辑就可以使用这个更新了的zone，循环退出的条件也就是zone为NULL时。zone通过zonelist_zone获得：
 </p>
-<pre class="example" id="orgfca5f48">
+<pre class="example" id="orgcda8a06">
 static inline struct zone *zonelist_zone(struct zoneref *zoneref)
 {
 	return zoneref-&gt;zone;
 }
 </pre>
 <p>
-<a href="#orge0ec8e0">next_zones_zonelist</a>函数前面已经分析过了。继续往下分析第一部分的代码：
+<a href="#orga307aea">next_zones_zonelist</a>函数前面已经分析过了。继续往下分析第一部分的代码：
 </p>
-<pre class="example" id="org61042a5">
+<pre class="example" id="org002acc8">
 if (cpusets_enabled() &amp;&amp;
         (alloc_flags &amp; ALLOC_CPUSET) &amp;&amp;
         !__cpuset_zone_allowed(zone, gfp_mask))
                 continue;
 </pre>
+<pre class="example" id="orge30bf82">
+static inline bool __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
+{
+	return cpuset_node_allowed(zone_to_nid(z), gfp_mask);
+}
+</pre>
+<pre class="example" id="orge47a206">
+bool cpuset_node_allowed(int node, gfp_t gfp_mask)
+{
+	struct cpuset *cs;		/* current cpuset ancestors */
+	bool allowed;			/* is allocation in zone z allowed? */
+	unsigned long flags;
+
+	if (in_interrupt())
+		return true;
+	if (node_isset(node, current-&gt;mems_allowed))
+		return true;
+	/*
+	 * Allow tasks that have access to memory reserves because they have
+	 * been OOM killed to get memory anywhere.
+	 */
+	if (unlikely(tsk_is_oom_victim(current)))
+		return true;
+	if (gfp_mask &amp; __GFP_HARDWALL)	/* If hardwall request, stop here */
+		return false;
+
+	if (current-&gt;flags &amp; PF_EXITING) /* Let dying task have memory */
+		return true;
+
+	/* Not hardwall and node outside mems_allowed: scan up cpusets */
+	spin_lock_irqsave(&amp;callback_lock, flags);
+
+	rcu_read_lock();
+	cs = nearest_hardwall_ancestor(task_cs(current));
+	allowed = node_isset(node, cs-&gt;mems_allowed);
+	rcu_read_unlock();
+
+	spin_unlock_irqrestore(&amp;callback_lock, flags);
+	return allowed;
+}
+</pre>
+<p>
+首先通过zone_to_nid去获得zone所在的节点号：
+</p>
+<pre class="example" id="org8ff6988">
+static inline int zone_to_nid(struct zone *zone)
+{
+	return zone-&gt;node;
+}
+</pre>
+<p>
+zone的node成员表示了zone所在的节点号，在初始化的时候通过zone_set_nid去设置：
+</p>
+<pre class="example" id="org0f0fd13">
+static inline void zone_set_nid(struct zone *zone, int nid)
+{
+	zone-&gt;node = nid;
+}
+</pre>
+<p>
+可以看到cpuset_node_allowed函数是这段代码的主体逻辑。通过in_terrupt判断出当前是在中断上下文的话返回true，代表任何节点分配内存都可以，中断上下文使用内存主要满足可用性，所以所有节点都可以。另外zone所在的节点在当前进程设置的mems_allowed节点里时也返回true，这是优先判断的。如果当前进程是oom选中的victim进程时，也返回true进行内存分配，因为victim进程很快会被杀死而释放出更多的内存。
+</p>
+
+<p>
+再往后判断gfp标志是否设置了__GFP_HARDWALL，这个标志被设置，就要求内存必须来自current-&gt;mems_allowed，但是前面的node_isset并没有返回，那这说明不能满足__GFP_HARDWALL的语义了，返回false，表示不能在当前的内存节点（zone所在的结点）进行内存分配。再往后正在退出的进程的情况，也是返回true可以在当前zone分配内存，因为它退出了自然就有内存了。
+</p>
+
+<p>
+最后的情况才是检查cpuset内存资源组的设置，关于cpuset参见笔者其它文章。
+</p>
 </div>
 </div>
 
-<div id="outline-container-orga85a742" class="outline-3">
-<h3 id="orga85a742"><span class="section-number-3">4.2.</span> 第二部分</h3>
+<div id="outline-container-org42cb55d" class="outline-3">
+<h3 id="org42cb55d"><span class="section-number-3">4.2.</span> 第二部分</h3>
 </div>
-<div id="outline-container-org151874c" class="outline-3">
-<h3 id="org151874c"><span class="section-number-3">4.3.</span> 第三部分</h3>
+<div id="outline-container-org6b115e8" class="outline-3">
+<h3 id="org6b115e8"><span class="section-number-3">4.3.</span> 第三部分</h3>
 </div>
 </div>
-<div id="outline-container-orgc76393c" class="outline-2">
-<h2 id="orgc76393c"><span class="section-number-2">5.</span> 附节</h2>
+<div id="outline-container-org6f9e132" class="outline-2">
+<h2 id="org6f9e132"><span class="section-number-2">5.</span> 附节</h2>
 <div class="outline-text-2" id="text-5">
 </div>
-<div id="outline-container-org2362ee1" class="outline-3">
-<h3 id="org2362ee1"><span class="section-number-3">5.1.</span> get_vma_policy生成ilx</h3>
+<div id="outline-container-org1ca7a58" class="outline-3">
+<h3 id="org1ca7a58"><span class="section-number-3">5.1.</span> get_vma_policy生成ilx</h3>
 <div class="outline-text-3" id="text-5-1">
 </div>
 </div>
@@ -2147,7 +2217,7 @@ if (cpusets_enabled() &amp;&amp;
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-12-03 Tue 21:06</p>
+<p class="date">Created: 2024-12-04 Wed 23:06</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
