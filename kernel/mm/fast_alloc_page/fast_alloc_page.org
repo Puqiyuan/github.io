@@ -1462,6 +1462,7 @@ static inline int gfp_migratetype(const gfp_t gfp_flags)
 在should_fail_alloc_page主要用于处理错误注入。
 
 __GFP_WRITE代表内存的申请者将会写页面，这样内存分配的时候就会尽量将其分散在不同zone中：
+<<set_spread_dirty_pages>>
 #+begin_example
 /* Dirty zone balancing only done in the fast path */
 ac->spread_dirty_pages = (gfp_mask & __GFP_WRITE);
@@ -1684,8 +1685,7 @@ static inline void zone_set_nid(struct zone *zone, int nid)
 
 再往后判断gfp标志是否设置了__GFP_HARDWALL，这个标志被设置，就要求内存必须来自current->mems_allowed，但是前面的node_isset并没有返回，那这说明不能满足__GFP_HARDWALL的语义了，返回false，表示不能在当前的内存节点（zone所在的结点）进行内存分配。再往后正在退出的进程的情况，也是返回true可以在当前zone分配内存，因为它退出了自然就有内存了。
 
-最后的情况才是检查cpuset内存资源组的设置，关于cpuset参见笔者其它文章。这里只是简单提一下，
-引用cgroup sub sys时通过的id是通过##拼起来的，比如如下使用的cpuset_cgrp_id：
+最后的情况才是检查cpuset内存资源组的设置，关于cpuset参见笔者其它文章。这里只是简单提一下，引用cgroup sub sys时通过的id是通过##拼起来的，比如如下使用的cpuset_cgrp_id：
 #+begin_example
 /* Retrieve the cpuset for a task */
 static inline struct cpuset *task_cs(struct task_struct *task)
@@ -1698,6 +1698,40 @@ static inline struct cpuset *task_cs(struct task_struct *task)
 ./include/linux/cgroup-defs.h:42:#define SUBSYS(_x) _x ## _cgrp_id
 #+end_example
 
+继续看get_page_from_freelist函数：
+#+begin_example
+		if (ac->spread_dirty_pages) {
+			if (last_pgdat != zone->zone_pgdat) {
+				last_pgdat = zone->zone_pgdat;
+				last_pgdat_dirty_ok = node_dirty_ok(zone->zone_pgdat);
+			}
+
+			if (!last_pgdat_dirty_ok)
+				continue;
+		}
+#+end_example
+这段代码主要针对分配的页面用于page cache即将写时，需要做写脏页平衡。实际上就是当gfp_mask设置了__GFP_WRITE时，ac->spread_dirty_pages就会[[set_spread_dirty_pages][被设置]]。这里的逻辑就是当循环遍历到zone所在的节点（zone->zone_pgdat）发生变化时，和前一个分配内存的节点不一样时，对于新的这个用于分配内存的节点（zone->zone_pgdat），需要调用node_dirty_ok判断其是否已经超过了脏页写数量的限制，那么往下分析下这个函数的实现：
+#+begin_example
+/**
+ * node_dirty_ok - tells whether a node is within its dirty limits
+ * @pgdat: the node to check
+ *
+ * Return: %true when the dirty pages in @pgdat are within the node's
+ * dirty limit, %false if the limit is exceeded.
+ */
+bool node_dirty_ok(struct pglist_data *pgdat)
+{
+	unsigned long limit = node_dirty_limit(pgdat);
+	unsigned long nr_pages = 0;
+
+	nr_pages += node_page_state(pgdat, NR_FILE_DIRTY);
+	nr_pages += node_page_state(pgdat, NR_WRITEBACK);
+
+	return nr_pages <= limit;
+}
+
+
+#+end_example
 
 ** 第二部分
 ** 第三部分
