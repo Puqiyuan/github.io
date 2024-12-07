@@ -1732,6 +1732,7 @@ bool node_dirty_ok(struct pglist_data *pgdat)
 #+end_example
 该函数先通过node_dirty_limit函数获得当前节点可以写的最大脏页数量limit，然后又通过node_page_state来获得脏页和回写页的数量nr_pages，当它小于limit证明还有页面可以用于写，返回true。
 
+<<node_dirty_limit>>
 继续分析下node_dirty_limit：
 #+begin_example
 /**
@@ -1810,7 +1811,119 @@ static inline bool rt_or_dl_task(struct task_struct *p)
 	return rt_or_dl_prio(p->prio);
 }
 #+end_example
-从这一段代码可以看到，所有进程总的优先级可以从0到MAX_PRIO为140，默认的优先级DEFAULT_PRIO为
+从这一段代码可以看到，所有进程总的优先级可以从0到MAX_PRIO为140，默认的优先级DEFAULT_PRIO为120，并且优先级是倒转的，task_struct:prio的值越大，其优先级其实越小，task_struct:prio的值越小，其优先级越大。SCHED_NORMAL/SCHED_BATCH类的进程的优先级范围从100到139共四十个级别，这一般也就是用户态进程的级别，0-100是给实时或deadline类进程用的。对于SCHED_NORMAL/SCHED_BATCH的进程类来说，其还有nice值的概念，范围为[-20, 19]，它和优先级之间可以通过NICE_TO_PRIO/PRIO_TO_NICE这样的宏进行转换。
+
+回到node_dirty_limit函数，往下分析下怎样获取一个节点的可脏内存给node_memory量：
+#+begin_example
+static unsigned long node_dirtyable_memory(struct pglist_data *pgdat)
+{
+	unsigned long nr_pages = 0;
+	int z;
+
+	for (z = 0; z < MAX_NR_ZONES; z++) {
+		struct zone *zone = pgdat->node_zones + z;
+
+		if (!populated_zone(zone))
+			continue;
+
+		nr_pages += zone_page_state(zone, NR_FREE_PAGES);
+	}
+
+	/*
+	 * Pages reserved for the kernel should not be considered
+	 * dirtyable, to prevent a situation where reclaim has to
+	 * clean pages in order to balance the zones.
+	 */
+	nr_pages -= min(nr_pages, pgdat->totalreserve_pages);
+
+	nr_pages += node_page_state(pgdat, NR_INACTIVE_FILE);
+	nr_pages += node_page_state(pgdat, NR_ACTIVE_FILE);
+
+	return nr_pages;
+}
+#+end_example
+从这个node_dirtyable_memory函数的逻辑可以看到一个节点可以用于page cache的页面包括NR_FREE_PAGES空闲页面，以及NR_INACTIVE_FILE、NR_ACTIVE_FILE这种可以回收的页面，但是它们的和只是作为一个base value，[[node_dirty_limit][node_dirty_limit]]函数的逻辑前面介绍了还要进行比例计算，并且这个比例用户态是可配的。
+
+base value还要减去保留的页面数量totalreserve_pages，
+
+该函数依次遍历节点里所有的zone，对于已经populated了的zone，都需要加上里面空闲页面的数量。前面也有提到过，pglist_data:node_zones就是包含属于本节点的所有zone，所以遍历基地址从它开始。那么什么叫populated了的zone呢：
+#+begin_example
+/* Returns true if a zone has memory */
+static inline bool populated_zone(struct zone *zone)
+{
+	return zone->present_pages;
+}
+#+end_example
+zone里有几个表示各种类型页面数量的变量：managed_pages、spanned_pages以及present_pages。一般来说spanned_pages >= present_pages >= managed_pages，spanned_pages是zone所跨过的所有页面，包括内存空洞：
+#+begin_example
+spanned_pages = zone_end_pfn - zone_start_pfn
+#+end_example
+而present_pages是在spanned_pages中除去空洞的地址范围，managed_pages是在present_pages中由buddy system管理的页面。
+
+再来看看zone_page_state函数：
+#+begin_example
+static inline unsigned long zone_page_state(struct zone *zone,
+					enum zone_stat_item item)
+{
+	long x = atomic_long_read(&zone->vm_stat[item]);
+#ifdef CONFIG_SMP
+	if (x < 0)
+		x = 0;
+#endif
+	return x;
+}
+#+end_example
+每个zone都有一个atomic_long_t类型的数组vm_stat，它的大小是NR_VM_ZONE_STAT_ITEMS，统计了zone里各种页面状态的数量，比如空闲页面数量放在vm_stat的第零位（NR_FREE_PAGES）。
+
+回到node_dirty_limit函数再看看它调用的global_dirtyable_memory：
+#+begin_example
+/**
+ * global_dirtyable_memory - number of globally dirtyable pages
+ *
+ * Return: the global number of pages potentially available for dirty
+ * page cache.  This is the base value for the global dirty limits.
+ */
+static unsigned long global_dirtyable_memory(void)
+{
+	unsigned long x;
+
+	x = global_zone_page_state(NR_FREE_PAGES);
+	/*
+	 * Pages reserved for the kernel should not be considered
+	 * dirtyable, to prevent a situation where reclaim has to
+	 * clean pages in order to balance the zones.
+	 */
+	x -= min(x, totalreserve_pages);
+
+	x += global_node_page_state(NR_INACTIVE_FILE);
+	x += global_node_page_state(NR_ACTIVE_FILE);
+
+	if (!vm_highmem_is_dirtyable)
+		x -= highmem_dirtyable_memory(x);
+
+	return x + 1;	/* Ensure that we never return 0 */
+}
+#+end_example
+这个函数和node_dirtyable_memory的逻辑类似，只是global_node_page_state读的是vm_node_stat这个全局统计量。node_dirty_ok函数就介绍完了，回到get_page_from_freelist函数继续分析，如果node_dirty_ok返回false，意味着当前zone对应的node已经达到了最高的脏页限制，跳过到下一个zone继续。
+
+继续往下分析get_page_from_freelist函数：
+#+begin_example
+if (no_fallback && nr_online_nodes > 1 &&
+    zone != zonelist_zone(ac->preferred_zoneref)) {
+        int local_nid;
+
+        /*
+         * If moving to a remote node, retry but allow
+         * fragmenting fallbacks. Locality is more important
+         * than fragmentation avoidance.
+         */
+        local_nid = zonelist_node_idx(ac->preferred_zoneref);
+        if (zone_to_nid(zone) != local_nid) {
+                alloc_flags &= ~ALLOC_NOFRAGMENT;
+                goto retry;
+        }
+}
+#+end_example
 ** 第二部分
 ** 第三部分
 * 附节
