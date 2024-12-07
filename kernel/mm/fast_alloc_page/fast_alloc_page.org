@@ -1729,10 +1729,88 @@ bool node_dirty_ok(struct pglist_data *pgdat)
 
 	return nr_pages <= limit;
 }
-
-
 #+end_example
+该函数先通过node_dirty_limit函数获得当前节点可以写的最大脏页数量limit，然后又通过node_page_state来获得脏页和回写页的数量nr_pages，当它小于limit证明还有页面可以用于写，返回true。
 
+继续分析下node_dirty_limit：
+#+begin_example
+/**
+ * node_dirty_limit - maximum number of dirty pages allowed in a node
+ * @pgdat: the node
+ *
+ * Return: the maximum number of dirty pages allowed in a node, based
+ * on the node's dirtyable memory.
+ */
+static unsigned long node_dirty_limit(struct pglist_data *pgdat)
+{
+	unsigned long node_memory = node_dirtyable_memory(pgdat);
+	struct task_struct *tsk = current;
+	unsigned long dirty;
+
+	if (vm_dirty_bytes)
+		dirty = DIV_ROUND_UP(vm_dirty_bytes, PAGE_SIZE) *
+			node_memory / global_dirtyable_memory();
+	else
+		dirty = vm_dirty_ratio * node_memory / 100;
+
+	if (rt_or_dl_task(tsk))
+		dirty += dirty / 4;
+
+	/*
+	 * Dirty throttling logic assumes the limits in page units fit into
+	 * 32-bits. This gives 16TB dirty limits max which is hopefully enough.
+	 */
+	return min_t(unsigned long, dirty, UINT_MAX);
+}
+#+end_example
+在Linux系统中，内存写操作先写入缓存页，稍后再由内核的写回机制将数据从内存写到磁盘。这些缓存页称为脏页（dirty pages）。为了避免内存中脏页过多影响系统性能，内核通过vm.dirty_bytes或vm.dirty_ratio参数来限制脏页的数量或比例。这两参数可以通过以下两个命令去查看：
+#+begin_example
+sysctl vm.dirty_bytes
+sysctl vm.dirty_ratio
+#+end_example
+在node_dirty_limit函数中可以看到，如果设置了vm_dirty_bytes这种绝对值指明了可以多少内存用于脏页缓存，那么当前节点会按其所有的内存node_memory占整个可脏写内存的比例去分担vm_dirty_bytes。否则，就是当前节点可写内存的20%用于写脏页缓存。对于用rt_or_dl_task判断出来当前进程是实时或者deadline进程的话，还可以在算出来的可脏写大小的基础上再增加25%的容量。这里想继续简单分析下rt_or_dl_task，因为这方面涉及到进程优先级的划分：
+#+begin_example
+#define MAX_NICE	19
+#define MIN_NICE	-20
+#define NICE_WIDTH	(MAX_NICE - MIN_NICE + 1)
+
+/*
+ * Priority of a process goes from 0..MAX_PRIO-1, valid RT
+ * priority is 0..MAX_RT_PRIO-1, and SCHED_NORMAL/SCHED_BATCH
+ * tasks are in the range MAX_RT_PRIO..MAX_PRIO-1. Priority
+ * values are inverted: lower p->prio value means higher priority.
+ */
+
+#define MAX_RT_PRIO		100
+#define MAX_DL_PRIO		0
+
+#define MAX_PRIO		(MAX_RT_PRIO + NICE_WIDTH)
+#define DEFAULT_PRIO		(MAX_RT_PRIO + NICE_WIDTH / 2)
+
+/*
+ * Convert user-nice values [ -20 ... 0 ... 19 ]
+ * to static priority [ MAX_RT_PRIO..MAX_PRIO-1 ],
+ * and back.
+ */
+#define NICE_TO_PRIO(nice)	((nice) + DEFAULT_PRIO)
+#define PRIO_TO_NICE(prio)	((prio) - DEFAULT_PRIO)
+
+static inline bool rt_or_dl_prio(int prio)
+{
+	return unlikely(prio < MAX_RT_PRIO);
+}
+
+/*
+ * Returns true if a task has a priority that belongs to RT or DL classes.
+ * PI-boosted tasks will return true. Use rt_or_dl_task_policy() to ignore
+ * PI-boosted tasks.
+ */
+static inline bool rt_or_dl_task(struct task_struct *p)
+{
+	return rt_or_dl_prio(p->prio);
+}
+#+end_example
+从这一段代码可以看到，所有进程总的优先级可以从0到MAX_PRIO为140，默认的优先级DEFAULT_PRIO为
 ** 第二部分
 ** 第三部分
 * 附节
