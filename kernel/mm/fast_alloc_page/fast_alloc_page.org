@@ -1948,8 +1948,186 @@ if (no_fallback && nr_online_nodes > 1 &&
 #+begin_example
 cond_accept_memory(zone, order);
 #+end_example
-对于Intel TDX这样的虚拟化平台，在虚拟机能够使用内存前必须先accepted它，这样机制可以阻止恶意的主机该表虚拟机的内存。
+对于Intel TDX这样的虚拟化平台，在虚拟机能够使用内存前必须先accepted它，这种机制可以阻止恶意的主机修改虚拟机的内存：
+#+begin_example
+static bool cond_accept_memory(struct zone *zone, unsigned int order)
+{
+	long to_accept;
+	bool ret = false;
 
+	if (!has_unaccepted_memory())
+		return false;
+
+	if (list_empty(&zone->unaccepted_pages))
+		return false;
+
+	/* How much to accept to get to promo watermark? */
+	to_accept = promo_wmark_pages(zone) -
+		    (zone_page_state(zone, NR_FREE_PAGES) -
+		    __zone_watermark_unusable_free(zone, order, 0) -
+		    zone_page_state(zone, NR_UNACCEPTED));
+
+	while (to_accept > 0) {
+		if (!try_to_accept_memory_one(zone))
+			break;
+		ret = true;
+		to_accept -= MAX_ORDER_NR_PAGES;
+	}
+
+	return ret;
+}
+#+end_example
+该函数首先通过has_unaccepted_memory检测下是否还有unaccepted的内存，如果没有可以accepted的内存就直接返回false了。has_unaccepted_memory主要检测zone_with_unaccepted_pages这个量，它会在__free_unaccepted中增加，同时page:lru也会在这个函数中通过list_add_tail挂到zone:unaccepted_pages链表，以备后面可以accept这些内存。一旦accepted内存了，就可以在__accept_page中去减少zone_with_unaccepted_pages了。
+
+如果有内存可以accept，则这些页面是挂在zone:unaccepted_pages链表上的，只有这个链表非空的时候才往下进行accepted内存的过程。
+
+再往下的逻辑是计算需要accept多少内存可以达到promo watermark，首先计算promo watermark在哪个水位：
+#+begin_example
+static inline unsigned long wmark_pages(const struct zone *z,
+					enum zone_watermarks w)
+{
+	return z->_watermark[w] + z->watermark_boost;
+}
+
+static inline unsigned long promo_wmark_pages(const struct zone *z)
+{
+	return wmark_pages(z, WMARK_PROMO);
+}
+#+end_example
+可以看到这个promo watermark就是WMARK_PROMO水位再加上watermark_boot临时提高的水位。WMARK_PROMO是比较高的水位：
+#+begin_example
+enum zone_watermarks {
+	WMARK_MIN,
+	WMARK_LOW,
+	WMARK_HIGH,
+	WMARK_PROMO,
+	NR_WMARK
+};
+#+end_example
+WMARK_MIN水位最低。
+
+计算还需要accept多少内存其实就是看现在的空闲内存离promo_wmark_pages算出的水印还差多少内存。但是通过zone_page_state得到的空闲内存还需要排除一些内存再来看离目标内存水印位多远，比如对于__zone_watermark_unusable_free函数：
+#+begin_example
+static inline long __zone_watermark_unusable_free(struct zone *z,
+				unsigned int order, unsigned int alloc_flags)
+{
+	long unusable_free = (1 << order) - 1;
+
+	/*
+	 * If the caller does not have rights to reserves below the min
+	 * watermark then subtract the free pages reserved for highatomic.
+	 */
+	if (likely(!(alloc_flags & ALLOC_RESERVES)))
+		unusable_free += READ_ONCE(z->nr_free_highatomic);
+
+#ifdef CONFIG_CMA
+	/* If allocation can't use CMA areas don't use free CMA pages */
+	if (!(alloc_flags & ALLOC_CMA))
+		unusable_free += zone_page_state(z, NR_FREE_CMA_PAGES);
+#endif
+
+	return unusable_free;
+}
+
+#+end_example
+一开始的(1 << order) - 1是处理对齐需要多少页面，然后要是调用者没有权限去分配预留的内存，那么不可用内存还需要加上nr_free_highatomic。允许分配预留内存（也就是允许分配低于WMARK_MIN水印的内存）的情况一共有四种：
+#+begin_example
+/* Flags that allow allocations below the min watermark. */
+#define ALLOC_RESERVES (ALLOC_NON_BLOCK|ALLOC_MIN_RESERVE|ALLOC_HIGHATOMIC|ALLOC_OOM)
+#+end_example
+计算出了需要accepted内存的量to_accept就在循环里通过try_to_accept_memory_one去接受内存了，只要有一次接受成功都会返回true，每次接受内存的order都是最大order值。具体的try_to_accept_memory_one函数参见作者其它文章分析，概况的说这个过程最终会调用free_one_page释放页面到伙伴系统。
+
+回到get_page_from_freelist的第一部分继续分析：
+#+begin_example
+/*
+ * Detect whether the number of free pages is below high
+ * watermark.  If so, we will decrease pcp->high and free
+ * PCP pages in free path to reduce the possibility of
+ * premature page reclaiming.  Detection is done here to
+ * avoid to do that in hotter free path.
+ */
+if (test_bit(ZONE_BELOW_HIGH, &zone->flags))
+        goto check_alloc_wmark;
+
+mark = high_wmark_pages(zone);
+if (zone_watermark_fast(zone, order, mark,
+                        ac->highest_zoneidx, alloc_flags,
+                        gfp_mask))
+        goto try_this_zone;
+else
+        set_bit(ZONE_BELOW_HIGH, &zone->flags);
+#+end_example
+这段代码主要是检查zone:flags是否设置了ZONE_BELOW_HIGH，这个水印表示zone的内存在高水位内存下。这时就需要进入check_alloc_wmark标签也就是第二部分进行内存回收了，通过high_wmark_pages去获得当前zone对应的高水位内存，注意这个都是要算上watermark_boost的：
+#+begin_example
+static inline unsigned long wmark_pages(const struct zone *z,
+					enum zone_watermarks w)
+{
+	return z->_watermark[w] + z->watermark_boost;
+}
+static inline unsigned long high_wmark_pages(const struct zone *z)
+{
+	return wmark_pages(z, WMARK_HIGH);
+}
+#+end_example
+zone:flags还可能有以下一些值：
+#+begin_example
+enum zone_flags {
+	ZONE_BOOSTED_WATERMARK,		/* zone recently boosted watermarks.
+					 * Cleared when kswapd is woken.
+					 */
+	ZONE_RECLAIM_ACTIVE,		/* kswapd may be scanning the zone. */
+	ZONE_BELOW_HIGH,		/* zone is below high watermark. */
+};
+#+end_example
+对于当前zone里的空想内存是否能达到mark这个内存水位，通过zone_watermark_fast来计算，如果达到就直接进入第三部分try_this_zone进行内存分配了。否则要设置当前当前zone:flags的ZONE_BELOW_HIGH，并进入到check_alloc_wmark也就是第二部分代码去回收内存，回收到足够的内存就可以到try_this_zone继续内存分配了。否则就要跳过这个zone，下次再遇到这个zone，若zone:flags还设置为ZONE_BELOW_HIGH，那么还要继续走第二部分代码check_alloc_wmark去回收内存，直到在free_unref_page_commit中调用clear_bit去清除这个bit。
+
+下面继续详细分析下zone_watermark_fast函数：
+#+begin_example
+static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
+				unsigned long mark, int highest_zoneidx,
+				unsigned int alloc_flags, gfp_t gfp_mask)
+{
+	long free_pages;
+
+	free_pages = zone_page_state(z, NR_FREE_PAGES);
+
+	/*
+	 * Fast check for order-0 only. If this fails then the reserves
+	 * need to be calculated.
+	 */
+	if (!order) {
+		long usable_free;
+		long reserved;
+
+		usable_free = free_pages;
+		reserved = __zone_watermark_unusable_free(z, 0, alloc_flags);
+
+		/* reserved may over estimate high-atomic reserves. */
+		usable_free -= min(usable_free, reserved);
+		if (usable_free > mark + z->lowmem_reserve[highest_zoneidx])
+			return true;
+	}
+
+	if (__zone_watermark_ok(z, order, mark, highest_zoneidx, alloc_flags,
+					free_pages))
+		return true;
+
+	/*
+	 * Ignore watermark boosting for __GFP_HIGH order-0 allocations
+	 * when checking the min watermark. The min watermark is the
+	 * point where boosting is ignored so that kswapd is woken up
+	 * when below the low watermark.
+	 */
+	if (unlikely(!order && (alloc_flags & ALLOC_MIN_RESERVE) && z->watermark_boost
+		&& ((alloc_flags & ALLOC_WMARK_MASK) == WMARK_MIN))) {
+		mark = z->_watermark[WMARK_MIN];
+		return __zone_watermark_ok(z, order, mark, highest_zoneidx,
+					alloc_flags, free_pages);
+	}
+
+	return false;
+}
+#+end_example
 ** 第二部分
 ** 第三部分
 * 附节
