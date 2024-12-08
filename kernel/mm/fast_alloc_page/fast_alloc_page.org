@@ -1621,10 +1621,28 @@ static inline struct zone *zonelist_zone(struct zoneref *zoneref)
 #+end_example
 [[next_zones_zonelist][next_zones_zonelist]]函数前面已经分析过了。继续往下分析第一部分的代码：
 #+begin_example
-if (cpusets_enabled() &&
-        (alloc_flags & ALLOC_CPUSET) &&
-        !__cpuset_zone_allowed(zone, gfp_mask))
-                continue;
+	struct zoneref *z;
+	struct zone *zone;
+	struct pglist_data *last_pgdat = NULL;
+	bool last_pgdat_dirty_ok = false;
+	bool no_fallback;
+
+retry:
+	/*
+	 * Scan zonelist, looking for a zone with enough free.
+	 * See also cpuset_node_allowed() comment in kernel/cgroup/cpuset.c.
+	 */
+	no_fallback = alloc_flags & ALLOC_NOFRAGMENT;
+	z = ac->preferred_zoneref;
+	for_next_zone_zonelist_nodemask(zone, z, ac->highest_zoneidx,
+					ac->nodemask) {
+		struct page *page;
+		unsigned long mark;
+
+		if (cpusets_enabled() &&
+			(alloc_flags & ALLOC_CPUSET) &&
+			!__cpuset_zone_allowed(zone, gfp_mask))
+				continue;
 #+end_example
 #+begin_example
 static inline bool __cpuset_zone_allowed(struct zone *z, gfp_t gfp_mask)
@@ -1924,6 +1942,14 @@ if (no_fallback && nr_online_nodes > 1 &&
         }
 }
 #+end_example
+这段代码的作用是，当前可能要切换节点分配内存了，但是还可以在清除ALLOC_NOFRAGMENT的情况下再尝试一次本地节点分配内存，因为本地性比碎片化更重要，本地性的内存访问性能较好。注意这里比较的基准是和preferred_zoneref这个zone所在的节点进行比较。goto retry实际上就是到整个for_next_zone_zonelist_nodemask循环重新开始一次了，只不过这次就没有ALLOC_NOFRAGMENT约束了。
+
+再往下看第一部分的代码：
+#+begin_example
+cond_accept_memory(zone, order);
+#+end_example
+对于Intel TDX这样的虚拟化平台，在虚拟机能够使用内存前必须先accepted它，这样机制可以阻止恶意的主机该表虚拟机的内存。
+
 ** 第二部分
 ** 第三部分
 * 附节
