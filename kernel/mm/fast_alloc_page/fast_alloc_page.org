@@ -1878,6 +1878,7 @@ spanned_pages = zone_end_pfn - zone_start_pfn
 #+end_example
 而present_pages是在spanned_pages中除去空洞的地址范围，managed_pages是在present_pages中由buddy system管理的页面。
 
+<<zone_page_state>>
 再来看看zone_page_state函数：
 #+begin_example
 static inline unsigned long zone_page_state(struct zone *zone,
@@ -2007,6 +2008,7 @@ enum zone_watermarks {
 WMARK_MIN水位最低。
 
 计算还需要accept多少内存其实就是看现在的空闲内存离promo_wmark_pages算出的水印还差多少内存。但是通过zone_page_state得到的空闲内存还需要排除一些内存再来看离目标内存水印位多远，比如对于__zone_watermark_unusable_free函数：
+<<__zone_watermark_unusable_free>>
 #+begin_example
 static inline long __zone_watermark_unusable_free(struct zone *z,
 				unsigned int order, unsigned int alloc_flags)
@@ -2128,7 +2130,159 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 	return false;
 }
 #+end_example
+zone_page_state[[zone_page_state][前面]]已经介绍过了，就是获得zone里空闲的页面有多少。然后的逻辑是对order为0也就是只分配一个页面的情况进行特殊处理，这可以理解为一种优化。在 =if (!order)= 的逻辑里，首
+先通过[[__zone_watermark_unusable_free][__zone_watermark_unusable_free]]去获得不可用内存，然后现在剩余可用的内存free_pages里还要减去reserved，并且减去后需要大于当前传进来的水印与lowmem_reserve里保护内存的和，现在这个
+水印前面介绍过就是WMARK_HIGH高水位。
+
+如果order大于0，或者说order为0，但是没有返回true，都会进入到__zone_watermark_ok再次尝试：
+#+begin_example
+bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
+			 int highest_zoneidx, unsigned int alloc_flags,
+			 long free_pages)
+{
+	long min = mark;
+	int o;
+
+	/* free_pages may go negative - that's OK */
+	free_pages -= __zone_watermark_unusable_free(z, order, alloc_flags);
+
+	if (unlikely(alloc_flags & ALLOC_RESERVES)) {
+		/*
+		 * __GFP_HIGH allows access to 50% of the min reserve as well
+		 * as OOM.
+		 */
+		if (alloc_flags & ALLOC_MIN_RESERVE) {
+			min -= min / 2;
+
+			/*
+			 * Non-blocking allocations (e.g. GFP_ATOMIC) can
+			 * access more reserves than just __GFP_HIGH. Other
+			 * non-blocking allocations requests such as GFP_NOWAIT
+			 * or (GFP_KERNEL & ~__GFP_DIRECT_RECLAIM) do not get
+			 * access to the min reserve.
+			 */
+			if (alloc_flags & ALLOC_NON_BLOCK)
+				min -= min / 4;
+		}
+
+		/*
+		 * OOM victims can try even harder than the normal reserve
+		 * users on the grounds that it's definitely going to be in
+		 * the exit path shortly and free memory. Any allocation it
+		 * makes during the free path will be small and short-lived.
+		 */
+		if (alloc_flags & ALLOC_OOM)
+			min -= min / 2;
+	}
+
+	/*
+	 * Check watermarks for an order-0 allocation request. If these
+	 * are not met, then a high-order request also cannot go ahead
+	 * even if a suitable page happened to be free.
+	 */
+	if (free_pages <= min + z->lowmem_reserve[highest_zoneidx])
+		return false;
+
+	/* If this is an order-0 request then the watermark is fine */
+	if (!order)
+		return true;
+
+	/* For a high-order request, check at least one suitable page is free */
+	for (o = order; o < NR_PAGE_ORDERS; o++) {
+		struct free_area *area = &z->free_area[o];
+		int mt;
+
+		if (!area->nr_free)
+			continue;
+
+		for (mt = 0; mt < MIGRATE_PCPTYPES; mt++) {
+			if (!free_area_empty(area, mt))
+				return true;
+		}
+
+#ifdef CONFIG_CMA
+		if ((alloc_flags & ALLOC_CMA) &&
+		    !free_area_empty(area, MIGRATE_CMA)) {
+			return true;
+		}
+#endif
+		if ((alloc_flags & (ALLOC_HIGHATOMIC|ALLOC_OOM)) &&
+		    !free_area_empty(area, MIGRATE_HIGHATOMIC)) {
+			return true;
+		}
+	}
+	return false;
+}
+#+end_example
+该函数首先还是通过[[__zone_watermark_unusable_free][__zone_watermark_unusable_free]]去获得不可用内存，free_pages要减去它。然后
+=if (unlikely(alloc_flags & ALLOC_RESERVES))= 里的逻辑主要是根据是否设置要使用保留内存标志来调整内存水线，如果可以使用保留内存，那么内存水线还可以往下调整，也就是可以使用更多的内存，不同的标志往下调的幅度不一样。
+
+随后的代码：
+#+begin_example
+	if (free_pages <= min + z->lowmem_reserve[highest_zoneidx])
+		return false;
+
+	/* If this is an order-0 request then the watermark is fine */
+	if (!order)
+		return true;
+#+end_example
+这里其实再一次对order 0的情况进行里检测，前面的条件，其实就是除了高过水线和保留内存，还需要free_pages至少大1，因为order 0就是一个页面，前面的条件过了，并且后面的条件判断出是order0的情况就可以返回true了。
+
+如果不是order 0的高阶内存分配的请求，后面的for循环里，从请求的order开始循环，依次向上到最大NR_PAGE_ORDERS这个order，这里面只要有一个order对应的free_area里有空闲的页面，就可以返回true了。
+
+这里引出了free_area，需要介绍一点背景知识了。
+
+Linux内核内存管理有2^order次方个连续页面形成页块大小这样的概念，一个单页面是内存分配的最小单位，而一个页块是连续的页面集合。NR_PAGE_ORDERS表示支持的页面块（page block）大小的种类，
+NR_PAGE_ORDERS = MAX_ORDER，通常定义为11。这意味着支持从order-0到order-10的块大小（即2^0到2^10个页面，每个块里面的页面都是连续的）。zone结构体里有一free_area数组，每个元素表示一个特定order的空闲块。每个free_area[order]管理的页面块大小是2^order个页面，注意这并不是说管理的总页面就是2^order个，它只是说一个页面块的大小。
+
+free_area也是一个结构体，里面的nr_free表示当前特定order的页块数量（不是单页面的数量），这表示了当前order里所有的页块个数。每个free_area[order]中有nr_free个页块，每个页块的大小是2^order个页面，所以当前order的free_area总共管理的页面数量可以通过以下公式计算：页面数量 = nr_free * 2^order。
+
+在free_area中还有一个链表数组成员free_list，当前order对应的nr_free这么多个页块又根据内核定义的迁移类型（MIGRATE_TYPES）进一步分类，按不同的类型挂入free_list链表数组中。
+
+有了这些基础再理解上面对于高阶内存分配的循环检测逻辑就容易理解了，free_area_empty函数就是根据传进来的free_area去检查对应参数migratetype的链表是否不为空，不为空则代表可以分出一个页块（其阶大于或等于请求的order），注意这里检测到了MIGRATE_PCPTYPES：
+#+begin_example
+enum migratetype {
+	MIGRATE_UNMOVABLE,
+	MIGRATE_MOVABLE,
+	MIGRATE_RECLAIMABLE,
+	MIGRATE_PCPTYPES,	/* the number of types on the pcp lists */
+	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
+#ifdef CONFIG_CMA
+	/*
+	 * MIGRATE_CMA migration type is designed to mimic the way
+	 * ZONE_MOVABLE works.  Only movable pages can be allocated
+	 * from MIGRATE_CMA pageblocks and page allocator never
+	 * implicitly change migration type of MIGRATE_CMA pageblock.
+	 *
+	 * The way to use it is to change migratetype of a range of
+	 * pageblocks to MIGRATE_CMA which can be done by
+	 * __free_pageblock_cma() function.
+	 */
+	MIGRATE_CMA,
+#endif
+#ifdef CONFIG_MEMORY_ISOLATION
+	MIGRATE_ISOLATE,	/* can't allocate from here */
+#endif
+	MIGRATE_TYPES
+};
+#+end_example
+也就是MIGRATE_UNMOVABLE、MIGRATE_MOVABLE以及MIGRATE_RECLAIMABLE三个链表只要有一个里面有空闲页块就行。
+
+free_area_empty定义如下：
+#+begin_example
+static inline bool free_area_empty(struct free_area *area, int migratetype)
+{
+	return list_empty(&area->free_list[migratetype]);
+}
+#+end_example
+可以看到其实现就是简单的判断链表非空。
+
+回到zone_watermark_fast函数，最后的逻辑是针对order 0的情况并且ALLOC_MIN_RESERVE（__GFP_HIGH）高优先级内存分配，并且watermark_boost有值，且alloc_flags只是WMARK_MIN时，可以使用WMARK_MIN这个最低水位再次调用__zone_watermark_ok尝试去判断是否满足水位分配，相当于再次放宽了条件去检测。
+
+回到get_page_from_freelist函数的第一部分，当zone_watermark_fast返回true时，表示当前内存充足，内存水位高于最高水位线，可以直接可以去往get_page_from_freelist函数的[[get_page_from_freelist_p3][第三部分]]去分配内存了。否则就将zone->flags置上ZONE_BELOW_HIGH，表示当前zone的水位低于最高水位线，这样在释放页面的路径上就会减少pcp缓存的页面数量以达到最高水位线，另外需要进一步针对当前这次分配使用的水位做检测，去往get_page_from_freelist函数的[[get_page_from_freelist_p2][第二部分]]。
+<<get_page_from_freelist_p2>>
 ** 第二部分
+<<get_page_from_freelist_p3>>
 ** 第三部分
 * 附节
 ** get_vma_policy生成ilx
