@@ -1,0 +1,12 @@
+x86-64，反汇编__schedule函数有：
+ffffffff81cc7277:       e8 64 0e 34 ff          call   ffffffff810080e0 <__switch_to_asm>
+ffffffff81cc727c:       48 89 c7                mov    %rax,%rdi
+ffffffff81cc727f:       e8 2c 23 44 ff          call   ffffffff811095b0 <finish_task_switch.isra.0>
+
+那么call指令一旦执行，现在rsp栈顶就存着call下一条指令的地址：ffffffff81cc727c
+而在__switch_to_asm的反汇编里有：
+ffffffff810080ee:       48 89 a7 18 15 00 00    mov    %rsp,0x1518(%rdi)
+ffffffff810080f5:       48 8b a6 18 15 00 00    mov    0x1518(%rsi),%rsp
+
+在这里可以看到rsp被恢复成之前保存在task_struct里偏移TASK_threadsp的位置，最后在__switch_to的反汇编里又通过__x86_return_thunk里的ret指令完成从栈顶弹出之前保存的ffffffff81cc727c处的指令继续运行，这样凡是切换完成过来的进程都从finish_task_switch开始运行，context_switch->finish_task_switch，finish_task_switch也作为context_switch的最后一个函数，而context_switch也作为__schedule的最后一个函数，这样就离开调度器的代码了，继续运行进程自己的代码了，调用__schedule的代码有很多（查看调用scheule的地方有很多，schedule->__schedule_loop->__schedule）。
+这是x86任务切换的底层原理。
