@@ -1949,6 +1949,7 @@ if (no_fallback && nr_online_nodes > 1 &&
 #+begin_example
 cond_accept_memory(zone, order);
 #+end_example
+<<cond_accept_memory>>
 对于Intel TDX这样的虚拟化平台，在虚拟机能够使用内存前必须先accepted它，这种机制可以阻止恶意的主机修改虚拟机的内存：
 #+begin_example
 static bool cond_accept_memory(struct zone *zone, unsigned int order)
@@ -2060,6 +2061,7 @@ else
         set_bit(ZONE_BELOW_HIGH, &zone->flags);
 #+end_example
 这段代码主要是检查zone:flags是否设置了ZONE_BELOW_HIGH，这个水印表示zone的内存在高水位内存下。这时就需要进入check_alloc_wmark标签也就是第二部分进行内存回收了，通过high_wmark_pages去获得当前zone对应的高水位内存，注意这个都是要算上watermark_boost的：
+<<wmark_pages>>
 #+begin_example
 static inline unsigned long wmark_pages(const struct zone *z,
 					enum zone_watermarks w)
@@ -2282,8 +2284,116 @@ static inline bool free_area_empty(struct free_area *area, int migratetype)
 回到get_page_from_freelist函数的第一部分，当zone_watermark_fast返回true时，表示当前内存充足，内存水位高于最高水位线，可以直接可以去往get_page_from_freelist函数的[[get_page_from_freelist_p3][第三部分]]去分配内存了。否则就将zone->flags置上ZONE_BELOW_HIGH，表示当前zone的水位低于最高水位线，这样在释放页面的路径上就会减少pcp缓存的页面数量以达到最高水位线，另外需要进一步针对当前这次分配使用的水位做检测，去往get_page_from_freelist函数的[[get_page_from_freelist_p2][第二部分]]。
 <<get_page_from_freelist_p2>>
 ** 第二部分
+进入第二部分代码的前提是当前处理的zone其水位没有达到WMARK_LOW指定的高水位位置。该部分代码的主要逻辑是依据本次分配指定的水位线（之前是直接看高水位），再重新调用zone_watermark_fast来看下水位线是否满足，因为本次分配可能指定了更低的水位线，比如WMARK_LOW或WMARK_MIN，这相当于放松条件再次尝试，如果还是没有满足的话就会尝试一些方法去补充内存，下面详细分析这段代码：
+#+begin_example
+check_alloc_wmark:
+		mark = wmark_pages(zone, alloc_flags & ALLOC_WMARK_MASK);
+		if (!zone_watermark_fast(zone, order, mark,
+				       ac->highest_zoneidx, alloc_flags,
+				       gfp_mask)) {
+			int ret;
+
+			if (cond_accept_memory(zone, order))
+				goto try_this_zone;
+
+			/*
+			 * Watermark failed for this zone, but see if we can
+			 * grow this zone if it contains deferred pages.
+			 */
+			if (deferred_pages_enabled()) {
+				if (_deferred_grow_zone(zone, order))
+					goto try_this_zone;
+			}
+			/* Checked here to keep the fast path fast */
+			BUILD_BUG_ON(ALLOC_NO_WATERMARKS < NR_WMARK);
+			if (alloc_flags & ALLOC_NO_WATERMARKS)
+				goto try_this_zone;
+
+			if (!node_reclaim_enabled() ||
+			    !zone_allows_reclaim(zonelist_zone(ac->preferred_zoneref), zone))
+				continue;
+
+			ret = node_reclaim(zone->zone_pgdat, gfp_mask, order);
+			switch (ret) {
+			case NODE_RECLAIM_NOSCAN:
+				/* did not scan */
+				continue;
+			case NODE_RECLAIM_FULL:
+				/* scanned but unreclaimable */
+				continue;
+			default:
+				/* did we reclaim enough */
+				if (zone_watermark_ok(zone, order, mark,
+					ac->highest_zoneidx, alloc_flags))
+					goto try_this_zone;
+
+				continue;
+			}
+		}
+#+end_example
+[[wmark_pages][wmark_pages]]函数前面介绍过，只不过这次传入的参数是通过alloc_flags & ALLOC_WMARK_MASK去得到本次的分配水位线：
+#+begin_example
+/* The ALLOC_WMARK bits are used as an index to zone->watermark */
+#define ALLOC_WMARK_MIN		WMARK_MIN
+#define ALLOC_WMARK_LOW		WMARK_LOW
+#define ALLOC_WMARK_HIGH	WMARK_HIGH
+#define ALLOC_NO_WATERMARKS	0x04 /* don't check watermarks at all */
+
+/* Mask to get the watermark bits */
+#define ALLOC_WMARK_MASK	(ALLOC_NO_WATERMARKS-1)
+#+end_example
+前次调用使用的是WMARK_HIGH水位，本次可能会有更宽松的水位要求比如WMARK_MIN或WMARK_LOW。如果本次zone_watermark_fast依旧返回false，就会进入第二部分代码的主体了，依据一些条件看能不能尝试一些办法去回收内存。
+
+首先是前面介绍过的[[cond_accept_memory][cond_accept_memory]]函数，这里再次尝试看能否接受一些未accept的内存。
+
+下一个方式是依据DEFERRED_STRUCT_PAGE_INIT是否配置，通过_deferred_grow_zone函数去增加可用内存。通常情况下，所有的 struct page 结构会在早期启动阶段由单线程进行初始化。在非常大的机器上，这可能会耗费相当长的时间。如果启用此选项，大型机器将在启动时仅加载一部分内存映射（memmap），然后通过并行的方式初始化剩余部分，相当于是说早期内存启动如果遇到内存不足的请求，还可以试试是不是还有deferred pages可以拿来用。
+
+再往下的检测是如果本次分配可以允许不检查内存水印就直接跳到try_this_zone的第三部分去分配内存了。
+
+最后一部分的逻辑是依据node_reclaim_mode的设置，看要不要通过node_reclaim进行内存节点回收。这需要满足两个条件：
+#+begin_example
+if (!node_reclaim_enabled() ||
+    !zone_allows_reclaim(zonelist_zone(ac->preferred_zoneref), zone))
+        continue;
+#+end_example
+continue如果被执行了就是跳过当前zone了，所以要想执行到node_reclaim，就必须这两个条件都不满足。node_reclaim_enabled定义如下：
+#+begin_example
+extern int node_reclaim_mode;
+static inline bool node_reclaim_enabled(void)
+{
+	/* Is any node_reclaim_mode bit set? */
+	return node_reclaim_mode & (RECLAIM_ZONE|RECLAIM_WRITE|RECLAIM_UNMAP);
+}
+#+end_example
+就是只要node_reclaim_mode设置了任意的位，node_reclaim_enabled都会返回真了，取反当然就是假了。这个node_reclaim_mode支持用户态设置，是提供给用户态的一个接口：
+#+begin_example
+#ifdef CONFIG_NUMA
+	{
+		.procname	= "zone_reclaim_mode",
+		.data		= &node_reclaim_mode,
+		.maxlen		= sizeof(node_reclaim_mode),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+	},
+#endif
+#+end_example
+第二个条件的函数zone_allows_reclaim如下：
+#+begin_example
+int __read_mostly node_reclaim_distance = RECLAIM_DISTANCE;
+
+static bool zone_allows_reclaim(struct zone *local_zone, struct zone *zone)
+{
+	return node_distance(zone_to_nid(local_zone), zone_to_nid(zone)) <=
+				node_reclaim_distance;
+}
+#+end_example
+node_distance是计算两个节点间距离的，关于这个函数的细节在笔者其它文章还会有详细分析。这里RECLAIM_DISTANCE被定义成30，也就是要能进行node_reclaim，还需要当前处理zone所在的节点和第一候选ac->preferred_zoneref这个zone所在的节点距离要小于30.
+
+后面的逻辑就是调用node_reclaim去回收内存以及检查回收的结果，关于回收内存的主题参见笔者其它文章系列。
 <<get_page_from_freelist_p3>>
 ** 第三部分
+该部分的代码其实比较简单了。
 * 附节
 ** get_vma_policy生成ilx
 # ** 使用与操作优化取模
