@@ -2393,7 +2393,79 @@ node_distance是计算两个节点间距离的，关于这个函数的细节在�
 后面的逻辑就是调用node_reclaim去回收内存以及检查回收的结果，关于回收内存的主题参见笔者其它文章系列。
 <<get_page_from_freelist_p3>>
 ** 第三部分
-该部分的代码其实比较简单了。
+该部分本身的代码其实比较简单了，就是调用rmqueue去伙伴系统里拿内存，这个函数的分析又开到[[rmqueue][下一节]]去介绍了。
+
+第三部分本身的代码如下：
+#+begin_example
+try_this_zone:
+		page = rmqueue(zonelist_zone(ac->preferred_zoneref), zone, order,
+				gfp_mask, alloc_flags, ac->migratetype);
+		if (page) {
+			prep_new_page(page, order, gfp_mask, alloc_flags);
+
+			/*
+			 * If this is a high-order atomic allocation then check
+			 * if the pageblock should be reserved for the future
+			 */
+			if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
+				reserve_highatomic_pageblock(page, order, zone);
+
+			return page;
+		} else {
+			if (cond_accept_memory(zone, order))
+				goto try_this_zone;
+
+			/* Try again if zone has deferred pages */
+			if (deferred_pages_enabled()) {
+				if (_deferred_grow_zone(zone, order))
+					goto try_this_zone;
+			}
+		}
+	}
+
+	/*
+	 * It's possible on a UMA machine to get through all zones that are
+	 * fragmented. If avoiding fragmentation, reset and try again.
+	 */
+	if (no_fallback) {
+		alloc_flags &= ~ALLOC_NOFRAGMENT;
+		goto retry;
+	}
+
+	return NULL;
+}
+#+end_example
+rmqueue本节不介绍，假设rmqueue成功返回了page，那么prep_new_page会做一些准备工作：
+#+begin_example
+static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags,
+							unsigned int alloc_flags)
+{
+	post_alloc_hook(page, order, gfp_flags);
+
+	if (order && (gfp_flags & __GFP_COMP))
+		prep_compound_page(page, order);
+
+	/*
+	 * page is set pfmemalloc when ALLOC_NO_WATERMARKS was necessary to
+	 * allocate the page. The expectation is that the caller is taking
+	 * steps that will free more memory. The caller should avoid the page
+	 * being used for !PFMEMALLOC purposes.
+	 */
+	if (alloc_flags & ALLOC_NO_WATERMARKS)
+		set_page_pfmemalloc(page);
+	else
+		clear_page_pfmemalloc(page);
+}
+#+end_example
+
+<<rmqueue>>
+* rmqueue
+
+* 附节
+** get_vma_policy生成ilx
+#+end_example
+<<rmqueue>>
+* rmqueue
 * 附节
 ** get_vma_policy生成ilx
 # ** 使用与操作优化取模
