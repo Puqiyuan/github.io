@@ -1,0 +1,26 @@
+以下是在x86上e1000网卡中断处理的一个流程：
+    kworker/14:0-3974    [014] dNH1.   588.025196: e1000_intr: (e1000_intr+0x4/0xf0 [e1000])
+    kworker/14:0-3974    [014] dNH1.   588.025204: <stack trace>
+ => e1000_intr
+ => __handle_irq_event_percpu
+ => handle_irq_event
+ => handle_fasteoi_irq
+ => __common_interrupt
+ => common_interrupt
+ => asm_common_interrupt
+ => e1000_clean_rx_irq
+ => e1000_clean
+ => __napi_poll
+ => net_rx_action
+ => handle_softirqs
+ => __irq_exit_rcu
+ => common_interrupt
+ => asm_common_interrupt
+ => finish_task_switch.isra.0
+ => __schedule
+ => schedule
+ => worker_thread
+ => kthread
+ => ret_from_fork
+ => ret_from_fork_asm
+以这个流程为契机，详细分析Linux中断管理。
