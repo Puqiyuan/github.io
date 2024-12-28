@@ -2457,13 +2457,112 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
 		clear_page_pfmemalloc(page);
 }
 #+end_example
+先看post_alloc_hook函数：
+#+begin_example
+inline void post_alloc_hook(struct page *page, unsigned int order,
+				gfp_t gfp_flags)
+{
+	bool init = !want_init_on_free() && want_init_on_alloc(gfp_flags) &&
+			!should_skip_init(gfp_flags);
+	bool zero_tags = init && (gfp_flags & __GFP_ZEROTAGS);
+	int i;
 
+	set_page_private(page, 0);
+	set_page_refcounted(page);
+
+	arch_alloc_page(page, order);
+	debug_pagealloc_map_pages(page, 1 << order);
+
+	/*
+	 * Page unpoisoning must happen before memory initialization.
+	 * Otherwise, the poison pattern will be overwritten for __GFP_ZERO
+	 * allocations and the page unpoisoning code will complain.
+	 */
+	kernel_unpoison_pages(page, 1 << order);
+
+	/*
+	 * As memory initialization might be integrated into KASAN,
+	 * KASAN unpoisoning and memory initializion code must be
+	 * kept together to avoid discrepancies in behavior.
+	 */
+
+	/*
+	 * If memory tags should be zeroed
+	 * (which happens only when memory should be initialized as well).
+	 */
+	if (zero_tags) {
+		/* Initialize both memory and memory tags. */
+		for (i = 0; i != 1 << order; ++i)
+			tag_clear_highpage(page + i);
+
+		/* Take note that memory was initialized by the loop above. */
+		init = false;
+	}
+	if (!should_skip_kasan_unpoison(gfp_flags) &&
+	    kasan_unpoison_pages(page, order, init)) {
+		/* Take note that memory was initialized by KASAN. */
+		if (kasan_has_integrated_init())
+			init = false;
+	} else {
+		/*
+		 * If memory tags have not been set by KASAN, reset the page
+		 * tags to ensure page_address() dereferencing does not fault.
+		 */
+		for (i = 0; i != 1 << order; ++i)
+			page_kasan_tag_reset(page + i);
+	}
+	/* If memory is still not initialized, initialize it now. */
+	if (init)
+		kernel_init_pages(page, 1 << order);
+
+	set_page_owner(page, order, gfp_flags);
+	page_table_check_alloc(page, order);
+	pgalloc_tag_add(page, current, 1 << order);
+}
+#+end_example
+三个条件共同决定了是否要对分配出来的页面进行初始化：
+#+begin_example
+bool init = !want_init_on_free() && want_init_on_alloc(gfp_flags) &&
+                !should_skip_init(gfp_flags);
+#+end_example
+#+begin_example
+want_init_on_free实现如下：
+static inline bool want_init_on_free(void)
+{
+	return static_branch_maybe(CONFIG_INIT_ON_FREE_DEFAULT_ON,
+				   &init_on_free);
+}
+#+end_example
+启用init_on_free后，内核会在释放内存时将所有页面分配器和slab分配器的内存清零。这相当于在内核启动参数中添加init_on_free=1，这时默认开启此功能。可以通过在启动参数中设置init_on_free=0来禁用该功能。与init_on_alloc（在分配时清零内存）类似，init_on_free的目的是防止未初始化的堆内存问题。当启用init_on_free时，释放的内存会立刻被清零。这有效防止了多种与未初始化内存相关的漏洞，例如：堆内容泄露：清零后，即使后续程序意外访问到释放的内存，也不会看到之前的内容。内存取证和冷启动攻击：攻击者即使尝试从释放的内存中恢复数据，也无法获取实际内容。启用init_on_free会对性能产生负面影响，主要原因是清零操作会触碰到本来已经“冷”的内存区域，影响缓存效率。性能损耗范围：大多数情况下，性能影响约为3-5%。在某些特定的合成工作负载（如专门测试内存分配和释放的基准测试）中，性能损耗可能高达8%。如果系统需要加强对内存数据的保护（如防止敏感数据泄露或提高系统安全性），可以启用init_on_free。对性能敏感的场景下，则可能需要权衡利弊，选择关闭此功能。在笔者的环境里这个功能是关闭的。
+
+继续看下一个条件：
+#+begin_example
+DECLARE_STATIC_KEY_MAYBE(CONFIG_INIT_ON_ALLOC_DEFAULT_ON, init_on_alloc);
+
+#define static_branch_maybe(config, x)					\
+	(IS_ENABLED(config) ? static_branch_likely(x)			\
+			    : static_branch_unlikely(x))
+
+static inline bool want_init_on_alloc(gfp_t flags)
+{
+	if (static_branch_maybe(CONFIG_INIT_ON_ALLOC_DEFAULT_ON,
+				&init_on_alloc))
+		return true;
+	return flags & __GFP_ZERO;
+}
+#+end_example
+这个配置打开时，所有页面分配器出来的页面或是slab分配器得到的内存在分配的时候都会被清零，大多数时候该功能对性能的影响在1%，某些专门合成的测试负载可能会有高达7%的性能损失。
+
+这个配置在笔者的环境是打开的。最后一个条件主要是针对arm64环境的硬件内存标签功能，它依赖于ARMv8.5+提供的Memory Tagging Extension，本文不详细探究，总之第三个条件一般也是true，所以在笔者的环境就是init为true。
+
+再往下set_page_private将page: private成员给赋值成0，因为这个成员可能表示之前使用者有意义的值，比如buffer head可以使用它，也可以表示一个swap_entry_t，当该页面在伙伴系统里，又可以存放页面的order信息，所以在分配完成返回给用户前，先将这个值清0。
+
+set_page_refcounted函数又设置
 <<rmqueue>>
 * rmqueue
 
 * 附节
 ** get_vma_policy生成ilx
-#+end_example
 <<rmqueue>>
 * rmqueue
 * 附节
