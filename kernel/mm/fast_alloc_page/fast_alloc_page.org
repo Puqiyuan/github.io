@@ -2557,7 +2557,76 @@ static inline bool want_init_on_alloc(gfp_t flags)
 
 再往下set_page_private将page: private成员给赋值成0，因为这个成员可能表示之前使用者有意义的值，比如buffer head可以使用它，也可以表示一个swap_entry_t，当该页面在伙伴系统里，又可以存放页面的order信息，所以在分配完成返回给用户前，先将这个值清0。
 
-set_page_refcounted函数又设置
+set_page_refcounted函数又设置page: _refcount为1。在设置前判断当前页面应该不是tail page，因为tail page不能单独拿出来分配，操作tail page只能通过head page，如果一个页面是tail page，那么page: compound_head的bit 0被设置为1。
+
+再往下是unpoision页面。poision/unposion页面是内核内存管理的一个安全功能，在释放页面时，以特定的毒化模式串去填充页面，而在分配页面时又会去验证是不是这样的毒化模式串，这样如果内存页面被非法的访问修改过，就会在分配页面检测毒化模式串时被发现。这个配置CONFIG_PAGE_POISONING在笔者的环境上是打开的。
+
+#+begin_example
+kernel_unpoison_pages(page, 1 << order);
+
+static inline void kernel_unpoison_pages(struct page *page, int numpages)
+{
+	if (page_poisoning_enabled_static())
+		__kernel_unpoison_pages(page, numpages);
+}
+
+void __kernel_unpoison_pages(struct page *page, int n)
+{
+	int i;
+
+	for (i = 0; i < n; i++)
+		unpoison_page(page + i);
+}
+
+static void unpoison_page(struct page *page)
+{
+	void *addr;
+
+	addr = kmap_local_page(page);
+	kasan_disable_current();
+	/*
+	 * Page poisoning when enabled poisons each and every page
+	 * that is freed to buddy. Thus no extra check is done to
+	 * see if a page was poisoned.
+	 */
+	check_poison_mem(page, kasan_reset_tag(addr), PAGE_SIZE);
+	kasan_enable_current();
+	kunmap_local(addr);
+}
+
+static void check_poison_mem(struct page *page, unsigned char *mem, size_t bytes)
+{
+	static DEFINE_RATELIMIT_STATE(ratelimit, 5 * HZ, 10);
+	unsigned char *start;
+	unsigned char *end;
+
+	start = memchr_inv(mem, PAGE_POISON, bytes);
+	if (!start)
+		return;
+
+	for (end = mem + bytes - 1; end > start; end--) {
+		if (*end != PAGE_POISON)
+			break;
+	}
+
+	if (!__ratelimit(&ratelimit))
+		return;
+	else if (start == end && single_bit_flip(*start, PAGE_POISON))
+		pr_err("pagealloc: single bit error\n");
+	else
+		pr_err("pagealloc: memory corruption\n");
+
+	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 16, 1, start,
+			end - start + 1, 1);
+	dump_stack();
+	dump_page(page, "pagealloc: corrupted page details");
+}
+#+end_example
+可以看到这里针对每个页面都调用了memchr_inv函数来检查其里的内容是不是毒化模式串PAGE_POISON，它一般是0xaa，memchr_inv的作用就是检查自start起始，如果某个地址不是0xaa，就返回这个串的地
+址了，判断完所有内容都是0xaa的话，就返回NULL。
+
+中间关于tag/kasan的处理本文不详细描述了。接下来主要想介绍下set_page_owner函数，尽管CONFIG_PAGE_OWNER在笔者的环境上没有打开，但这个功能是一个用于跟踪页面被哪个进程使用的，对于调试可能有很大帮助。
+
 <<rmqueue>>
 * rmqueue
 
