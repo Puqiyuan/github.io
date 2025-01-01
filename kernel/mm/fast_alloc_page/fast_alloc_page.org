@@ -2627,6 +2627,41 @@ static void check_poison_mem(struct page *page, unsigned char *mem, size_t bytes
 
 中间关于tag/kasan的处理本文不详细描述了。接下来主要想介绍下set_page_owner函数，尽管CONFIG_PAGE_OWNER在笔者的环境上没有打开，但这个功能是一个用于跟踪页面被哪个进程使用的，对于调试可能有很大帮助。
 
+如果开启了CONFIG_PAGE_OWNER就会定义上page_owner_ops这个操作集。
+#+begin_example
+static struct page_ext_operations *page_ext_ops[] __initdata = {
+#ifdef CONFIG_PAGE_OWNER
+	&page_owner_ops,
+#endif
+...
+};
+#+end_example
+page_owner_ops里的init成员为函数init_page_owner，它会调用：
+#+begin_example
+static_branch_enable(&page_owner_inited);
+#+end_example
+去使能page_owner_inited。而mm_core_init->page_ext_init->invoke_init_callbacks会对上述的init函数进行调用：
+#+begin_example
+static void __init invoke_init_callbacks(void)
+{
+	int i;
+	int entries = ARRAY_SIZE(page_ext_ops);
+
+	for (i = 0; i < entries; i++) {
+		if (page_ext_ops[i]->init)
+			page_ext_ops[i]->init();
+	}
+}
+#+end_example
+这样在打开了配置CONFIG_PAGE_OWNER时，page_owner_inited量就会使能。这样set_page_owner函数就可以调用__set_page_owner函数了：
+#+begin_example
+static inline void set_page_owner(struct page *page,
+			unsigned short order, gfp_t gfp_mask)
+{
+	if (static_branch_unlikely(&page_owner_inited))
+		__set_page_owner(page, order, gfp_mask);
+}
+#+end_example
 <<rmqueue>>
 * rmqueue
 
