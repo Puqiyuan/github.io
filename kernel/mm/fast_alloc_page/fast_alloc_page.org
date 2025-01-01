@@ -2662,6 +2662,100 @@ static inline void set_page_owner(struct page *page,
 		__set_page_owner(page, order, gfp_mask);
 }
 #+end_example
+如果开启了CONFIG_PAGE_OWNER，那么每个page关联到一个page_ext结构体，这个page_ext可以解释为一个地址，这样就可以在这个地址存储当前页面的一些额外的信息了，所谓extend就是这个意思。这个配置用于跟踪内核中每个页面的分配者和调用链。如果启用此特性，它会记录每个页面的分配和释放的调用堆栈，从而帮助开发者排查可能的内存泄漏或未释放的页面（例如裸调用 alloc_page(s) 而未释放）。
+
+__set_page_owner函数里，通过page_ext_get->lookup_page_ext去获得当前页面对应的page_ext，所有的page_ext结构体在每个内存节点里有一个开始的基址base，就是pglist_data: node_page_ext成员，所谓获取page对应的page_ext，其实就是看当前页面对应当前节点起始页面的偏移是多少，取出相对于基址base偏移这么多的page_ext就行。而所有page所占的的page_ext结构体的空间，在alloc_node_page_ext函数里初始化的时候通过memblock_alloc_try_node去获得，并给到pglist_data: node_page_ext：
+#+begin_example
+static int __init alloc_node_page_ext(int nid)
+{
+	struct page_ext *base;
+	unsigned long table_size;
+	unsigned long nr_pages;
+
+	nr_pages = NODE_DATA(nid)->node_spanned_pages;
+	if (!nr_pages)
+		return 0;
+
+	/*
+	 * Need extra space if node range is not aligned with
+	 * MAX_ORDER_NR_PAGES. When page allocator's buddy algorithm
+	 * checks buddy's status, range could be out of exact node range.
+	 */
+	if (!IS_ALIGNED(node_start_pfn(nid), MAX_ORDER_NR_PAGES) ||
+		!IS_ALIGNED(node_end_pfn(nid), MAX_ORDER_NR_PAGES))
+		nr_pages += MAX_ORDER_NR_PAGES;
+
+	table_size = page_ext_size * nr_pages;
+
+	base = memblock_alloc_try_nid(
+			table_size, PAGE_SIZE, __pa(MAX_DMA_ADDRESS),
+			MEMBLOCK_ALLOC_ACCESSIBLE, nid);
+	if (!base)
+		return -ENOMEM;
+	NODE_DATA(nid)->node_page_ext = base;
+	total_usage += table_size;
+	memmap_boot_pages_add(DIV_ROUND_UP(table_size, PAGE_SIZE));
+	return 0;
+}
+#+end_example
+memblock是内核里相对于伙伴系统的另一个内存管理基址，它在伙伴系统还未就绪的时候使用，关于它的详细分析见笔者另外的文章，总之page_ext所需的空间是在启动时事先通过memblock预分配好的。
+
+有了page_ext，就可以通过get_page_owner去获得page_owner结构体了，page_ext可能不止被
+page_owner使用，page owner是page_ext的使用者之一（page owner这个功能就作为page ext的
+client），__set_page_owner->__update_page_owner_handle，在后者这个函数里，先通过
+get_page_owner将page_ext转换为page_owner结构体，然后就可以往里面存信息了，由于每个页面关联
+一个page_ext，page_ext又可以关联到page_owner，所以最终其实就记录了每个页面由谁持有，
+且__set_page_owner->save_stack还保存了调用栈用于分析：
+#+begin_example
+noinline void __set_page_owner(struct page *page, unsigned short order,
+					gfp_t gfp_mask)
+{
+	struct page_ext *page_ext;
+	u64 ts_nsec = local_clock();
+	depot_stack_handle_t handle;
+
+	handle = save_stack(gfp_mask);
+
+	page_ext = page_ext_get(page);
+	if (unlikely(!page_ext))
+		return;
+	__update_page_owner_handle(page_ext, handle, order, gfp_mask, -1,
+				   ts_nsec, current->pid, current->tgid,
+				   current->comm);
+	page_ext_put(page_ext);
+	inc_stack_record_count(handle, gfp_mask, 1 << order);
+}
+#+end_example
+#+begin_example
+static inline void __update_page_owner_handle(struct page_ext *page_ext,
+					      depot_stack_handle_t handle,
+					      unsigned short order,
+					      gfp_t gfp_mask,
+					      short last_migrate_reason, u64 ts_nsec,
+					      pid_t pid, pid_t tgid, char *comm)
+{
+	int i;
+	struct page_owner *page_owner;
+
+	for (i = 0; i < (1 << order); i++) {
+		page_owner = get_page_owner(page_ext);
+		page_owner->handle = handle;
+		page_owner->order = order;
+		page_owner->gfp_mask = gfp_mask;
+		page_owner->last_migrate_reason = last_migrate_reason;
+		page_owner->pid = pid;
+		page_owner->tgid = tgid;
+		page_owner->ts_nsec = ts_nsec;
+		strscpy(page_owner->comm, comm,
+			sizeof(page_owner->comm));
+		__set_bit(PAGE_EXT_OWNER, &page_ext->flags);
+		__set_bit(PAGE_EXT_OWNER_ALLOCATED, &page_ext->flags);
+		page_ext = page_ext_next(page_ext);
+	}
+}
+#+end_example
+关于page owner和page ext的更多细节可以参考笔者其它文章。到这里post_alloc_hook就介绍的差不
+多了。回到prep_new_page函数
 <<rmqueue>>
 * rmqueue
 
