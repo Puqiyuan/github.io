@@ -1,0 +1,52 @@
+#+TITLE:X86-64架构下一个网卡中断的处理流程
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
+#+begin_example
+ => e1000_intr
+ => __handle_irq_event_percpu
+ => handle_irq_event
+ => handle_fasteoi_irq
+ => __common_interrupt
+ => common_interrupt
+ => asm_common_interrupt
+ => e1000_clean_rx_irq
+ => e1000_clean
+ => __napi_poll
+ => net_rx_action
+ => handle_softirqs
+ => __irq_exit_rcu
+ => common_interrupt
+ => asm_common_interrupt
+ => finish_task_switch.isra.0
+ => __schedule
+ => schedule
+ => worker_thread
+ => kthread
+ => ret_from_fork
+ => ret_from_fork_asm
+#+end_example
+* 中断向量表初始化
+X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
+** 外部中断向量表构造
+下面的汇编代码描述了外部中断向量表的内容：
+#+begin_example
+	.align IDT_ALIGN
+SYM_CODE_START(irq_entries_start)
+    vector=FIRST_EXTERNAL_VECTOR
+    .rept NR_EXTERNAL_VECTORS
+	UNWIND_HINT_IRET_REGS
+0 :
+	ENDBR
+	.byte	0x6a, vector
+	jmp	asm_common_interrupt
+	/* Ensure that the above is IDT_ALIGN bytes max */
+	.fill 0b + IDT_ALIGN - ., 1, 0xcc
+	vector = vector+1
+    .endr
+SYM_CODE_END(irq_entries_start)
+#+end_example
+** 注册外部中断向量表
+* 一个网卡中断的触发与执行

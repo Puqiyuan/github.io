@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2025-01-02 Thu 22:45 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X86-64架构下一个网卡中断的处理流程</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<script type="text/javascript">
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+<!--/*--><![CDATA[/*><!--*/
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">X86-64架构下一个网卡中断的处理流程</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgf50b74e">1. 中断向量表初始化</a>
+<ul>
+<li><a href="#org9c5fd2e">1.1. 外部中断向量表构造</a></li>
+<li><a href="#orgf06d229">1.2. 注册外部中断向量表</a></li>
+</ul>
+</li>
+<li><a href="#orgf55fbd7">2. 一个网卡中断的触发与执行</a></li>
+</ul>
+</div>
+</div>
+<p>
+本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
+</p>
+<pre class="example" id="orgeffd605">
+=&gt; e1000_intr
+=&gt; __handle_irq_event_percpu
+=&gt; handle_irq_event
+=&gt; handle_fasteoi_irq
+=&gt; __common_interrupt
+=&gt; common_interrupt
+=&gt; asm_common_interrupt
+=&gt; e1000_clean_rx_irq
+=&gt; e1000_clean
+=&gt; __napi_poll
+=&gt; net_rx_action
+=&gt; handle_softirqs
+=&gt; __irq_exit_rcu
+=&gt; common_interrupt
+=&gt; asm_common_interrupt
+=&gt; finish_task_switch.isra.0
+=&gt; __schedule
+=&gt; schedule
+=&gt; worker_thread
+=&gt; kthread
+=&gt; ret_from_fork
+=&gt; ret_from_fork_asm
+</pre>
+<div id="outline-container-orgf50b74e" class="outline-2">
+<h2 id="orgf50b74e"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
+</p>
+</div>
+<div id="outline-container-org9c5fd2e" class="outline-3">
+<h3 id="org9c5fd2e"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+下面的汇编代码描述了外部中断向量表的内容：
+</p>
+<pre class="example" id="orgefa7c9e">
+	.align IDT_ALIGN
+SYM_CODE_START(irq_entries_start)
+    vector=FIRST_EXTERNAL_VECTOR
+    .rept NR_EXTERNAL_VECTORS
+	UNWIND_HINT_IRET_REGS
+0 :
+	ENDBR
+	.byte	0x6a, vector
+	jmp	asm_common_interrupt
+	/* Ensure that the above is IDT_ALIGN bytes max */
+	.fill 0b + IDT_ALIGN - ., 1, 0xcc
+	vector = vector+1
+    .endr
+SYM_CODE_END(irq_entries_start)
+</pre>
+</div>
+</div>
+<div id="outline-container-orgf06d229" class="outline-3">
+<h3 id="orgf06d229"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+</div>
+</div>
+<div id="outline-container-orgf55fbd7" class="outline-2">
+<h2 id="orgf55fbd7"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2025-01-02 Thu 22:45</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

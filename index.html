@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2024-11-02 Sat 21:07 -->
+<!-- 2025-01-02 Thu 22:35 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dissect Kernel</title>
@@ -38,10 +38,11 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org96084e6">1. net</a></li>
-<li><a href="#orgdb21154">2. virt</a></li>
-<li><a href="#org7723f73">3. mm</a></li>
-<li><a href="#org8ed69a3">4. debug</a></li>
+<li><a href="#org94e4440">1. net</a></li>
+<li><a href="#orgff754b3">2. virt</a></li>
+<li><a href="#orga4d0abe">3. mm</a></li>
+<li><a href="#orgd1c058c">4. interrupt</a></li>
+<li><a href="#orgd1437e7">5. debug</a></li>
 </ul>
 </div>
 </div>
@@ -56,36 +57,44 @@
 有任何想法请联系作者Cauchy(Qiyuan Pu)：pqy7172@gmail.com。
 </p>
 </div>
-<div id="outline-container-org96084e6" class="outline-2">
-<h2 id="org96084e6"><span class="section-number-2">1.</span> net</h2>
+<div id="outline-container-org94e4440" class="outline-2">
+<h2 id="org94e4440"><span class="section-number-2">1.</span> net</h2>
 <div class="outline-text-2" id="text-1">
 <ul class="org-ul">
-<li><a href="./kernel/net/ipfrag_high_thresh.html">ipfrag_high_thresh参数作用</a>.</li>
+<li><a href="./kernel/net/ipfrag_high_thresh.html">ipfrag_high_thresh参数作用</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgdb21154" class="outline-2">
-<h2 id="orgdb21154"><span class="section-number-2">2.</span> virt</h2>
+<div id="outline-container-orgff754b3" class="outline-2">
+<h2 id="orgff754b3"><span class="section-number-2">2.</span> virt</h2>
 <div class="outline-text-2" id="text-2">
 <ul class="org-ul">
-<li><a href="./virt/cpu-virt.html">CPU计算虚拟化：kvm与qemu</a>.</li>
+<li><a href="./virt/cpu-virt.html">CPU计算虚拟化：kvm与qemu</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org7723f73" class="outline-2">
-<h2 id="org7723f73"><span class="section-number-2">3.</span> mm</h2>
+<div id="outline-container-orga4d0abe" class="outline-2">
+<h2 id="orga4d0abe"><span class="section-number-2">3.</span> mm</h2>
 <div class="outline-text-2" id="text-3">
 <ul class="org-ul">
-<li><a href="./kernel/mm/phy-mem.html">物理内存信息获取及初始化</a>.</li>
-<li><a href="./kernel/mm/memblock/memblock.html">memblock代码分析</a>.</li>
-<li><a href="./kernel/mm/free_page/free_page.html">页面释放</a>.</li>
-<li><a href="./kernel/mm/fast_alloc_page/fast_alloc_page.html">物理页面分配之快速路径</a>.</li>
+<li><a href="./kernel/mm/phy-mem.html">物理内存信息获取及初始化</a>。</li>
+<li><a href="./kernel/mm/memblock/memblock.html">memblock代码分析</a>。</li>
+<li><a href="./kernel/mm/free_page/free_page.html">页面释放</a>。</li>
+<li><a href="./kernel/mm/fast_alloc_page/fast_alloc_page.html">物理页面分配之快速路径</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org8ed69a3" class="outline-2">
-<h2 id="org8ed69a3"><span class="section-number-2">4.</span> debug</h2>
+<div id="outline-container-orgd1c058c" class="outline-2">
+<h2 id="orgd1c058c"><span class="section-number-2">4.</span> interrupt</h2>
 <div class="outline-text-2" id="text-4">
+<ul class="org-ul">
+<li><a href="./kernel/interrupts/a-net-interrupt.html">X86-64架构下一个网卡中断的处理流程</a>。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orgd1437e7" class="outline-2">
+<h2 id="orgd1437e7"><span class="section-number-2">5.</span> debug</h2>
+<div class="outline-text-2" id="text-5">
 <ul class="org-ul">
 <li><a href="./kernel/debug/kernel-bootparam.html">内核启动参数之memblock</a>.</li>
 </ul>
@@ -94,7 +103,7 @@
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2024-11-02 Sat 21:07</p>
+<p class="date">Created: 2025-01-02 Thu 22:35</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
