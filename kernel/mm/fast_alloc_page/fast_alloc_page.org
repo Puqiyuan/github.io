@@ -2700,12 +2700,7 @@ static int __init alloc_node_page_ext(int nid)
 #+end_example
 memblock是内核里相对于伙伴系统的另一个内存管理基址，它在伙伴系统还未就绪的时候使用，关于它的详细分析见笔者另外的文章，总之page_ext所需的空间是在启动时事先通过memblock预分配好的。
 
-有了page_ext，就可以通过get_page_owner去获得page_owner结构体了，page_ext可能不止被
-page_owner使用，page owner是page_ext的使用者之一（page owner这个功能就作为page ext的
-client），__set_page_owner->__update_page_owner_handle，在后者这个函数里，先通过
-get_page_owner将page_ext转换为page_owner结构体，然后就可以往里面存信息了，由于每个页面关联
-一个page_ext，page_ext又可以关联到page_owner，所以最终其实就记录了每个页面由谁持有，
-且__set_page_owner->save_stack还保存了调用栈用于分析：
+有了page_ext，就可以通过get_page_owner去获得page_owner结构体了，page_ext可能不止被page_owner使用，page owner是page_ext的使用者之一（page owner这个功能就作为page ext的client），__set_page_owner->__update_page_owner_handle，在后者这个函数里，先通过get_page_owner将page_ext转换为page_owner结构体，然后就可以往里面存信息了，由于每个页面关联一个page_ext，page_ext又可以关联到page_owner，所以最终其实就记录了每个页面由谁持有，且__set_page_owner->save_stack还保存了调用栈用于分析：
 #+begin_example
 noinline void __set_page_owner(struct page *page, unsigned short order,
 					gfp_t gfp_mask)
@@ -2754,8 +2749,29 @@ static inline void __update_page_owner_handle(struct page_ext *page_ext,
 	}
 }
 #+end_example
-关于page owner和page ext的更多细节可以参考笔者其它文章。到这里post_alloc_hook就介绍的差不
-多了。回到prep_new_page函数
+这里可以看到各种信息被保存到了page_owner，比较典型的比如调用者的pid。关于page owner和page ext的更多细节可以参考笔者其它文章。到这里post_alloc_hook就介绍的差不多了。回到prep_new_page函数：
+#+begin_example
+	if (order && (gfp_flags & __GFP_COMP))
+		prep_compound_page(page, order);
+#+end_example
+如果gfp_flags设置了__GFP_COMP，那么就会调用prep_compound_page来处理head/tail page的逻辑。对于高阶的页面分配，可以组织这些连续的多个页面为复合页，高阶分配的第一页，称为head page，并设置了PG_head标志。除了head page以外的页称为tail pages，它们通过page->compound_head指向head page。第一个tail page的->compound_order字段记录了分配的阶数（order）。这意味着只有高阶分配（order > 0）的页才会被标记为compound page。tail page的compound_head的最低位（bit 0）表示PageTail() 状态（即是否是tail page），compound_head的其余部分存储了指向head page的指针。
+
+高阶分配和compound page是有区别的，高阶多页分配是指分配2^order个连续的物理页（即高阶页）。分配高阶页时，是否启用compound page的逻辑，取决于分配时是否指定了__GFP_COMP标志。如果没有指定 __GFP_COMP，这些高阶页仅仅是分配了一块连续的物理内存，而没有特殊的结构或元数据（例如head/tail page）关联这些页。每个页只是独立的，和普通单页没有什么不同，内核无法识别它们属于同一个高阶分配。
+
+#+begin_example
+void prep_compound_page(struct page *page, unsigned int order)
+{
+	int i;
+	int nr_pages = 1 << order;
+
+	__SetPageHead(page);
+	for (i = 1; i < nr_pages; i++)
+		prep_compound_tail(page, i);
+
+	prep_compound_head(page, order);
+}
+#+end_example
+先通过__SetPageHead设置head页面的PG_head。
 <<rmqueue>>
 * rmqueue
 
