@@ -2771,7 +2771,78 @@ void prep_compound_page(struct page *page, unsigned int order)
 	prep_compound_head(page, order);
 }
 #+end_example
-先通过__SetPageHead设置head页面的PG_head。
+先通过__SetPageHead设置head页面的PG_head标志。然后就是一个for循环开始对后面所有的页设置page.compund_head：
+#+begin_example
+static __always_inline void set_compound_head(struct page *page, struct page *head)
+{
+	WRITE_ONCE(page->compound_head, (unsigned long)head + 1);
+}
+static inline void prep_compound_tail(struct page *head, int tail_idx)
+{
+	struct page *p = head + tail_idx;
+
+	p->mapping = TAIL_MAPPING;
+	set_compound_head(p, head);
+	set_page_private(p, 0);
+}
+#+end_example
+这里利用了指针对齐到struct page的大小，所以指向page结构体的指针最低位是没有用途的，用来存放信息可以判断该页是否是tail page。
+
+继续往下看pre_new_page：
+#+begin_example
+	if (alloc_flags & ALLOC_NO_WATERMARKS)
+		set_page_pfmemalloc(page);
+	else
+		clear_page_pfmemalloc(page);
+#+end_example
+ALLOC_NO_WATERMARKS标志的目的是在系统内存非常低的情况下，确保关键路径上的内存分配优先级和正确性。表示允许分配内存超出系统设定的正常水位线（watermark），即允许突破最低水位限制。这通常发生在内存非常紧张的情况下，用于确保关键任务（如内核操作或内存回收操作）的内存需求可以被满足。
+
+PFMEMALLOC是一个与页面关联的标志，表示该页面是通过ALLOC_NO_WATERMARKS分配的。分配这样的页面通常预期会被用于释放更多内存（如内存回收操作），而不是普通用途。这段代码判断分配标志是否包含ALLOC_NO_WATERMARKS如果内存分配时指定了ALLOC_NO_WATERMARKS，意味着当前内存极度不足，调用者可能需要确保分配到的页面用于内存回收或类似的关键任务，调用set_page_pfmemalloc(page)，为页面设置PFMEMALLOC标志，否则调用clear_page_pfmemalloc(page)，清除该标志。
+
+调用者有责任确保标记了PFMEMALLOC的页面不会被用于非关键任务。这样可以避免稀缺的内存资源被滥用，从而帮助系统恢复到正常状态。在内存回收时，当系统内存不足时，内核的回收机制可能需要更多内存来完成清理操作，这些PFMEMALLOC页面可以确保分配到的内存优先用于回收任务。
+
+以下几个接口常用来操作页面的PFMEMALLOC标志：
+#+begin_example
+/*
+ * Only to be called by the page allocator on a freshly allocated
+ * page.
+ */
+static inline void set_page_pfmemalloc(struct page *page)
+{
+	page->lru.next = (void *)BIT(1);
+}
+
+static inline void clear_page_pfmemalloc(struct page *page)
+{
+	page->lru.next = NULL;
+}
+
+/*
+ * Return true only if the page has been allocated with
+ * ALLOC_NO_WATERMARKS and the low watermark was not
+ * met implying that the system is under some pressure.
+ */
+static inline bool page_is_pfmemalloc(const struct page *page)
+{
+	/*
+	 * lru.next has bit 1 set if the page is allocated from the
+	 * pfmemalloc reserves.  Callers may simply overwrite it if
+	 * they do not need to preserve that information.
+	 */
+	return (uintptr_t)page->lru.next & BIT(1);
+}
+#+end_example
+可以看到其实际操作的是page:lru:next成员，而不是page:flags。这样prep_new_page函数就分析完了，又回到get_page_from_freelist函数：
+#+begin_example
+			/*
+			 * If this is a high-order atomic allocation then check
+			 * if the pageblock should be reserved for the future
+			 */
+			if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
+				reserve_highatomic_pageblock(page, order, zone);
+#+end_example
+
+
 <<rmqueue>>
 * rmqueue
 
