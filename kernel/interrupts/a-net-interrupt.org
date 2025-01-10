@@ -48,5 +48,15 @@ SYM_CODE_START(irq_entries_start)
     .endr
 SYM_CODE_END(irq_entries_start)
 #+end_example
+这里NR_EXTERNAL_VECTORS被如下方式定义：
+#+begin_example
+
+#ifdef CONFIG_X86_LOCAL_APIC
+#define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
+#else
+#define FIRST_SYSTEM_VECTOR		NR_VECTORS
+#endif
+#define NR_EXTERNAL_VECTORS		(FIRST_SYSTEM_VECTOR - FIRST_EXTERNAL_VECTOR)
+#+end_example
 ** 注册外部中断向量表
 * 一个网卡中断的触发与执行

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-01-02 Thu 22:45 -->
+<!-- 2025-01-10 Fri 23:01 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X86-64架构下一个网卡中断的处理流程</title>
@@ -38,20 +38,20 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgf50b74e">1. 中断向量表初始化</a>
+<li><a href="#org66f990f">1. 中断向量表初始化</a>
 <ul>
-<li><a href="#org9c5fd2e">1.1. 外部中断向量表构造</a></li>
-<li><a href="#orgf06d229">1.2. 注册外部中断向量表</a></li>
+<li><a href="#org060a544">1.1. 外部中断向量表构造</a></li>
+<li><a href="#org17795ce">1.2. 注册外部中断向量表</a></li>
 </ul>
 </li>
-<li><a href="#orgf55fbd7">2. 一个网卡中断的触发与执行</a></li>
+<li><a href="#orgc3531cd">2. 一个网卡中断的触发与执行</a></li>
 </ul>
 </div>
 </div>
 <p>
 本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
 </p>
-<pre class="example" id="orgeffd605">
+<pre class="example" id="orgc9ddc7f">
 =&gt; e1000_intr
 =&gt; __handle_irq_event_percpu
 =&gt; handle_irq_event
@@ -75,20 +75,20 @@
 =&gt; ret_from_fork
 =&gt; ret_from_fork_asm
 </pre>
-<div id="outline-container-orgf50b74e" class="outline-2">
-<h2 id="orgf50b74e"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div id="outline-container-org66f990f" class="outline-2">
+<h2 id="org66f990f"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
 </p>
 </div>
-<div id="outline-container-org9c5fd2e" class="outline-3">
-<h3 id="org9c5fd2e"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div id="outline-container-org060a544" class="outline-3">
+<h3 id="org060a544"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的汇编代码描述了外部中断向量表的内容：
 </p>
-<pre class="example" id="orgefa7c9e">
+<pre class="example" id="org562cfc4">
 	.align IDT_ALIGN
 SYM_CODE_START(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
@@ -104,19 +104,31 @@ SYM_CODE_START(irq_entries_start)
     .endr
 SYM_CODE_END(irq_entries_start)
 </pre>
+<p>
+这里NR_EXTERNAL_VECTORS被如下方式定义：
+</p>
+<pre class="example" id="org1938470">
+
+#ifdef CONFIG_X86_LOCAL_APIC
+#define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
+#else
+#define FIRST_SYSTEM_VECTOR		NR_VECTORS
+#endif
+#define NR_EXTERNAL_VECTORS		(FIRST_SYSTEM_VECTOR - FIRST_EXTERNAL_VECTOR)
+</pre>
 </div>
 </div>
-<div id="outline-container-orgf06d229" class="outline-3">
-<h3 id="orgf06d229"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div id="outline-container-org17795ce" class="outline-3">
+<h3 id="org17795ce"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
 </div>
 </div>
-<div id="outline-container-orgf55fbd7" class="outline-2">
-<h2 id="orgf55fbd7"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+<div id="outline-container-orgc3531cd" class="outline-2">
+<h2 id="orgc3531cd"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-01-02 Thu 22:45</p>
+<p class="date">Created: 2025-01-10 Fri 23:01</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
