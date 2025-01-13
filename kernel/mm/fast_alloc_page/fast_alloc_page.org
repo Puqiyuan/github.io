@@ -867,9 +867,10 @@ CONFIG_SPARSEMEM用于支持物理地址内存布局不连续或稀疏分布的�
 
 CONFIG_SPARSEMEM这种实现需要明确知道section的数量，而section的数量（SECTIONS_WIDTH占用多少比特位）由SECTIONS_SHIFT决定，依赖物理地址空间和section大小。因此，在这种模式下：SECTIONS_WIDTH = SECTIONS_SHIFT，用于指定section的数量以及在数据结构中进行索引的宽度。
 
-而CONFIG_SPARSEMEM_VMEMMAP是CONFIG_SPARSEMEM的一种改进版本，优化了元数据的管理。使用VMEMMAP（虚拟内存映射来为每个物理页创建映射。每个页框的元数据直接存储在struct page中，而不
-是依赖 struct mem_section。通过这种方式，不再需要SECTIONS_SHIFT，因为元数据已经按页粒度存储。vmemmap模式的核心特点是通过预先映射的虚拟地址直接访问struct page，而不是依赖struct
-mem_section，struct page并不是直接按物理地址或其他逻辑地址存储，而是通过vmemmap映射到内核的虚拟地址空间，vmemmap通过虚拟地址空间为所有struct page提供了连续的地址映射，内核可以直接访问struct page而不会引发页面缺页异常（Page Fault），可以直接通过简单的偏移量计算找到对应的struct page。
+<<sparsemem_vmemmap>>
+而CONFIG_SPARSEMEM_VMEMMAP是CONFIG_SPARSEMEM的一种改进版本，优化了元数据的管理。使用vmemmap表示第一个struct page在内核空间的初始虚拟地址。每个页框的元数据直接存储在struct
+page中，而不是依赖struct mem_section。通过这种方式，不再需要SECTIONS_SHIFT，因为元数据已经按页粒度存储。vmemmap模式的核心特点是通过预先映射的虚拟地址直接访问struct page，而不是依赖struct
+mem_section，vmemmap通过虚拟地址空间为所有struct page提供了连续的地址映射，内核可以直接访问struct page而不会引发页面缺页异常（Page Fault），可以直接通过简单的偏移量计算找到对应的struct page。
 
 现代系统一般都是既配置了CONFIG_SPARSEMEM，也配置了CONFIG_SPARSEMEM_VMEMMAP（比如笔者的环境），所以SECTIONS_WIDTH为0。
 
@@ -1876,7 +1877,7 @@ zone里有几个表示各种类型页面数量的变量：managed_pages、spanne
 #+begin_example
 spanned_pages = zone_end_pfn - zone_start_pfn
 #+end_example
-而present_pages是在spanned_pages中除去空洞的地址范围，managed_pages是在present_pages中由buddy system管理的页面。
+而present_pages是在spanned_pages中除去空洞的地址范围，managed_pages是在present_pages中由buddy system管理的页面，就是managed_pages = present_pages - reserved_pages。
 
 <<zone_page_state>>
 再来看看zone_page_state函数：
@@ -2841,7 +2842,7 @@ static inline bool page_is_pfmemalloc(const struct page *page)
 			if (unlikely(alloc_flags & ALLOC_HIGHATOMIC))
 				reserve_highatomic_pageblock(page, order, zone);
 #+end_example
-对于高阶原子分配（ALLOC_HIGHATOMIC），需要提前预留一些一些内存到MIGRATE_HIGHATOMIC类型的，以下是reserve_highatomic_pageblock实现：
+对于高阶原子分配（ALLOC_HIGHATOMIC），需要提前预留一些内存到MIGRATE_HIGHATOMIC类型，可以看到这种情况一般是unlikely，尽管如此还是需要详细分析下，因为这个函数涉及页面类型以及页面迁移的代码，以下是reserve_highatomic_pageblock实现：
 #+begin_example
 /*
  * Reserve the pageblock(s) surrounding an allocation request for
@@ -2891,7 +2892,14 @@ out_unlock:
 	spin_unlock_irqrestore(&zone->lock, flags);
 }
 #+end_example
-首先检查
+内核的内存管理，又将多个页面划分成了不同的迁移类型，比如MIGRATE_UNMOVABLE: 不可移动页面，MIGRATE_MOVABLE: 可移动页面（如用户空间页面），MIGRATE_RECLAIMABLE: 可回收页面（如文件缓存
+页面），MIGRATE_HUGE: 巨页页面以及MIGRATE_CMA: 供连续内存分配器（CMA）使用的页面。通过将页面划分成不同的迁移类型，可以避免内存碎片化。具有相同迁移类型的页面组成在一起可以叫做一个pageblock（页块），这个pageblock具有pageblock_nr_pages个页面。一个页块具有阶pageblock_order，当然就有pageblock_nr_pages = 2^pageblock_order。
+
+有了上面的背景再来分析reserve_highatomic_pageblock函数开头的判断，为high-order atomic分配保留的页面最多就是zone:managed_pages的百分之一。当百分之一的managed_pages还小于pageblock_nr_pages时，就不需要做预留页面了，因为最小也是预留一个pageblock。
+
+在加锁前后都判断了zone->nr_reserved_highatomic >= max_managed，这种编程模式叫做double-checked locking，便于在条件满足时快速返回而不用获取锁。
+
+<<sparseme_vmemmap>>
 <<rmqueue>>
 * rmqueue
 
