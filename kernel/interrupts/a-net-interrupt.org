@@ -48,8 +48,19 @@ SYM_CODE_START(irq_entries_start)
     .endr
 SYM_CODE_END(irq_entries_start)
 #+end_example
-这里NR_EXTERNAL_VECTORS被如下方式定义：
+这里NR_EXTERNAL_VECTORS以及FIRST_EXTERNAL_VECTOR被如下方式定义：
 #+begin_example
+/*
+ * Posted interrupt notification vector for all device MSIs delivered to
+ * the host kernel.
+ */
+#define POSTED_MSI_NOTIFICATION_VECTOR	0xeb
+
+/*
+ * IDT vectors usable for external interrupt sources start at 0x20.
+ * (0x80 is the syscall vector, 0x30-0x3f are for ISA)
+ */
+#define FIRST_EXTERNAL_VECTOR		0x20
 
 #ifdef CONFIG_X86_LOCAL_APIC
 #define FIRST_SYSTEM_VECTOR		POSTED_MSI_NOTIFICATION_VECTOR
@@ -58,5 +69,34 @@ SYM_CODE_END(irq_entries_start)
 #endif
 #define NR_EXTERNAL_VECTORS		(FIRST_SYSTEM_VECTOR - FIRST_EXTERNAL_VECTOR)
 #+end_example
+X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断向量的起始位置，所谓外部中断源是指硬件设备（如键盘、网卡、定时器等）通过中断控制器（如 PIC、APIC或Local APIC）触发的中断，这些外部设备都需要通过中断控制器再中断CPU。
+
+现代x86-64架构一般都配置了CONFIG_X86_LOCAL_APIC，所以FIRST_SYSTEM_VECTOR就是POSTED_MSI_NOTIFICATION_VECTOR，POSTED_MSI_NOTIFICATION_VECTOR（向量号 0xEB）主要用在中断虚拟机化里，当设备通过 MSI（Message Signaled Interrupts）触发中断时，如果设备的中断目标是虚拟机（vCPU），并且这个vCPU正在运行，且它支持APICv，APIC会直接通过PI机制将中断注入到目标虚拟机。如果目标虚拟机vCPU未运行（例如调度到宿主机的其他线程上），则会触发POSTED_MSI_NOTIFICATION_VECTOR（0xEB）来通知宿主机，传统中断处理中，当设备向虚拟机发送中断时，通常需要以下步骤，首先触发中断导致虚拟机VM-Exit。然后宿主机内核处理中断后，再注入到虚拟机。这种方法会带来大量的性能开销，尤其是I/O密集型工作负载（如网卡或存储设备）会产生频繁的中断。使用POSTED_MSI_NOTIFICATION_VECTOR和PI机制后，如果目标vCPU正在运行，则直接将中断注入虚拟机，完全避免VM-Exit。如果目标vCPU未运行，仅在必要时通知宿主机处理，这大幅减少了VM-Exit的次数。
+
+所以[0x20, 0xeb)共计203个向量号用于外部设备中断，低于0x20的中断号一般用于处理CPU内部异常，比如除0错误，调试以及Page Fault等，NMI使用的向量号也低于0x20。
+
+使用.byte硬编码push指令的方式
+
+最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
+#+begin_example
+ffffffff81e00230 <irq_entries_start>:
+ffffffff81e00230:       f3 0f 1e fa             endbr64
+ffffffff81e00234:       6a 20                   push   $0x20
+ffffffff81e00236:       e9 05 13 00 00          jmp    ffffffff81e01540 <asm_common_interrupt>
+ffffffff81e0023b:       cc                      int3
+ffffffff81e0023c:       cc                      int3
+ffffffff81e0023d:       cc                      int3
+ffffffff81e0023e:       cc                      int3
+ffffffff81e0023f:       cc                      int3
+ffffffff81e00240:       f3 0f 1e fa             endbr64
+ffffffff81e00244:       6a 21                   push   $0x21
+ffffffff81e00246:       e9 f5 12 00 00          jmp    ffffffff81e01540 <asm_common_interrupt>
+ffffffff81e0024b:       cc                      int3
+ffffffff81e0024c:       cc                      int3
+ffffffff81e0024d:       cc                      int3
+ffffffff81e0024e:       cc                      int3
+ffffffff81e0024f:       cc                      int3
+#+end_example
+每个中断句柄入口的代码都是相似的几条指令，唯一的不同就是push到栈上的向量号不一样。注意每个中断句柄的入口，其第一条指令都是endbr64，这是因为内核开启了X86_KERNEL_IBT配置的缘故，该指令的作用是标记合法的间接跳转目标，确保控制流的安全性。所谓间接跳转，比如间接调用或中断处理程序入口（因为硬件会自动往中断句柄跳）。如果跳转到没有endbr64的地址，处理器会触发异常（#CP: Control Protection Exception），从而防御攻击。
 ** 注册外部中断向量表
 * 一个网卡中断的触发与执行
