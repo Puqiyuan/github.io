@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2025-01-20 Mon 02:12 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux内核启动过程</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../../org-manual.css" type="text/css">
+<script type="text/javascript">
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+<!--/*--><![CDATA[/*><!--*/
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">Linux内核启动过程</h1>
+<p>
+本文介绍Linux内核的启动流程，从bootloader（grub）过来内核的第一个函数到内核完全启动起来。
+</p>
+
+<p>
+计算机加电时，首先运行SPI Flash上的固件，这上面的固件一般都是厂家定制的，大部分基于开源的edk2固件代码，edk2实现了UEFI规范，它会初始化硬件（如内存控制器、CPU、外设等），设置系统的运行环境（如UEFI Boot Services和Runtime Services），这些运行环境主要为efi app准备，常见的efi应用包括shim和grub等，这些efi app常以.efi后缀结尾，位于boot分区下，比如在我的系统上有：
+</p>
+<pre class="example" id="orgdfc5a5d">
+root@debian-hp:.../pqy7172# file /boot/efi/EFI/debian/*.efi
+/boot/efi/EFI/debian/fbx64.efi:   PE32+ executable (EFI application) x86-64 (stripped to external PDB), for MS Windows, 7 sections
+/boot/efi/EFI/debian/grubx64.efi: PE32+ executable (EFI application) x86-64 (stripped to external PDB), for MS Windows, 5 sections
+/boot/efi/EFI/debian/mmx64.efi:   PE32+ executable (EFI application) x86-64 (stripped to external PDB), for MS Windows, 7 sections
+/boot/efi/EFI/debian/shimx64.efi: PE32+ executable (EFI application) x86-64 (stripped to external PDB), for MS Windows, 10 sections
+</pre>
+<p>
+edk2 uefi固件会加载第一个EFI应用程序（通常是Shim或GRUB）。现代Linux的系统，一般开启了Secure Boot，Shim就是是第一个被edk2加载的可信EFI应用，Shim会验证接下来加载的引导加载器（如GRUB）的签名，Shim也是一个开源的项目，主要提供其它efi app的签名验证功能。典型的，一般都使用grub作为bootloader去加载内核，那么shim就会验证grub efi应用的签名，签名通过后才能运行grub。总结起来简单且典型的现代Linux在进入内核前的流程一般就是：
+</p>
+<pre class="example" id="orgaeb3c0a">
+edk2-&gt;shim-&gt;grub-&gt;linux内核
+</pre>
+
+<p>
+在Linux上可以使用efibootmgr查看当前配置的启动项：
+</p>
+<pre class="example" id="org0862d29">
+root@debian-hp:.../pqy7172# efibootmgr -v
+BootCurrent: 0007
+Timeout: 0 seconds
+BootOrder: 0007,0003,0004,0005,0000,0001,0002,0006
+Boot0000* IPV4 Network - Intel(R) Ethernet Connection (16) I219-V       PciRoot(0x0)/Pci(0x1f,0x6)/MAC(5c60bac9a2e8,0)/IPv4(0.0.0.00.0.0.0,0,0)4eac0881119f594d850ee21a522c59b20000000049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 06 1f / 03 0b 25 00 5c 60 ba c9 a2 e8 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 03 0c 1b 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 00 00 00 00 49 53 50 48
+Boot0001* IPV6 Network - Intel(R) Ethernet Connection (16) I219-V       PciRoot(0x0)/Pci(0x1f,0x6)/MAC(5c60bac9a2e8,0)/IPv6([::]:&lt;-&gt;[::]:,0,0)4eac0881119f594d850ee21a522c59b20000000049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 06 1f / 03 0b 25 00 5c 60 ba c9 a2 e8 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 03 0d 3c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 00 00 00 00 49 53 50 48
+Boot0002* Wi-Fi IPV4 Network    PciRoot(0x0)/Pci(0x14,0x3)/MAC(3c219c0bdad3,1)/Wi-Fi(00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00)/IPv4(0.0.0.00.0.0.0,0,0)4eac0881119f594d850ee21a522c59b20000000049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 03 14 / 03 0b 25 00 3c 21 9c 0b da d3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 / 03 1c 24 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 03 0c 1b 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 00 00 00 00 49 53 50 48
+Boot0003* USB DISK 2.0 4723B05A3F2DE4AB PciRoot(0x0)/Pci(0x14,0x0)/USB(5,0)4eac0881119f594d850ee21a522c59b20980010049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 00 14 / 03 05 06 00 05 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 09 80 01 00 49 53 50 48
+Boot0004  USB NETWORK BOOT:     PciRoot(0x0)/Pci(0x0,0x0)/IPv4(0.0.0.00.0.0.0,0,0)4eac0881119f594d850ee21a522c59b21b08020049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 00 00 / 03 0c 1b 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 1b 08 02 00 49 53 50 48
+Boot0005  USB NETWORK BOOT:     PciRoot(0x0)/Pci(0x0,0x0)/IPv6([::]:&lt;-&gt;[::]:,0,0)4eac0881119f594d850ee21a522c59b21b10020049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 00 00 / 03 0d 3c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 1b 10 02 00 49 53 50 48
+Boot0006* Wi-Fi IPV6 Network    PciRoot(0x0)/Pci(0x14,0x3)/MAC(3c219c0bdad3,1)/Wi-Fi(00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00)/IPv6([::]:&lt;-&gt;[::]:,0,0)4eac0881119f594d850ee21a522c59b20000000049535048
+      dp: 02 01 0c 00 d0 41 03 0a 00 00 00 00 / 01 01 06 00 03 14 / 03 0b 25 00 3c 21 9c 0b da d3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 / 03 1c 24 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 03 0d 3c 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 / 7f ff 04 00
+    data: 4e ac 08 81 11 9f 59 4d 85 0e e2 1a 52 2c 59 b2 00 00 00 00 49 53 50 48
+Boot0007* debian        HD(1,GPT,1953af37-2a1f-4740-a447-f035cbeee4fd,0x800,0x100000)/File(\EFI\debian\shimx64.efi)
+      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 00 10 00 00 00 00 00 37 af 53 19 1f 2a 40 47 a4 47 f0 35 cb ee e4 fd 02 02 / 04 04 34 00 5c 00 45 00 46 00 49 00 5c 00 64 00 65 00 62 00 69 00 61 00 6e 00 5c 00 73 00 68 00 69 00 6d 00 78 00 36 00 34 00 2e 00 65 00 66 00 69 00 00 00 / 7f ff 04 00
+</pre>
+<p>
+可以看到这里配置的优先启动项就是shimx64.efi，它会作为一个efi app运行在edk2提供的环境下，完成后续启动过程。
+</p>
+
+<p>
+edk2通过CoreStartImage函数转到一个image（前面提到的那些efi app）去执行：
+</p>
+<pre class="example" id="orgffa4446">
+EFI_STATUS
+EFIAPI
+CoreStartImage (
+  IN EFI_HANDLE  ImageHandle,
+  OUT UINTN      *ExitDataSize,
+  OUT CHAR16     **ExitData  OPTIONAL
+  )
+{
+  ...
+  LOADED_IMAGE_PRIVATE_DATA  *Image;
+  ...
+  Image = CoreLoadedImageInfo (ImageHandle);
+  Image-&gt;Status  = Image-&gt;EntryPoint (ImageHandle, Image-&gt;Info.SystemTable);
+}
+</pre>
+<p>
+EntryPoint就是CoreStartImage前面的逻辑从image里解析出来要执行的efi app的入口函数，这里主要关心第二个参数SystemTable，edk2所谓给efi app提供的启动或者运行时服务主要就是靠这个表，其类型为EFI_SYSTEM_TABLE，定义在edk2代码里，其成员EFI_SYSTEM_TABLE:BootServices里面都是关于启动服务的函数指针，而EFI_SYSTEM_TABLE:RuntimeServices里面都是运行时服务的指针，这些函数可以在OS运行起来时调用。
+</p>
+
+<p>
+那么Image-&gt;Info.SystemTable是怎么设置的呢？
+</p>
+
+<p>
+edk2先通过CoreLoadImage-&gt;CoreLoadImageCommon函数分配Image结构体的空间，并且给
+Image-&gt;Info.SystemTable赋值：
+</p>
+<pre class="example" id="org4c2b65b">
+EFI_STATUS
+CoreLoadImageCommon (
+  IN  BOOLEAN                   BootPolicy,
+  IN  EFI_HANDLE                ParentImageHandle,
+  IN  EFI_DEVICE_PATH_PROTOCOL  *FilePath,
+  IN  VOID                      *SourceBuffer       OPTIONAL,
+  IN  UINTN                     SourceSize,
+  IN  EFI_PHYSICAL_ADDRESS      DstBuffer           OPTIONAL,
+  IN OUT UINTN                  *NumberOfPages      OPTIONAL,
+  OUT EFI_HANDLE                *ImageHandle,
+  OUT EFI_PHYSICAL_ADDRESS      *EntryPoint         OPTIONAL,
+  IN  UINT32                    Attribute
+  )
+{
+  ...
+  LOADED_IMAGE_PRIVATE_DATA  *Image;
+  //
+  // Allocate a new image structure
+  //
+  Image = AllocateZeroPool (sizeof (LOADED_IMAGE_PRIVATE_DATA));
+  ...
+  //
+  // Initialize the fields for an internal driver
+  //
+  Image-&gt;Signature         = LOADED_IMAGE_PRIVATE_DATA_SIGNATURE;
+  Image-&gt;Info.SystemTable  = gDxeCoreST;
+  ...
+}
+</pre>
+<p>
+gDxeCoreST是一个全局的系统表：
+</p>
+<pre class="example" id="orgcc65b3b">
+//
+// DXE Core Global Variables for the EFI System Table, Boot Services Table,
+// DXE Services Table, and Runtime Services Table
+//
+EFI_DXE_SERVICES  *gDxeCoreDS = &amp;mDxeServices;
+EFI_SYSTEM_TABLE  *gDxeCoreST = NULL;
+</pre>
+<p>
+其在更早的DxeMain函数里被初始化：
+</p>
+<pre class="example" id="org184544f">
+//
+// Allocate the EFI System Table and EFI Runtime Service Table from EfiRuntimeServicesData
+// Use the templates to initialize the contents of the EFI System Table and EFI Runtime Services Table
+//
+gDxeCoreST = AllocateRuntimeCopyPool (sizeof (EFI_SYSTEM_TABLE), &amp;mEfiSystemTableTemplate);
+ASSERT (gDxeCoreST != NULL);
+
+gDxeCoreRT = AllocateRuntimeCopyPool (sizeof (EFI_RUNTIME_SERVICES), &amp;mEfiRuntimeServicesTableTemplate);
+ASSERT (gDxeCoreRT != NULL);
+
+gDxeCoreST-&gt;RuntimeServices = gDxeCoreRT;
+</pre>
+<p>
+可以看到这里使用mEfiSystemTableTemplate去初始化分配出来的EFI_SYSTEM_TABLE，而mEfiSystemTableTemplate里的BootServices就是全局变量mBootServices，查看它的定义其LoadImage函数就是CoreLoadImage，所以将来要是efi app想使用启动服务的加载镜像就可以使用这个LoadImage函数，它最终执行的是edk2提供的实现CoreLoadImage函数。当然这段代码还使用gDxeCoreRT初始化了运行时服务，这些服务可以提供给OS使用，比如OS可以设置/获取时间，重启系统等。
+</p>
+
+<p>
+上面详细描述了Image-&gt;Info.SystemTable的初始化，现在假设shim已经加载，相关的efi系统表也初始化好了，那么继续看efi app的入口函数。一般来说efi app都有一个efi_main函数作为该镜像执行的入口函数，比如对于shim来说其实现如下：
+</p>
+<pre class="example" id="org7578ae6">
+static EFI_SYSTEM_TABLE *systab;
+
+EFI_STATUS
+efi_main (EFI_HANDLE passed_image_handle, EFI_SYSTEM_TABLE *passed_systab)
+{
+  ...
+  systab = passed_systab;
+  ...
+  /*
+   * Hand over control to the second stage bootloader
+   */
+  efi_status = init_grub(image_handle);
+  ...
+}
+</pre>
+<p>
+这里通过passed_systab接受了之前介绍过的edk2传过来的efi系统表，以便使用edk2提供的各种服务，shim里会对grub efi app做签名校验，如果校验通过就会执行init_grub函数，init_grub又主要调用了start_image函数来加载并执行grub efi app，其主要逻辑如下：
+</p>
+<pre class="example" id="org857c432">
+EFI_STATUS start_image(EFI_HANDLE image_handle, CHAR16 *ImagePath)
+{
+        ...
+	EFI_IMAGE_ENTRY_POINT entry_point;
+        ...
+       	efi_status = read_image(image_handle, ImagePath, &amp;PathName, &amp;data,
+				&amp;datasize);
+        ...
+       	efi_status = handle_image(data, datasize, shim_li, &amp;entry_point,
+				  &amp;alloc_address, &amp;alloc_pages);
+        ...
+	/*
+	 * The binary is trusted and relocated. Run it
+	 */
+	efi_status = entry_point(image_handle, systab);
+}
+</pre>
+<p>
+可以看到这里加载grub efi app并没有直接使用前面介绍过的启动服务，但是read_image里的实现依赖了edk2提供提供的EFI_FILE_PROTOCOL协议服务去操作文件IO，这里不详细描述了，总之任何efi app一定是运行在edk2提供的环境下。
+</p>
+
+<p>
+从现在开始，就进入grub的代码了。grub的代码实现并没有明确的efi_main函数，不过在startup.S文件里有_start符号的定义，它作为入口函数：
+</p>
+<pre class="example" id="org95e8fe8">
+_start:
+	/*
+	 *  EFI_SYSTEM_TABLE * and EFI_HANDLE are passed on the stack.
+	 */
+	movl	4(%esp), %eax
+	movl	%eax, EXT_C(grub_efi_image_handle)
+	movl	8(%esp), %eax
+	movl	%eax, EXT_C(grub_efi_system_table)
+	call	EXT_C(grub_main)
+	ret
+</pre>
+<pre class="example" id="org9a01bf0">
+/* The pointer to a system table. Filled in by the startup code.  */
+grub_efi_system_table_t *grub_efi_system_table;
+</pre>
+<p>
+可以看到，这里主要就是将efi系统表存到C变量grub_efi_system_table里，这是前面介绍过edk2里的gDxeCoreST。
+</p>
+
+<p>
+grub加载并执行内核镜像的代码路径主要如下：
+</p>
+<pre class="example" id="org7e7ea87">
+grub_linux_boot-&gt;grub_arch_efi_linux_boot_image
+</pre>
+<p>
+在后者的函数里有：
+</p>
+<pre class="example" id="org4e7d18c">
+grub_err_t
+grub_arch_efi_linux_boot_image (grub_addr_t addr, grub_size_t size, char *args)
+{
+  ...
+  grub_efi_boot_services_t *b;
+  ...
+  b = grub_efi_system_table-&gt;boot_services;
+  status = b-&gt;load_image (0, grub_efi_image_handle,
+			  (grub_efi_device_path_t *) mempath,
+			  (void *) addr, size, &amp;image_handle);
+  ...
+  status = b-&gt;start_image (image_handle, 0, NULL);
+}
+</pre>
+<p>
+这里load_image和start_image其实都是edk2 uefi固件提供的启动服务，这点前面已经详细介绍过了，
+其实现在edk2里，可以看到虽然shim efi app没有使用传递过来的efi系统表去调用启动服务运行grub
+efi app，但是grub efi app却使用了这个服务去进入到Linux内核里执行。最后带进内核的一是ImageHandle以及一个efi系统表。这里要提下，在edk2代码里CoreStartImage函数被给到了LoadImage成员，但是这里调用的名字却是start_image，这其实是grub代码自己又写了一遍edk2里EFI_BOOT_SERVICES的定义，在grub里叫grub_efi_boot_services，里面的成员的布局和edk2里相应的实现一样，只要efi系统表的基地址没问题，成员布局一样就是偏移一样，一定可以找到CoreStartImage函数。
+</p>
+
+<p>
+Linux内核一般都是压缩格式的，arch/x86/boot/compressed/head_64.S文件提供了startup_32和
+startup_64两个版本的入口点，其选择依据arch/x86/boot/compressed/vmlinux.lds.S内核链接脚本里
+的代码：
+</p>
+<pre class="example" id="org72fafbc">
+#ifdef CONFIG_X86_64
+OUTPUT_ARCH(i386:x86-64)
+ENTRY(startup_64)
+#else
+OUTPUT_ARCH(i386)
+ENTRY(startup_32)
+#endif
+</pre>
+<p>
+现在的机器一般都是64位的，所以从grub过来内核的第一个函数就是startup_64。
+</p>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2025-01-20 Mon 02:12</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
