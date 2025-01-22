@@ -98,5 +98,9 @@ ffffffff81e0024e:       cc                      int3
 ffffffff81e0024f:       cc                      int3
 #+end_example
 每个中断句柄入口的代码都是相似的几条指令，唯一的不同就是push到栈上的向量号不一样。注意每个中断句柄的入口，其第一条指令都是endbr64，这是因为内核开启了X86_KERNEL_IBT配置的缘故，该指令的作用是标记合法的间接跳转目标，确保控制流的安全性。所谓间接跳转，比如间接调用或中断处理程序入口（因为硬件会自动往中断句柄跳）。如果跳转到没有endbr64的地址，处理器会触发异常（#CP: Control Protection Exception），从而防御攻击。
+
+.align IDT_ALIGN指明了接下来的汇编符号（代码）要对齐到某个字节，现代Intel处理器一般启用了IBT(Intel CET，Control-flow Enforcement Technology)，这是一种安全机制，用于防范间接分支跳转攻击，这些攻击会劫持程序的控制流，跳转到恶意代码或利用程序中合法代码片段进行恶意行为，启用了这个配置，就会对齐到16字节处。
+
+.rept和.endr宏指令表示在它们之间的指令需要重复编出NR_EXTERNAL_VECTORS次，
 ** 注册外部中断向量表
 * 一个网卡中断的触发与执行

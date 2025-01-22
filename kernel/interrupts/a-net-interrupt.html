@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-01-14 Tue 22:44 -->
+<!-- 2025-01-22 Wed 22:13 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X86-64架构下一个网卡中断的处理流程</title>
@@ -38,20 +38,20 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org22adfc4">1. 中断向量表初始化</a>
+<li><a href="#org08c908f">1. 中断向量表初始化</a>
 <ul>
-<li><a href="#org112797b">1.1. 外部中断向量表构造</a></li>
-<li><a href="#org638efaf">1.2. 注册外部中断向量表</a></li>
+<li><a href="#orgae1e096">1.1. 外部中断向量表构造</a></li>
+<li><a href="#org8276a66">1.2. 注册外部中断向量表</a></li>
 </ul>
 </li>
-<li><a href="#org4bfc489">2. 一个网卡中断的触发与执行</a></li>
+<li><a href="#orgda30a5d">2. 一个网卡中断的触发与执行</a></li>
 </ul>
 </div>
 </div>
 <p>
 本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
 </p>
-<pre class="example" id="org52a544f">
+<pre class="example" id="org9f9127b">
 =&gt; e1000_intr
 =&gt; __handle_irq_event_percpu
 =&gt; handle_irq_event
@@ -75,20 +75,20 @@
 =&gt; ret_from_fork
 =&gt; ret_from_fork_asm
 </pre>
-<div id="outline-container-org22adfc4" class="outline-2">
-<h2 id="org22adfc4"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div id="outline-container-org08c908f" class="outline-2">
+<h2 id="org08c908f"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
 </p>
 </div>
-<div id="outline-container-org112797b" class="outline-3">
-<h3 id="org112797b"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div id="outline-container-orgae1e096" class="outline-3">
+<h3 id="orgae1e096"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的汇编代码描述了外部中断向量表的内容：
 </p>
-<pre class="example" id="org140dbc3">
+<pre class="example" id="org45bf276">
 	.align IDT_ALIGN
 SYM_CODE_START(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
@@ -107,7 +107,7 @@ SYM_CODE_END(irq_entries_start)
 <p>
 这里NR_EXTERNAL_VECTORS以及FIRST_EXTERNAL_VECTOR被如下方式定义：
 </p>
-<pre class="example" id="org5408aa2">
+<pre class="example" id="org0b8e6d2">
 /*
  * Posted interrupt notification vector for all device MSIs delivered to
  * the host kernel.
@@ -146,7 +146,7 @@ X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断�
 <p>
 最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
 </p>
-<pre class="example" id="org26fb248">
+<pre class="example" id="org028f86d">
 ffffffff81e00230 &lt;irq_entries_start&gt;:
 ffffffff81e00230:       f3 0f 1e fa             endbr64
 ffffffff81e00234:       6a 20                   push   $0x20
@@ -168,19 +168,27 @@ ffffffff81e0024f:       cc                      int3
 <p>
 每个中断句柄入口的代码都是相似的几条指令，唯一的不同就是push到栈上的向量号不一样。注意每个中断句柄的入口，其第一条指令都是endbr64，这是因为内核开启了X86_KERNEL_IBT配置的缘故，该指令的作用是标记合法的间接跳转目标，确保控制流的安全性。所谓间接跳转，比如间接调用或中断处理程序入口（因为硬件会自动往中断句柄跳）。如果跳转到没有endbr64的地址，处理器会触发异常（#CP: Control Protection Exception），从而防御攻击。
 </p>
+
+<p>
+.align IDT_ALIGN指明了接下来的汇编符号（代码）要对齐到某个字节，现代Intel处理器一般启用了IBT(Intel CET，Control-flow Enforcement Technology)，这是一种安全机制，用于防范间接分支跳转攻击，这些攻击会劫持程序的控制流，跳转到恶意代码或利用程序中合法代码片段进行恶意行为，启用了这个配置，就会对齐到16字节处。
+</p>
+
+<p>
+.rept和.endr宏指令表示在它们之间的指令需要重复编出NR_EXTERNAL_VECTORS次，
+</p>
 </div>
 </div>
-<div id="outline-container-org638efaf" class="outline-3">
-<h3 id="org638efaf"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div id="outline-container-org8276a66" class="outline-3">
+<h3 id="org8276a66"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
 </div>
 </div>
-<div id="outline-container-org4bfc489" class="outline-2">
-<h2 id="org4bfc489"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+<div id="outline-container-orgda30a5d" class="outline-2">
+<h2 id="orgda30a5d"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-01-14 Tue 22:44</p>
+<p class="date">Created: 2025-01-22 Wed 22:13</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
