@@ -20,6 +20,9 @@
 - [[./kernel/mm/memblock/memblock.html][memblock代码分析]]。
 - [[./kernel/mm/free_page/free_page.html][页面释放]]。
 - [[./kernel/mm/fast_alloc_page/fast_alloc_page.html][物理页面分配之快速路径]]。
+
+* process management
+- [[./kernel/process-sched/process-schedule.html][进程调度]]。
 * interrupt
 - [[./kernel/interrupts/a-net-interrupt.html][X86-64架构下一个网卡中断的处理流程]]。
 * startup

@@ -1,0 +1,45 @@
+#+TITLE:进程调度
+#+AUTHOR: Cauchy(pqy7172@gmail.com)
+#+OPTIONS: ^:nil
+#+EMAIL: pqy7172@gmail.com
+#+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+#+OPTIONS: htmlize:nil
+#+OPTIONS: html-link-use-abs-url:nil
+#+OPTIONS: htmlize:nil
+
+__schedule是进程调度的核心函数，它先调用pick_next_task函数算出需要运行哪个进程，然后调用context_switch函数完成切换。
+
+驱动调度器并进入__schedule这个核心调度函数主要有以下一些方式：
+
++ 显式阻塞，例如互斥锁（mutex）、信号量（semaphore）、等待队列（waitqueue）等，任务主动睡眠进入等待状态，比如进程调用了mutex_lock、down或wait_event等函数可能会导致自己进入等待状态，需要调度器选择下一个可运行的任务。
++ 定时器的中断处理程序sched_tick可以设置TIF_NEED_RESCHED标志来驱动任务间的抢占调度，该标志会在中断返回和用户态返回路径上被检查。
++ 唤醒任务时并不会直接导致schedule被调用，它只是将任务添加到运行队列（run-queue）中。但如果新加入的任务优先级更高，导致抢占，那么唤醒代码会设置TIF_NEED_RESCHED，然后schedule将在最近的时机被调用，这种时机又分内核是否开启抢占而有所不同：
+  + 如果内核是可抢占的（CONFIG_PREEMPTION=y）：在系统调用或异常（syscall/exception）上下文中，会在最外层preempt_enable时触发抢占调度，这可能会在wake_up的spin_unlock之后立即发生。在中断（IRQ）上下文中，会在从中断处理程序返回到可抢占上下文时进行调度。
+  + 如果内核是不可抢占的（CONFIG_PREEMPTION未启用），那么调度将在以下情况下发生，1显式主动调用cond_resched，2显式主动调用schedule，3从系统调用或异常返回到用户态，4从中断处理程序返回到用户态。
+
+调用__schedule时必须禁用抢占（preemption disabled），但其父函数可能会处理抢占的问题，比如__schedule__loop就会禁用抢占。
+
+__schedule函数的参数sched_mode指明了以何种模式进入的调度器，它的取值可以有：
+#+begin_example
+/*
+ * Constants for the sched_mode argument of __schedule().
+ *
+ * The mode argument allows RT enabled kernels to differentiate a
+ * preemption from blocking on an 'sleeping' spin/rwlock.
+ */
+#define SM_IDLE			(-1)
+#define SM_NONE			0
+#define SM_PREEMPT		1
+#define SM_RTLOCK_WAIT		2
+#+end_example
+内核调度器在调度空闲任务时会使用SM_IDLE模式，表示当前没有可运行的普通任务，CPU可能会进入低功耗模式。
+
+SM_NONE是普通调度模式，不涉及特殊的抢占或锁等待情况。这是最常见的调度模式，表示当前任务只是正常调度，而不是因为抢占或等待锁。
+
+SM_PREEMPT表示任务被抢占（preempted）。当更高优先级的任务就绪时，内核可以抢占当前任务。比如普通任务被抢占式内核（Preemptible Kernel）或实时内核抢占时使用此模式。软实时（SCHED_RR）或硬实时（SCHED_FIFO）任务可能会触发此模式。
+
+SM_RTLOCK_WAIT表示任务正在等待RT（实时）锁。实时内核（RT内核）提供了一种机制，使spinlock和rwlock可以在高优先级任务上睡眠（普通内核的自旋锁是不会睡眠的）。当任务因为获取实时锁（RT lock）而阻塞时，会使用这个模式。
+
+总的来说这些调度模式主要用于区分不同的调度情况，特别是在抢占式调度和RT内核下，普通任务切换使用SM_NONE，表示任务因为时间片耗尽或显式调度而切换。抢占（Preemption）使用SM_PREEMPT，表示任务因为更高优先级任务到来而被抢占。空闲调度使用SM_IDLE，表示CPU进入空闲模式。实时锁等待使用SM_RTLOCK_WAIT，表示任务在RT互斥锁（如rtmutex）上睡眠等待。
+
+比如preempt_schedule_common函数调用_schedule时就指明了参数SM_PREEMPT，表明本次进入调度器是因为抢占。
