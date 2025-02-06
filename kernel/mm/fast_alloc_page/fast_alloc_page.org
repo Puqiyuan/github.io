@@ -2899,8 +2899,56 @@ out_unlock:
 
 在加锁前后都判断了zone->nr_reserved_highatomic >= max_managed，这种编程模式叫做double-checked locking，便于在条件满足时快速返回而不用获取锁。
 
-<<sparseme_vmemmap>>
-<<rmqueue>>
+继续往下看通过get_pageblock_migratetype获得了分配出来的page对应的迁移类型：
+#+begin_example
+#define get_pageblock_migratetype(page)					\
+	get_pfnblock_flags_mask(page, page_to_pfn(page), MIGRATETYPE_MASK)
+#+end_example
+#+begin_example
+/**
+ * get_pfnblock_flags_mask - Return the requested group of flags for the pageblock_nr_pages block of pages
+ * @page: The page within the block of interest
+ * @pfn: The target page frame number
+ * @mask: mask of bits that the caller is interested in
+ *
+ * Return: pageblock_bits flags
+ */
+unsigned long get_pfnblock_flags_mask(const struct page *page,
+					unsigned long pfn, unsigned long mask)
+{
+	unsigned long *bitmap;
+	unsigned long bitidx, word_bitidx;
+	unsigned long word;
+
+	bitmap = get_pageblock_bitmap(page, pfn);
+	bitidx = pfn_to_bitidx(page, pfn);
+	word_bitidx = bitidx / BITS_PER_LONG;
+	bitidx &= (BITS_PER_LONG-1);
+	/*
+	 * This races, without locks, with set_pfnblock_flags_mask(). Ensure
+	 * a consistent read of the memory array, so that results, even though
+	 * racy, are not corrupted.
+	 */
+	word = READ_ONCE(bitmap[word_bitidx]);
+	return (word >> bitidx) & mask;
+}
+#+end_example
+这里首先介绍下page_to_pfn这个宏，现代的Linux系统一般都开启了CONFIG_SPARSEMEM_VMEMMAP配置，这个配置优化了page_to_pfn/pfn_to_page的计算效率，这个配置的介绍如下：
+#+begin_example
+SPARSEMEM_VMEMMAP uses a virtually mapped memmap to optimise pfn_to_page and page_to_pfn operations. This is the most efficient option when sufficient kernel resources are available.
+#+end_example
+开启这个配置时，page_to_pfn定义如下：
+#+begin_example
+#define __page_to_pfn(page)	(unsigned long)((page) - vmemmap)
+#define page_to_pfn __page_to_pfn
+#+end_example
+从这个定义其实可以看到，vmemmap就存储了第一个page的虚拟地址，这点前面也有介绍过，但是vmemmap的设置没有介绍过，这里一并介绍下。
+对于x86架构来说，vmemmap的定义如下：
+#+begin_example
+#define vmemmap ((struct page *)VMEMMAP_START)
+#+end_example
+
+
 * rmqueue
 
 * 附节
