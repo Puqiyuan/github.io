@@ -2942,19 +2942,31 @@ SPARSEMEM_VMEMMAP uses a virtually mapped memmap to optimise pfn_to_page and pag
 #define __page_to_pfn(page)	(unsigned long)((page) - vmemmap)
 #define page_to_pfn __page_to_pfn
 #+end_example
-从这个定义其实可以看到，vmemmap就存储了第一个page的虚拟地址，这点前面也有介绍过，但是vmemmap的设置没有介绍过，这里一并介绍下。
-对于x86架构来说，vmemmap的定义如下：
+从这个定义其实可以看到，vmemmap就存储了第一个page的虚拟地址，这点前面也有介绍过，但是vmemmap的设置没有介绍过，这里一并介绍下。对于x86架构来说，vmemmap的定义如下：
 #+begin_example
 #define vmemmap ((struct page *)VMEMMAP_START)
 #+end_example
-
+对于开启了DYNAMIC_MEMORY_LAYOUT配置的情况，VMEMMAP_START定义如下：
+#+begin_example
+# define VMEMMAP_START		vmemmap_base
+#+end_example
+配置DYNAMIC_MEMORY_LAYOUT主要使得像vmemmap这样的地址可以随机化增加安全性，以下是这个配置的介绍：
+#+begin_example
+This option makes base addresses of vmalloc and vmemmap as well as __PAGE_OFFSET movable during boot.
+#+end_example
+对于x86来说，vmemmap_base一般定义为如下：
+#+begin_example
+unsigned long vmemmap_base __ro_after_init = __VMEMMAP_BASE_L4;
+EXPORT_SYMBOL(vmemmap_base);
+#+end_example
+这里可以看到，vmemmap_base使用了__ro_after_init修饰，它被如下定义：
+#+begin_example
+#define __ro_after_init __section(".data..ro_after_init")
+#define __section(section) __attribute__((__section__(section)))
+#+end_example
+所以被__ro_after_init修饰的vmemmap_base最终就是放到了.data..ro_after_init这个节里。Linux内核初始化时，vmemmap_base的初始值就是__VMEMMAP_BASE_L4，
 
 * rmqueue
 
 * 附节
 ** get_vma_policy生成ilx
-<<rmqueue>>
-* rmqueue
-* 附节
-** get_vma_policy生成ilx
-# ** 使用与操作优化取模
