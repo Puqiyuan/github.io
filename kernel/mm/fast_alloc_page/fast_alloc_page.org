@@ -868,10 +868,6 @@ CONFIG_SPARSEMEM用于支持物理地址内存布局不连续或稀疏分布的�
 CONFIG_SPARSEMEM这种实现需要明确知道section的数量，而section的数量（SECTIONS_WIDTH占用多少比特位）由SECTIONS_SHIFT决定，依赖物理地址空间和section大小。因此，在这种模式下：SECTIONS_WIDTH = SECTIONS_SHIFT，用于指定section的数量以及在数据结构中进行索引的宽度。
 
 <<sparsemem_vmemmap>>
-而CONFIG_SPARSEMEM_VMEMMAP是CONFIG_SPARSEMEM的一种改进版本，优化了元数据的管理。使用vmemmap表示第一个struct page在内核空间的初始虚拟地址。每个页框的元数据直接存储在struct
-page中，而不是依赖struct mem_section。通过这种方式，不再需要SECTIONS_SHIFT，因为元数据已经按页粒度存储。vmemmap模式的核心特点是通过预先映射的虚拟地址直接访问struct page，而不是依赖struct
-mem_section，vmemmap通过虚拟地址空间为所有struct page提供了连续的地址映射，内核可以直接访问struct page而不会引发页面缺页异常（Page Fault），可以直接通过简单的偏移量计算找到对应的struct page。
-
 现代系统一般都是既配置了CONFIG_SPARSEMEM，也配置了CONFIG_SPARSEMEM_VMEMMAP（比如笔者的环境），所以SECTIONS_WIDTH为0。
 
 那么在笔者的环境下就是：(3 + 3 + 0 + 10 = 16) <= (64 - 24 = 40)。也就是NODES_WIDTH有值为10，node id就在page:flags中。那么page_to_nid的实现就容易理解了，先将flags右移NODES_PGSHIFT位，这会保证node id所占的比特对齐到最低位，再与上NODES_MASK，只取node id所占的所有bit：
@@ -2243,6 +2239,7 @@ free_area也是一个结构体，里面的nr_free表示当前特定order的页�
 在free_area中还有一个链表数组成员free_list，当前order对应的nr_free这么多个页块又根据内核定义的迁移类型（MIGRATE_TYPES）进一步分类，按不同的类型挂入free_list链表数组中。
 
 有了这些基础再理解上面对于高阶内存分配的循环检测逻辑就容易理解了，free_area_empty函数就是根据传进来的free_area去检查对应参数migratetype的链表是否不为空，不为空则代表可以分出一个页块（其阶大于或等于请求的order），注意这里检测到了MIGRATE_PCPTYPES：
+<<enum-migratetype>>
 #+begin_example
 enum migratetype {
 	MIGRATE_UNMOVABLE,
@@ -2964,7 +2961,60 @@ EXPORT_SYMBOL(vmemmap_base);
 #define __ro_after_init __section(".data..ro_after_init")
 #define __section(section) __attribute__((__section__(section)))
 #+end_example
-所以被__ro_after_init修饰的vmemmap_base最终就是放到了.data..ro_after_init这个节里。Linux内核初始化时，vmemmap_base的初始值就是__VMEMMAP_BASE_L4，
+所以被__ro_after_init修饰的vmemmap_base最终就是放到了.data..ro_after_init这个节里，这是Linux内核划定的一个特殊的节，它的主要作用是在内核初始化完毕后，这个节里的数据不允许再更改，通过如下的调用路径设置了这个节的权限为只读：
+#+begin_example
+start_kernel(line: 1099)->rest_init(callback)->kernel_init->mark_readonly->mark_rodata_ro
+#+end_example
+上面的流程相对于vmemmap_base被设置的流程是靠后的，也就是说只有被随机化设置后，才能更改.data..ro_after_init为只读。Linux内核开始初始化时，vmemmap_base的初始值就是__VMEMMAP_BASE_L4。在初始化时，配置了DYNAMIC_MEMORY_LAYOUT还会对vmemmap_base进行随机化设置，下面简单分析下这个随机化的过程。首先vmemmap_base的地址给到了kaslr_memory_region的base成员：
+#+begin_example
+static __initdata struct kaslr_memory_region {
+	unsigned long *base;
+	unsigned long *end;
+	unsigned long size_tb;
+} kaslr_regions[] = {
+	{
+		.base	= &page_offset_base,
+		.end	= &direct_map_physmem_end,
+	},
+	{
+		.base	= &vmalloc_base,
+	},
+	{
+		.base	= &vmemmap_base,
+	},
+};
+#+end_example
+这里base成员有地址的，在内核启动初始化流程里都会被随机化，其设置是在kernel_randomize_memory函数里：
+#+begin_example
+*kaslr_regions[i].base = vaddr;
+#+end_example
+该函数的调用按如下路径：
+#+begin_example
+start_kernel(line: 918)->setup_arch->kernel_randomize_memory
+#+end_example
+可见其随机化设置是早于只读设置的。
+介绍完了page_to_pfn的细节，现在分析下MIGRATETYPE_MASK：
+#+begin_example
+#define PB_migratetype_bits 3
+#define MIGRATETYPE_MASK ((1UL << PB_migratetype_bits) - 1)
+#+end_example
+就是描述页面迁移类型的共占3个bit，这里MIGRATETYPE_MASK是指只关心迁移类型的bit，其它bit不关心。迁移有哪些类型在[[enum-migratetype][migratetype枚举]]定义处介绍过。设置页面的迁移类型可以通过set_pageblock_migratetype接口。
+
+介绍完了这些关联知识，可以看get_pfnblock_flags_mask的实现了。首先看get_pfnblock_flags_mask->get_pageblock_bitmap函数获得bitmap的实现：
+#+begin_example
+/* Return a pointer to the bitmap storing bits affecting a block of pages */
+static inline unsigned long *get_pageblock_bitmap(const struct page *page,
+							unsigned long pfn)
+{
+#ifdef CONFIG_SPARSEMEM
+	return section_to_usemap(__pfn_to_section(pfn));
+#else
+	return page_zone(page)->pageblock_flags;
+#endif /* CONFIG_SPARSEMEM */
+}
+#+end_example
+该函数就是要获得一个bitmap，bitmap里存储了一些bit位，这些bit位可以影响整个page block范围。对于配置了CONFIG_SPARSEMEM的情况：首先使用__pfn_to_section来获得对应pfn页框号的mm_section结构体，
+
 
 * rmqueue
 
