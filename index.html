@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-01-30 Thu 12:37 -->
+<!-- 2025-02-10 Mon 19:58 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dissect Kernel</title>
@@ -38,13 +38,13 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org9375438">1. net</a></li>
-<li><a href="#orgceed7d8">2. virt</a></li>
-<li><a href="#orgdac3e15">3. mm</a></li>
-<li><a href="#org523b4ef">4. process management</a></li>
-<li><a href="#orgf061597">5. interrupt</a></li>
-<li><a href="#orgad53ced">6. startup</a></li>
-<li><a href="#orgc478e29">7. debug</a></li>
+<li><a href="#org57f3cc7">1. net</a></li>
+<li><a href="#org8d8678a">2. virt</a></li>
+<li><a href="#org7088c18">3. mm</a></li>
+<li><a href="#orgeacd0e2">4. process management</a></li>
+<li><a href="#orgc264f76">5. interrupt</a></li>
+<li><a href="#org6971bbb">6. startup</a></li>
+<li><a href="#org88ce118">7. debug</a></li>
 </ul>
 </div>
 </div>
@@ -59,24 +59,25 @@
 有任何想法请联系作者Cauchy(Qiyuan Pu)：pqy7172@gmail.com。
 </p>
 </div>
-<div id="outline-container-org9375438" class="outline-2">
-<h2 id="org9375438"><span class="section-number-2">1.</span> net</h2>
+<div id="outline-container-org57f3cc7" class="outline-2">
+<h2 id="org57f3cc7"><span class="section-number-2">1.</span> net</h2>
 <div class="outline-text-2" id="text-1">
 <ul class="org-ul">
 <li><a href="./kernel/net/ipfrag_high_thresh.html">ipfrag_high_thresh参数作用</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgceed7d8" class="outline-2">
-<h2 id="orgceed7d8"><span class="section-number-2">2.</span> virt</h2>
+<div id="outline-container-org8d8678a" class="outline-2">
+<h2 id="org8d8678a"><span class="section-number-2">2.</span> virt</h2>
 <div class="outline-text-2" id="text-2">
 <ul class="org-ul">
 <li><a href="./virt/cpu-virt.html">CPU计算虚拟化：kvm与qemu</a>。</li>
+<li><a href="./kernel/virt/live-migration.html">QEMU热迁移机制</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgdac3e15" class="outline-2">
-<h2 id="orgdac3e15"><span class="section-number-2">3.</span> mm</h2>
+<div id="outline-container-org7088c18" class="outline-2">
+<h2 id="org7088c18"><span class="section-number-2">3.</span> mm</h2>
 <div class="outline-text-2" id="text-3">
 <ul class="org-ul">
 <li><a href="./kernel/mm/phy-mem.html">物理内存信息获取及初始化</a>。</li>
@@ -87,32 +88,32 @@
 </div>
 </div>
 
-<div id="outline-container-org523b4ef" class="outline-2">
-<h2 id="org523b4ef"><span class="section-number-2">4.</span> process management</h2>
+<div id="outline-container-orgeacd0e2" class="outline-2">
+<h2 id="orgeacd0e2"><span class="section-number-2">4.</span> process management</h2>
 <div class="outline-text-2" id="text-4">
 <ul class="org-ul">
 <li><a href="./kernel/process-sched/process-schedule.html">进程调度</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgf061597" class="outline-2">
-<h2 id="orgf061597"><span class="section-number-2">5.</span> interrupt</h2>
+<div id="outline-container-orgc264f76" class="outline-2">
+<h2 id="orgc264f76"><span class="section-number-2">5.</span> interrupt</h2>
 <div class="outline-text-2" id="text-5">
 <ul class="org-ul">
 <li><a href="./kernel/interrupts/a-net-interrupt.html">X86-64架构下一个网卡中断的处理流程</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgad53ced" class="outline-2">
-<h2 id="orgad53ced"><span class="section-number-2">6.</span> startup</h2>
+<div id="outline-container-org6971bbb" class="outline-2">
+<h2 id="org6971bbb"><span class="section-number-2">6.</span> startup</h2>
 <div class="outline-text-2" id="text-6">
 <ul class="org-ul">
 <li><a href="./kernel/startup/startup-process.html">Linux内核启动过程</a>。</li>
 </ul>
 </div>
 </div>
-<div id="outline-container-orgc478e29" class="outline-2">
-<h2 id="orgc478e29"><span class="section-number-2">7.</span> debug</h2>
+<div id="outline-container-org88ce118" class="outline-2">
+<h2 id="org88ce118"><span class="section-number-2">7.</span> debug</h2>
 <div class="outline-text-2" id="text-7">
 <ul class="org-ul">
 <li><a href="./kernel/debug/kernel-bootparam.html">内核启动参数之memblock</a>.</li>
@@ -122,7 +123,7 @@
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-01-30 Thu 12:37</p>
+<p class="date">Created: 2025-02-10 Mon 19:58</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

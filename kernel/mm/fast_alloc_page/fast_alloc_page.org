@@ -3015,7 +3015,6 @@ static inline unsigned long *get_pageblock_bitmap(const struct page *page,
 #+end_example
 该函数就是要获得一个bitmap，bitmap里存储了一些bit位，这些bit位可以影响整个page block范围。对于配置了CONFIG_SPARSEMEM的情况：首先使用__pfn_to_section来获得对应pfn页框号的mm_section结构体，
 
-
 * rmqueue
 
 * 附节

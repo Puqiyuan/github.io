@@ -15,6 +15,7 @@
 - [[./kernel/net/ipfrag_high_thresh.html][ipfrag_high_thresh参数作用]]。
 * virt
 - [[./virt/cpu-virt.html][CPU计算虚拟化：kvm与qemu]]。
+- [[./kernel/virt/live-migration.html][QEMU热迁移机制]]。
 * mm
 - [[./kernel/mm/phy-mem.html][物理内存信息获取及初始化]]。
 - [[./kernel/mm/memblock/memblock.html][memblock代码分析]]。
