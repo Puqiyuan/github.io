@@ -3013,7 +3013,75 @@ static inline unsigned long *get_pageblock_bitmap(const struct page *page,
 #endif /* CONFIG_SPARSEMEM */
 }
 #+end_example
-该函数就是要获得一个bitmap，bitmap里存储了一些bit位，这些bit位可以影响整个page block范围。对于配置了CONFIG_SPARSEMEM的情况：首先使用__pfn_to_section来获得对应pfn页框号的mm_section结构体，
+该函数就是要获得一个bitmap，bitmap里存储了一些bit位，这些bit位可以影响整个page block范围。对于配置了CONFIG_SPARSEMEM的情况：首先使用__pfn_to_section来获得对应pfn页框号的mm_section
+结构体：
+#+begin_example
+static inline struct mem_section *__pfn_to_section(unsigned long pfn)
+{
+	return __nr_to_section(pfn_to_section_nr(pfn));
+}
+#+end_example
+pfn_to_section_nr是先要找到pfn对应的section number是多少：
+#+begin_example
+#define PFN_SECTION_SHIFT	(SECTION_SIZE_BITS - PAGE_SHIFT)
+static inline unsigned long pfn_to_section_nr(unsigned long pfn)
+{
+	return pfn >> PFN_SECTION_SHIFT;
+}
+#+end_example
+SECTION_SIZE_BITS在x86-64上一般就是27，也就是一个section就是128MB大，对pfn除以PFN_SECTION_SHIFT，相当于计算出这个pfn位于哪个section了，有了这个section number再通过__nr_to_section去找到对应这个pfn（或者section number）的mem_section结构体：
+#+begin_example
+static inline struct mem_section *__nr_to_section(unsigned long nr)
+{
+	unsigned long root = SECTION_NR_TO_ROOT(nr);
+
+	if (unlikely(root >= NR_SECTION_ROOTS))
+		return NULL;
+
+#ifdef CONFIG_SPARSEMEM_EXTREME
+	if (!mem_section || !mem_section[root])
+		return NULL;
+#endif
+	return &mem_section[root][nr & SECTION_ROOT_MASK];
+}
+#+end_example
+系统定义了一个全局的mem_section二维数组，里面存放了所有的mem_section结构体的地址，开启了SPARSEMEM_EXTREME配置时，mem_section的空间是动态分配的。首先要找到section number对应哪个root，也就是mem_section的一维：
+#+begin_example
+#ifdef CONFIG_SPARSEMEM_EXTREME
+#define SECTIONS_PER_ROOT       (PAGE_SIZE / sizeof (struct mem_section))
+#else
+#define SECTIONS_PER_ROOT	1
+#endif
+#define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+#+end_example
+没有开启SPARSEMEM_EXTREME配置时，只有一个root mem_section，否则按每页作为一个root mem_section，那么一个页里能存放多少mem_section就是页的大小除以mem_section结构体的大小，这样__nr_to_section通过SECTION_NR_TO_ROOT先算出对应section number的root mem_section，通过root作为下标取了mem_section的一维后，又通过section number nr和SECTION_ROOT_MASK相于看看是某个root sections里的哪一个section，SECTION_ROOT_MASK定义如下：
+#+begin_example
+#define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
+#+end_example
+回到get_pageblock_bitmap里，有了mem_section结构体，section_to_usemap返回bitmap图就简单了：
+#+begin_example
+static inline unsigned long *section_to_usemap(struct mem_section *ms)
+{
+	return ms->usage->pageblock_flags;
+}
+#+end_example
+usage的初始化在激活section里完成：
+#+begin_example
+static struct page * __meminit section_activate(int nid, unsigned long pfn,
+		unsigned long nr_pages, struct vmem_altmap *altmap,
+		struct dev_pagemap *pgmap)
+{
+    ...
+	if (!ms->usage) {
+		usage = kzalloc(mem_section_usage_size(), GFP_KERNEL);
+		if (!usage)
+			return ERR_PTR(-ENOMEM);
+		ms->usage = usage;
+	}
+    ...
+}
+#+end_example
+其中mem_section_usage_size里
 
 * rmqueue
 
