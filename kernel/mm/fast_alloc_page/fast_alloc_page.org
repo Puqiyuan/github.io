@@ -3081,7 +3081,35 @@ static struct page * __meminit section_activate(int nid, unsigned long pfn,
     ...
 }
 #+end_example
-其中mem_section_usage_size里
+mem_section.usage这个成员的定义如下：
+#+begin_example
+struct mem_section_usage {
+	struct rcu_head rcu;
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+	DECLARE_BITMAP(subsection_map, SUBSECTIONS_PER_SECTION);
+#endif
+	/* See declaration of similar field in struct zone */
+	unsigned long pageblock_flags[0];
+};
+#+end_example
+其中mem_section_usage_size里计算了usage本身的大小再加上pageblock_flags的大小：
+#+begin_example
+size_t mem_section_usage_size(void)
+{
+	return sizeof(struct mem_section_usage) + usemap_size();
+}
+#+end_example
+#+begin_example
+static unsigned long usemap_size(void)
+{
+	return BITS_TO_LONGS(SECTION_BLOCKFLAGS_BITS) * sizeof(unsigned long);
+}
+#+end_example
+#+begin_example
+#define SECTION_BLOCKFLAGS_BITS \
+	((1UL << (PFN_SECTION_SHIFT - pageblock_order)) * NR_PAGEBLOCK_BITS)
+#+end_example
+从这里可以看到
 
 * rmqueue
 
