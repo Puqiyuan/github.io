@@ -3109,7 +3109,22 @@ static unsigned long usemap_size(void)
 #define SECTION_BLOCKFLAGS_BITS \
 	((1UL << (PFN_SECTION_SHIFT - pageblock_order)) * NR_PAGEBLOCK_BITS)
 #+end_example
-从这里可以看到
+从这里可以看到，首先是PFN_SECTION_SHIFT减去一个pageblock所占用的bit位数，再用1左移这么多位，表示一个mem section里可以用多少个pageblock，而每个pageblock需用NR_PAGEBLOCK_BITS这么多个
+bit来表示迁移类型，和NR_PAGEBLOCK_BITS相乘就是整个mem section需要的表示迁移类型的比特数目。
+
+回到get_pfnblock_flags_mask函数，现在get_pfnblock_flags_mask->get_pageblock_bitmap得到了对应page的pageblock的bitmap图，继续分析pfn_to_bitidx函数：
+#+begin_example
+static inline int pfn_to_bitidx(const struct page *page, unsigned long pfn)
+{
+#ifdef CONFIG_SPARSEMEM
+	pfn &= (PAGES_PER_SECTION-1);
+#else
+	pfn = pfn - pageblock_start_pfn(page_zone(page)->zone_start_pfn);
+#endif /* CONFIG_SPARSEMEM */
+	return (pfn >> pageblock_order) * NR_PAGEBLOCK_BITS;
+}
+#+end_example
+
 
 * rmqueue
 
