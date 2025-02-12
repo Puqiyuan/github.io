@@ -3124,8 +3124,11 @@ static inline int pfn_to_bitidx(const struct page *page, unsigned long pfn)
 	return (pfn >> pageblock_order) * NR_PAGEBLOCK_BITS;
 }
 #+end_example
+第一行先将pfn落到一个section里，然后最后一行看这个pfn属于第几个pageblock，最后乘以每个pageblock占了多少个bit（NR_PAGEBLOCK_BITS），最后得到了对应该pfn在bit图中第几位就是bitidx。
 
+回到get_pfnblock_flags_mask，得到了bitidx后，又除以BITS_PER_LONG，就是按每64位一个long来数，看看目标bit位在第几个unsigned long，最后是按unsigned long读取。
 
+回到reserve_highatomic_pageblock函数，
 * rmqueue
 
 * 附节
