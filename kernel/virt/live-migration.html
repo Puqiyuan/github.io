@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-02-10 Mon 21:42 -->
+<!-- 2025-02-13 Thu 22:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QEMU热迁移机制</title>
@@ -38,25 +38,24 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org180091b">1. 脏页跟踪机制</a>
+<li><a href="#org616e822">1. 脏页跟踪机制</a>
 <ul>
-<li><a href="#org4ddec66">1.1. PML功能基本介绍</a></li>
-<li><a href="#orge80cbc6">1.2. qemu侧开启脏页记录</a></li>
-<li><a href="#org26c9eda">1.3. kvm侧开启脏页记录</a></li>
-<li><a href="#org9a8f36e">1.4. kvm侧记录脏页流程</a></li>
-<li><a href="#org5be9006">1.5. qemu侧记录/获取脏页流程</a></li>
+<li><a href="#orgbdba159">1.1. PML功能基本介绍</a></li>
+<li><a href="#org64f86ed">1.2. qemu侧开启脏页记录</a></li>
+<li><a href="#org235a4e0">1.3. kvm侧开启脏页记录</a></li>
+<li><a href="#org0dcf539">1.4. kvm侧记录脏页流程</a></li>
+<li><a href="#org137e839">1.5. qemu侧记录/获取脏页流程</a></li>
 </ul>
 </li>
-<li><a href="#org764d003">2. 迁移第一阶段</a></li>
-<li><a href="#org8973656">3. 迁移第二阶段</a></li>
-<li><a href="#org93e0ffa">4. 迁移第三阶段</a></li>
-<li><a href="#org04b57c2">5. dst端还原虚拟机</a></li>
-<li><a href="#org4d71a32">6. 几个问题</a></li>
+<li><a href="#org6ad644e">2. 迁移第一阶段</a></li>
+<li><a href="#org2ddf50f">3. 迁移第二阶段</a></li>
+<li><a href="#org4eadc6a">4. 迁移第三阶段</a></li>
+<li><a href="#org5c3b99c">5. dst端还原虚拟机</a></li>
 </ul>
 </div>
 </div>
-<div id="outline-container-org180091b" class="outline-2">
-<h2 id="org180091b"><span class="section-number-2">1.</span> 脏页跟踪机制</h2>
+<div id="outline-container-org616e822" class="outline-2">
+<h2 id="org616e822"><span class="section-number-2">1.</span> 脏页跟踪机制</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 脏页信息最开始在内核侧kvm里记录，现在记录虚拟机写了哪些页面信息有两种方式，一是软件方式，将所有虚拟机使用的内存属性都改成写保护，这样每次虚拟机访问内存时，都会触发写保护异常，在异常流程里可以记录虚拟机访问了哪些页面，并且这次记录好了之后，退出异常流程前还要再次开启写保护，以使得下次可能还会访问该页面时，可以再次得到记录．
@@ -70,24 +69,24 @@
 PML硬件记录脏页的功能需要由qemu用户侧主动开启，代码流程会一路向下到内核kvm里，这里先介绍下Intel SDM对PML功能的说明。
 </p>
 </div>
-<div id="outline-container-org4ddec66" class="outline-3">
-<h3 id="org4ddec66"><span class="section-number-3">1.1.</span> PML功能基本介绍</h3>
+<div id="outline-container-orgbdba159" class="outline-3">
+<h3 id="orgbdba159"><span class="section-number-3">1.1.</span> PML功能基本介绍</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 Intel SDM3 27.2.6对PML有较为详细的介绍，这里简单总结下，PML可以开出一页的内存，每当虚拟机访问GPA时，最重要的信息GPA虚拟机物理地址就会作为一个entry放入这一页内存里，一页4KB的空间，共计512个entry．这一页的物理内存地址可以放入VMCS的PML Address域里，另外还有一个PML index域，用来指示现在将访问entry放入哪个位置．
 </p>
 </div>
 </div>
-<div id="outline-container-orge80cbc6" class="outline-3">
-<h3 id="orge80cbc6"><span class="section-number-3">1.2.</span> qemu侧开启脏页记录</h3>
+<div id="outline-container-org64f86ed" class="outline-3">
+<h3 id="org64f86ed"><span class="section-number-3">1.2.</span> qemu侧开启脏页记录</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 qemu侧开启脏页记录的一个路径可以是（逐步向下增长调用路径上的函数）：
 </p>
-<pre class="example" id="org3c17a39">
+<pre class="example" id="org63932f3">
 hmp_migrate-&gt;qmp_migrate
 </pre>
-<pre class="example" id="org18b22a4">
+<pre class="example" id="org08a96c0">
 ERST
 
     {
@@ -117,13 +116,13 @@ SRST
 <p>
 在qmp_migrate里依据不同uri接口可以调用不同的函数，比如tcp，unix以及vsock都走socket_start_outgoing_migration：
 </p>
-<pre class="example" id="org731221b">
+<pre class="example" id="orgcc66244">
 socket_start_outgoing_migration-&gt;socket_start_outgoing_migration_internal
 </pre>
 <p>
 在socket_start_outgoing_migration_internal函数里以socket_outgoing_migration作为callback调用qio_channel_socket_connect_async：
 </p>
-<pre class="example" id="org4223439">
+<pre class="example" id="org455b985">
 qio_channel_socket_connect_async(sioc,
                                  saddr,
                                  socket_outgoing_migration,
@@ -134,12 +133,12 @@ qio_channel_socket_connect_async(sioc,
 <p>
 qio_channel_socket_connect_async函数里将socket_outgoing_migration作为callback参数调用qio_task_new构造一个QIOTask：
 </p>
-<pre class="example" id="orga690e08">
+<pre class="example" id="org9fae535">
 QIOTask *task = qio_task_new(
     OBJECT(ioc), callback, opaque, destroy);
 SocketAddress *addrCopy;
 </pre>
-<pre class="example" id="orgfe5b76f">
+<pre class="example" id="org69ea7a5">
 QIOTask *qio_task_new(Object *source,
                       QIOTaskFunc func,
                       gpointer opaque,
@@ -159,7 +158,7 @@ QIOTask *qio_task_new(Object *source,
 <p>
 然后qio_channel_socket_connect_async调用qio_task_run_in_thread函数，构造出的task作为第一个参数：
 </p>
-<pre class="example" id="orgd78f4bc">
+<pre class="example" id="org84c6dc2">
 qio_task_run_in_thread(task,
                        qio_channel_socket_connect_worker,
                        addrCopy,
@@ -169,32 +168,32 @@ qio_task_run_in_thread(task,
 <p>
 最终会运行到开始提到的回调函数socket_outgoing_migration，该函数向下又有调用：
 </p>
-<pre class="example" id="orgc693056">
+<pre class="example" id="org02a8b8c">
 socket_outgoing_migration-&gt;migration_channel_connect-&gt;migrate_fd_connect
 </pre>
 <p>
 在migrate_fd_connect函数里，会创建一个名为live_migration的线程：
 </p>
-<pre class="example" id="org97df733">
+<pre class="example" id="org5873faa">
 qemu_thread_create(&amp;s-&gt;thread, "live_migration",
         migration_thread, s, QEMU_THREAD_JOINABLE);
 </pre>
 <p>
 该live_migration线程的工作函数为migration_thread，它向下又有调用链：
 </p>
-<pre class="example" id="orgb5d0e23">
+<pre class="example" id="orgbbe2777">
 migration_thread-&gt;qemu_savevm_state_setup-&gt;save_setup(ram_save_setup)-&gt;ram_init_all-&gt;ram_init_bitmaps
 </pre>
 <p>
 在ram_init_bitmaps里以GLOBAL_DIRTY_MIGRATION这个标志（原因）启动脏页记录：
 </p>
-<pre class="example" id="org7dd124b">
+<pre class="example" id="org757c248">
 memory_global_dirty_log_start(GLOBAL_DIRTY_MIGRATION);
 </pre>
 <p>
 这个标志其意思就是现在因为迁移要开启了，所以哪些是脏页要记录下来，后面需要迁移这些脏页．除了开始迁移需要记录脏页，还有一个原因也可以开启脏页：
 </p>
-<pre class="example" id="org8972c5c">
+<pre class="example" id="orgdbfa377">
 /* Possible bits for global_dirty_log_{start|stop} */
 
 /* Dirty tracking enabled because migration is running */
@@ -208,19 +207,19 @@ memory_global_dirty_log_start(GLOBAL_DIRTY_MIGRATION);
 <p>
 memory_global_dirty_log_start函数里先把传进来的GLOBAL_DIRTY_MIGRATION和global_dirty_tracking相或又给到global_dirty_tracking，这样global_dirty_tracking就有一个新的比特位第bit 0位被设置了，其肯定不为0：
 </p>
-<pre class="example" id="org02d8189">
+<pre class="example" id="org18adb34">
 global_dirty_tracking |= flags;
 </pre>
 <p>
 然后memory_global_dirty_log_start继续向下调：
 </p>
-<pre class="example" id="org2df9d6d">
+<pre class="example" id="orgdf03e1d">
 memory_region_transaction_commit-&gt;flatviews_reset-&gt;generate_memory_topology-&gt;render_memory_region
 </pre>
 <p>
 在render_memory_region函数里有：
 </p>
-<pre class="example" id="org670a391">
+<pre class="example" id="org774a4aa">
 ...
 FlatRange fr;
 ...
@@ -229,7 +228,7 @@ fr.dirty_log_mask = memory_region_get_dirty_log_mask(mr);
 <p>
 而memory_region_get_dirty_log_mask如下：
 </p>
-<pre class="example" id="orga9358fb">
+<pre class="example" id="org6cad10a">
 uint8_t memory_region_get_dirty_log_mask(MemoryRegion *mr)
 {
     uint8_t mask = mr-&gt;dirty_log_mask;
@@ -250,13 +249,13 @@ uint8_t memory_region_get_dirty_log_mask(MemoryRegion *mr)
 <p>
 这里最主要的条件其实就是global_dirty_tracking，前面看到了global_dirty_tracking第0位被设置了，其肯定是有值的，所以返回的mask其第DIRTY_MEMORY_MIGRATION个比特位也就被设置了（就是bit 2）．memory_region_transaction_commit完成对flatviews_reset的调用后（就是设置新的FlatRange:dirty_log_mask）又调用address_space_set_flatview：
 </p>
-<pre class="example" id="org97ba33e">
+<pre class="example" id="orgf16308f">
 memory_region_transaction_commit-&gt;address_space_set_flatview-&gt;address_space_update_topology_pass
 </pre>
 <p>
 在address_space_update_topology_pass里就可以看到利用FlatRange:dirty_log_mask作为条件判断是否开启脏页记录了：
 </p>
-<pre class="example" id="org25e0048">
+<pre class="example" id="org1c5e2e7">
 static void address_space_update_topology_pass(AddressSpace *as,
                                                const FlatView *old_view,
                                                const FlatView *new_view,
@@ -283,7 +282,7 @@ static void address_space_update_topology_pass(AddressSpace *as,
 <p>
 条件frnew-&gt;dirty_log_mask &amp; ~frold-&gt;dirty_log_mask就是说原来旧的FlatRange:dirty_log_mask没有设置的而新的FlatRange:dirty_log_mask有设置的话，就调用MEMORY_LISTENER_UPDATE_REGION进行更新，可以看到调用它的第四个参数是log_start，而MEMORY_LISTENER_UPDATE_REGION的实现如下：
 </p>
-<pre class="example" id="org8afbffa">
+<pre class="example" id="org9440287">
 #define MEMORY_LISTENER_UPDATE_REGION(fr, as, dir, callback, _args...)  \
     do {                                                                \
         MemoryRegionSection mrs = section_from_flat_range(fr,           \
@@ -294,26 +293,26 @@ static void address_space_update_topology_pass(AddressSpace *as,
 <p>
 在MEMORY_LISTENER_CALL里会调用log_start这个函数了：
 </p>
-<pre class="example" id="org40f5884">
+<pre class="example" id="org7cb42ef">
 _listener-&gt;_callback(_listener, _section, ##_args);
 </pre>
 <p>
 对于kvm memory listener来说，这个log_start函数就是kvm_log_start：
 </p>
-<pre class="example" id="org646c937">
+<pre class="example" id="org0bb4e18">
 kml-&gt;listener.log_start = kvm_log_start;
 </pre>
 <p>
 关于其初始化的流程，本文就不赘述了．
 kvm_log_start有如下调用链：
 </p>
-<pre class="example" id="org26b6c18">
+<pre class="example" id="org7361105">
 kvm_log_start-&gt;kvm_section_update_flags-&gt;kvm_slot_update_flags
 </pre>
 <p>
 kvm_slot_update_flags函数定义如下：
 </p>
-<pre class="example" id="org52017b3">
+<pre class="example" id="orga2fd4b5">
 static int kvm_slot_update_flags(KVMMemoryListener *kml, KVMSlot *mem,
                                  MemoryRegion *mr)
 {
@@ -332,7 +331,7 @@ static int kvm_slot_update_flags(KVMMemoryListener *kml, KVMSlot *mem,
 <p>
 先是调用了kvm_mem_flags，然后调用kvm_set_user_memory_region．先看kvm_mem_flags：
 </p>
-<pre class="example" id="org7cdd406">
+<pre class="example" id="orgc899fc7">
 static int kvm_mem_flags(MemoryRegion *mr)
 {
     bool readonly = mr-&gt;readonly || memory_region_is_romd(mr);
@@ -354,7 +353,7 @@ static int kvm_mem_flags(MemoryRegion *mr)
 <p>
 kvm_slot_update_flags随后调用了kvm_set_user_memory_region，在后者函数里有代码：
 </p>
-<pre class="example" id="org4a7b7ce">
+<pre class="example" id="orgba38186">
 static int kvm_set_user_memory_region(KVMMemoryListener *kml, KVMSlot *slot, bool new)
 {
     ...
@@ -372,13 +371,13 @@ slot-&gt;flags是带有KVM_MEM_LOG_DIRTY_PAGES的，这里又给到了kvm_usersp
 </div>
 </div>
 
-<div id="outline-container-org26c9eda" class="outline-3">
-<h3 id="org26c9eda"><span class="section-number-3">1.3.</span> kvm侧开启脏页记录</h3>
+<div id="outline-container-org235a4e0" class="outline-3">
+<h3 id="org235a4e0"><span class="section-number-3">1.3.</span> kvm侧开启脏页记录</h3>
 <div class="outline-text-3" id="text-1-3">
 <p>
 当kvm_vm_ioctl来到内核时，kvm里有个同名函数会处理这个ioctl请求：
 </p>
-<pre class="example" id="org3d2df1a">
+<pre class="example" id="org051421b">
 static long kvm_vm_ioctl(struct file *filp,
 			   unsigned int ioctl, unsigned long arg)
 {
@@ -404,13 +403,13 @@ static long kvm_vm_ioctl(struct file *filp,
 <p>
 从kvm_vm_ioctl_set_memory_region向下有如下调用链：
 </p>
-<pre class="example" id="orgc6dd651">
+<pre class="example" id="orgb5df28e">
 kvm_vm_ioctl_set_memory_region-&gt;kvm_set_memory_region-&gt;__kvm_set_memory_region
 </pre>
 <p>
 在__kvm_set_memory_region里，又引入了kvm_memory_slot概念：
 </p>
-<pre class="example" id="org4b2c39d">
+<pre class="example" id="orgd77962d">
 int __kvm_set_memory_region(struct kvm *kvm,
 			    const struct kvm_userspace_memory_region *mem)
 {
@@ -422,13 +421,13 @@ int __kvm_set_memory_region(struct kvm *kvm,
 <p>
 在这里可以看到，带有KVM_MEM_LOG_DIRTY_PAGES标志的flags又被转给了kvm_memory_slot:flags．从__kvm_set_memory_region继续往下：
 </p>
-<pre class="example" id="org694ac9a">
+<pre class="example" id="org2949238">
 __kvm_set_memory_region-&gt;kvm_arch_commit_memory_region-&gt;kvm_mmu_slot_apply_flags
 </pre>
 <p>
 在kvm_mmu_slot_apply_flags函数里：
 </p>
-<pre class="example" id="orgf48d422">
+<pre class="example" id="orgb1e8ac3">
 static void kvm_mmu_slot_apply_flags(struct kvm *kvm,
 				     struct kvm_memory_slot *old,
 				     struct kvm_memory_slot *new,
@@ -448,7 +447,7 @@ static void kvm_mmu_slot_apply_flags(struct kvm *kvm,
 <p>
 log_dirty_pages相当于是取出了kvm_memory_slot:flags里第KVM_MEM_LOG_DIRTY_PAGES这个bit位的设置情况，log_dirty_pages为0代表没有设置，为1代表设置了．下面的if判断条件意义是：只要原来flags和新的flags在KVM_MEM_LOG_DIRTY_PAGES这个比特位上发生变化时，都会调用kvm_mmu_update_cpu_dirty_logging函数，但是注意第二个参数指定了是否开启PML，kvm_mmu_slot_apply_flags定义如下：
 </p>
-<pre class="example" id="org25057b4">
+<pre class="example" id="org1a48d78">
 static void kvm_mmu_update_cpu_dirty_logging(struct kvm *kvm, bool enable)
 {
 	struct kvm_arch *ka = &amp;kvm-&gt;arch;
@@ -466,13 +465,13 @@ static void kvm_mmu_update_cpu_dirty_logging(struct kvm *kvm, bool enable)
 <p>
 一般开启PML功能第一个条件就会满足．kvm_make_all_cpus_request只是将KVM_REQ_UPDATE_CPU_DIRTY_LOGGING这个请求给挂到vcpu-&gt;requests了，并没有立即写硬件相关的bit位．如下调用链：
 </p>
-<pre class="example" id="org96336ab">
+<pre class="example" id="org58887ed">
 kvm_make_all_cpus_request-&gt;kvm_make_all_cpus_request_except-&gt;kvm_make_vcpus_request_mask-&gt;kvm_make_request
 </pre>
 <p>
 最后的kvm_make_request如下：
 </p>
-<pre class="example" id="org4f610f0">
+<pre class="example" id="org9d10fa9">
 static inline void kvm_make_request(int req, struct kvm_vcpu *vcpu)
 {
 	/*
@@ -486,14 +485,14 @@ static inline void kvm_make_request(int req, struct kvm_vcpu *vcpu)
 <p>
 可以看到只是设了一个bit位．那么什么时候设置硬件的比特位，以开启PML功能呢？搜索KVM_REQ_UPDATE_CPU_DIRTY_LOGGING知道，在下一次通过vcpu_enter_guest进入虚拟机时会处理挂在vcpu-&gt;requests上的请求：
 </p>
-<pre class="example" id="orgbce62e6">
+<pre class="example" id="orgc22a133">
 if (kvm_check_request(KVM_REQ_UPDATE_CPU_DIRTY_LOGGING, vcpu))
 	static_call(kvm_x86_update_cpu_dirty_logging)(vcpu);
 </pre>
 <p>
 kvm_x86_update_cpu_dirty_logging符号通过KVM_X86_OP_NULL展开：
 </p>
-<pre class="example" id="org2a55a01">
+<pre class="example" id="org5a927cd">
 KVM_X86_OP_NULL(update_cpu_dirty_logging)
 #define KVM_X86_OP(func) \
 	DECLARE_STATIC_CALL(kvm_x86_##func, *(((struct kvm_x86_ops *)0)-&gt;func));
@@ -504,19 +503,19 @@ KVM_X86_OP_NULL(update_cpu_dirty_logging)
 <p>
 可以看到，最后实际调用的是kvm_x86_ops:update_cpu_dirty_logging，其就是vmx_update_cpu_dirty_logging：
 </p>
-<pre class="example" id="org259141c">
+<pre class="example" id="org3ae328b">
 .update_cpu_dirty_logging = vmx_update_cpu_dirty_logging,
 </pre>
 <p>
 vmx_update_cpu_dirty_logging会调用secondary_exec_controls_setbit：
 </p>
-<pre class="example" id="org91cc434">
+<pre class="example" id="org6d508a3">
 secondary_exec_controls_setbit(vmx, SECONDARY_EXEC_ENABLE_PML);
 </pre>
 <p>
 SECONDARY_EXEC_ENABLE_PML定义如下：
 </p>
-<pre class="example" id="orgeeac669">
+<pre class="example" id="org107c950">
 #define SECONDARY_EXEC_ENABLE_PML               VMCS_CONTROL_BIT(PAGE_MOD_LOGGING)
 #define VMCS_CONTROL_BIT(x)	BIT(VMX_FEATURE_##x &amp; 0x1f)
 #define BIT(nr)			(UL(1) &lt;&lt; (nr))
@@ -525,7 +524,7 @@ SECONDARY_EXEC_ENABLE_PML定义如下：
 <p>
 这其实就是Secondary Processor-Based VM-Execution Controls的第17个bit位，intel虚拟化手册对这个位解释如下：
 </p>
-<pre class="example" id="orgcb43c43">
+<pre class="example" id="orgf79c458">
 17 Enable PML If this control is 1, an access to a guest-physical address that sets an EPT dirty bit first adds an entry to the page-modification. See Section 27.2.6.
 </pre>
 <p>
@@ -535,7 +534,7 @@ SECONDARY_EXEC_ENABLE_PML定义如下：
 <p>
 再来看secondary_exec_controls_setbit的定义，其是宏定义拼接的：
 </p>
-<pre class="example" id="orga5962b5">
+<pre class="example" id="org4764d88">
 BUILD_CONTROLS_SHADOW(secondary_exec, SECONDARY_VM_EXEC_CONTROL)
 #define BUILD_CONTROLS_SHADOW(lname, uname)				    \
 static inline void lname##_controls_set(struct vcpu_vmx *vmx, u32 val)	    \
@@ -565,7 +564,7 @@ static inline void lname##_controls_clearbit(struct vcpu_vmx *vmx, u32 val) \
 <p>
 先看SECONDARY_VM_EXEC_CONTROL的实现，它是在vmcs中的一个偏移：
 </p>
-<pre class="example" id="orga4874ba">
+<pre class="example" id="org7048405">
 enum vmcs_field {
 ...
 	SECONDARY_VM_EXEC_CONTROL       = 0x0000401e,
@@ -580,7 +579,7 @@ enum vmcs_field {
 再看secondary_exec_controls_setbit的实现，先通过secondary_exec_controls_get拿到原来的vmcs-&gt;controls_shadow:secondary_exec这个u32的值和新的val（1&lt;&lt;17）相或，然后在secondary_controls_set里通过vmcs_write32写到当前vmcs的secondary exec control字段，这样就启动了PML功能，关于vmcs_write32的实现如下，当然最后肯定是内联了：
 </p>
 
-<pre class="example" id="org8196e1b">
+<pre class="example" id="org35aa188">
 static __always_inline void vmcs_write32(unsigned long field, u32 value)
 {
 	vmcs_check32(field);
@@ -601,8 +600,8 @@ vmwrite就是操作当前cpu的VMCS，关于它intel虚拟化手册有详尽描�
 </div>
 </div>
 
-<div id="outline-container-org9a8f36e" class="outline-3">
-<h3 id="org9a8f36e"><span class="section-number-3">1.4.</span> kvm侧记录脏页流程</h3>
+<div id="outline-container-org0dcf539" class="outline-3">
+<h3 id="org0dcf539"><span class="section-number-3">1.4.</span> kvm侧记录脏页流程</h3>
 <div class="outline-text-3" id="text-1-4">
 <p>
 在前面介绍了qemu+kvm共同开启了PML硬件记录脏页的功能，本小节想分析下kvm内核侧记录脏页的流程，根据intel虚拟化手册，本质上开启PML后，脏页的记录实际上由cpu自动完成，每当guest虚拟机访问内存时，cpu会自动将GPA记录到pml buffer里，软件没有太多的工作，软件里主要是在pml buffer满时将脏信息搬移到dirty ring环形区里，qemu 6.2使用了kvm内核里的kvm_vcpu:dirty_ring以提高效率，而qemu 4.2使用了kvm内核里传统的kvm_memory_slot:dirty_bitmap，后面主要分析dirty ring的方式，而简单分析下dirty_bitmap方式．使用dirty ring的方式避免了内核态/用户态的数据拷贝，提高了效率，后面将详细看到这个过程．
@@ -611,7 +610,7 @@ vmwrite就是操作当前cpu的VMCS，关于它intel虚拟化手册有详尽描�
 <p>
 首先在创建vcpu而初始化vmcs的流程里vmx_create_vcpu-&gt;init_vmcs：
 </p>
-<pre class="example" id="orgf452685">
+<pre class="example" id="orgd02cb07">
 if (enable_pml) {
 	    vmcs_write64(PML_ADDRESS, page_to_phys(vmx-&gt;pml_pg));
 	    vmcs_write16(GUEST_PML_INDEX, PML_ENTITY_NUM - 1);
@@ -620,14 +619,14 @@ if (enable_pml) {
 <p>
 enable_pml作为一个模块参数，默认为1：
 </p>
-<pre class="example" id="orgd5f8bf0">
+<pre class="example" id="orge3438d4">
 bool __read_mostly enable_pml = 1;
 module_param_named(pml, enable_pml, bool, S_IRUGO);
 </pre>
 <p>
 根据intel虚拟化手册PML_ADDRESS就是vmcs里用来保存pml buffer地址的寄存器：
 </p>
-<pre class="example" id="orga091a6c">
+<pre class="example" id="orge8591ad">
 enum vmcs_field {
     ...
 	PML_ADDRESS			= 0x0000200e,
@@ -637,7 +636,7 @@ enum vmcs_field {
 <p>
 page_to_phys是将一个页面转换成物理地址，cpu访问pml address地址时不需要经过mmu，直接拿着物理地址往内存硬件单元上发送，而pml_pg同样在vmx_create_vcpu的初始化流程里分配：
 </p>
-<pre class="example" id="org75d5acb">
+<pre class="example" id="orga28d60f">
 if (enable_pml) {
 	vmx-&gt;pml_pg = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
 	if (!vmx-&gt;pml_pg)
@@ -647,14 +646,14 @@ if (enable_pml) {
 <p>
 根据intel虚拟化手册，pml log buffer是由512个64-bit的条目组成的，所以使用alloc_page分配一页空间就行．然后使用vmcs_write64写入到vmcs的PML_ADDRSS字段即硬件上生效．根据intel虚拟化手册，pml功能还有一个pml index的vmcs字段，它控制了现在可以写pml buffer的哪个条目，它从511递减到0，然后就会产生一个page-modification log-full event导致虚拟机退出：
 </p>
-<pre class="example" id="org31913f1">
+<pre class="example" id="org9e0a32b">
 enum vmcs_field {	
 	...
 	GUEST_PML_INDEX			= 0x00000812,
 	...
 };
 </pre>
-<pre class="example" id="org0edc7c7">
+<pre class="example" id="org5febb63">
 #define PML_ENTITY_NUM		512
 </pre>
 <p>
@@ -662,7 +661,7 @@ enum vmcs_field {
 当前面小节介绍的enable pml bit打开，pml address以及pml index都设置好后，cpu硬件在每次访问GPA时，都会记录下来这次访问到pml buffer．
 当虚拟机因为page-modification log-full event退出时，就会产生vm exit，这会退到宿主机（kvm）里有先有统一的接口去处理：__vmx_handle_exit，page-modification log-full event在kvm里其实是有专门的处理函数的，叫handle_pml_full，只是这个函数较为简单，并没有保存pml buffer里的脏信息到内存别处的动作．保存的动作另在如下路径：
 </p>
-<pre class="example" id="org43c95bb">
+<pre class="example" id="org955bba3">
 __vmx_handle_exit-&gt;vmx_flush_pml_buffer
 </pre>
 <p>
@@ -672,7 +671,7 @@ __vmx_handle_exit-&gt;vmx_flush_pml_buffer
 <p>
 现在看下vmx_flush_pml_buffer：
 </p>
-<pre class="example" id="orgba02f22">
+<pre class="example" id="org65ea56f">
 static void vmx_flush_pml_buffer(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -711,7 +710,7 @@ static void vmx_flush_pml_buffer(struct kvm_vcpu *vcpu)
 <p>
 继续往下分析kvm_vcpu_mark_page_dirty：
 </p>
-<pre class="example" id="orge5b0544">
+<pre class="example" id="org99748fb">
 void kvm_vcpu_mark_page_dirty(struct kvm_vcpu *vcpu, gfn_t gfn)
 {
 	struct kvm_memory_slot *memslot;
@@ -727,7 +726,7 @@ kvm_vcpu_gfn_to_memslot就不展示它的代码进行详细的分析了，总结
 <p>
 kvm_vcpu_gfn_to_memslot-&gt;search_memslots-&gt;try_get_memslot函数里有个预防侧信道攻击的接口这里可以简单提下：
 </p>
-<pre class="example" id="orgc8b818e">
+<pre class="example" id="org186fd62">
 /*
  * slot_index can come from vcpu-&gt;last_used_slot which is not kept
  * in sync with userspace-controllable memslot deletion. So use nospec
@@ -743,7 +742,7 @@ slot = &amp;slots-&gt;memslots[slot_index];
 <p>
 继续分析mark_page_dirty_in_slot函数：
 </p>
-<pre class="example" id="orgd94b38b">
+<pre class="example" id="org9640bed">
 void mark_page_dirty_in_slot(struct kvm *kvm,
 			     struct kvm_memory_slot *memslot,
 		 	     gfn_t gfn)
@@ -771,7 +770,7 @@ kvm_slot_dirty_track_enabled会检查前面的节提到过的KVM_MEM_LOG_DIRTY_P
 <p>
 针对kvm_memory_slot:dirty_bitmap的方式，内核kvm侧提供一个ioctl接口，用来同步内核侧的脏页信息到用户态qemu：
 </p>
-<pre class="example" id="orgc2e1e34">
+<pre class="example" id="org71b5bde">
 static long kvm_vm_ioctl(struct file *filp,
 			   unsigned int ioctl, unsigned long arg)
 {
@@ -791,7 +790,7 @@ static long kvm_vm_ioctl(struct file *filp,
 <p>
 然后在kvm_vm_ioctl_get_dirty_log-&gt;kvm_get_dirty_log_protect里有：
 </p>
-<pre class="example" id="org335814f">
+<pre class="example" id="org3d29bc4">
 static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 {
     ...
@@ -840,7 +839,7 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 <p>
 dirty ring功能涉及qemu/kvm的配合，qemu侧的支持在下一节去介绍．内核kvm侧通过如下的补丁引入了对dirty ring的基本支持：
 </p>
-<pre class="example" id="org2f4c52f">
+<pre class="example" id="org030beb1">
 fb04a1eddb1a65b6588a021bdc132270d5ae48bb 最早在v5.11引入
 </pre>
 <p>
@@ -850,7 +849,7 @@ fb04a1eddb1a65b6588a021bdc132270d5ae48bb 最早在v5.11引入
 <p>
 如果qemu侧支持dirty ring的功能（具体见下节），那么就可以发起KVM_CAP_DIRTY_LOG_RING的ioctl，这个ioctl cmd的处理函数是kvm_vm_ioctl_enable_dirty_log_ring：
 </p>
-<pre class="example" id="orgd329d16">
+<pre class="example" id="org2e9743f">
 static int kvm_vm_ioctl_enable_cap_generic(struct kvm *kvm,
 					   struct kvm_enable_cap *cap)
 {
@@ -863,7 +862,7 @@ static int kvm_vm_ioctl_enable_cap_generic(struct kvm *kvm,
 <p>
 而在kvm_vm_ioctl_enable_dirty_log_ring函数里，会设置kvm:dirty_ring_size：
 </p>
-<pre class="example" id="orgab5f250">
+<pre class="example" id="orga932ef8">
 static int kvm_vm_ioctl_enable_dirty_log_ring(struct kvm *kvm, u32 size)
 {
     ...
@@ -881,7 +880,7 @@ size是qemu用户态传来的，当size大于0时，就相当于是开启了内�
 <p>
 现在回到mark_page_dirty_in_slot继续往下分析内核kvm侧的脏页记录（dirty ring方式），先看一个获取kvm_dirty_ring的辅助函数：
 </p>
-<pre class="example" id="org8e0ad1c">
+<pre class="example" id="orgb376c28">
 struct kvm_dirty_ring *kvm_dirty_ring_get(struct kvm *kvm)
 {
 	struct kvm_vcpu *vcpu = kvm_get_running_vcpu();
@@ -904,7 +903,7 @@ struct kvm_vcpu *kvm_get_running_vcpu(void)
 <p>
 可以看到kvm_dirty_ring是per-vcpu的，也就是每个vcpu都有一个dirty ring，同时pcp变量kvm_running_vcpu记录了当前物理cpu上运行的是哪个vcpu．继续往下看mark_page_dirty_in_slot调用的kvm_dirty_ring_push：
 </p>
-<pre class="example" id="org484a4e4">
+<pre class="example" id="org346d47d">
 void kvm_dirty_ring_push(struct kvm_dirty_ring *ring, u32 slot, u64 offset)
 {
 	struct kvm_dirty_gfn *entry;
@@ -929,7 +928,7 @@ void kvm_dirty_ring_push(struct kvm_dirty_ring *ring, u32 slot, u64 offset)
 <p>
 先从dirty_gfns里拿出kvm_dirty_gfn，这个结构体内核/qemu都可以解释其格式，后面会介绍是因为dirty_gfns正是在内核空间和qemu用户空间共享的内存．kvm_dirty_gfn其实就是描述了guest访问某个gfn时关于脏信息的集合．前面分析父函数mark_page_dirty_in_slot时，知道offset其实是相对于当前gfn所在的kvm_memory_slot的base_gfn，同时slot号由kvm_memory_slot:as_id以及kvm_memory_slot:id两部分组成形成该gfn所属的槽号，也会记录到kvm_dirty_gfn里．kvm_dirty_ring_push里另一个调用的关键函数是kvm_dirty_gfn_set_dirtied：
 </p>
-<pre class="example" id="org231320f">
+<pre class="example" id="orgf030928">
 static inline void kvm_dirty_gfn_set_dirtied(struct kvm_dirty_gfn *gfn)
 {
 	gfn-&gt;flags = KVM_DIRTY_GFN_F_DIRTY;
@@ -938,7 +937,7 @@ static inline void kvm_dirty_gfn_set_dirtied(struct kvm_dirty_gfn *gfn)
 <p>
 这里其实是设置了当前gfn的状态，表示写脏了，guest刚访问过，KVM_DIRTY_GFN_F_DIRTY就代表gfn的一种dirty状态，这里涉及到gfn状态变化的一个简单状态机，直接引用内核代码的注释：
 </p>
-<pre class="example" id="org5d54152">
+<pre class="example" id="orgac989d8">
 /*
  * KVM dirty GFN flags, defined as:
  *
@@ -973,7 +972,7 @@ static inline void kvm_dirty_gfn_set_dirtied(struct kvm_dirty_gfn *gfn)
 <p>
 在创建vcpu时，就会检查kvm_vcpu:dirty_ring_size是否有值，如果有值，就会调用kvm_dirty_ring_alloc分配kvm_dirty_ring:dirty_gfns的空间：
 </p>
-<pre class="example" id="orgaefc827">
+<pre class="example" id="org723c2f0">
 static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 {
     ...
@@ -986,7 +985,7 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 	...
 }
 </pre>
-<pre class="example" id="org7cbf7c3">
+<pre class="example" id="orgce234e1">
 int kvm_dirty_ring_alloc(struct kvm_dirty_ring *ring, int index, u32 size)
 {
 	ring-&gt;dirty_gfns = vzalloc(size);
@@ -1008,13 +1007,13 @@ int kvm_dirty_ring_alloc(struct kvm_dirty_ring *ring, int index, u32 size)
 </div>
 </div>
 
-<div id="outline-container-org5be9006" class="outline-3">
-<h3 id="org5be9006"><span class="section-number-3">1.5.</span> qemu侧记录/获取脏页流程</h3>
+<div id="outline-container-org137e839" class="outline-3">
+<h3 id="org137e839"><span class="section-number-3">1.5.</span> qemu侧记录/获取脏页流程</h3>
 <div class="outline-text-3" id="text-1-5">
 <p>
 qemu侧对于dirty ring的支持，主要涉及下面一些补丁：
 </p>
-<pre class="example" id="orgfcfdf4c">
+<pre class="example" id="org06c0b25">
 b4420f198dd8eab53cf6062c1871d0e5f5601e86 涉及dirty ring的基本支持 v6.1.0-rc0
 2ea5cb0a47c9dbf78235de30a0d5846a4ab6d995 涉及dirty-ring-size参数接口方面的代码 v6.1.0-rc0
 856e23a0fb92b0949eace7f43a521e0214246735 针对arm架构有一些微调 v8.1.0-rc0
@@ -1022,7 +1021,7 @@ b4420f198dd8eab53cf6062c1871d0e5f5601e86 涉及dirty ring的基本支持 v6.1.0-
 <p>
 在上节介绍kvm侧时，提到了用户态kvm要传入大于0的size，内核态kvm才会开启dirty ring功能．这在qemu的kvm_init函数中有所体现：
 </p>
-<pre class="example" id="orge3ca0e7">
+<pre class="example" id="orgc700a58">
 if (s-&gt;kvm_dirty_ring_size &gt; 0) {
      uint64_t ring_bytes;
 
@@ -1057,7 +1056,7 @@ if (s-&gt;kvm_dirty_ring_size &gt; 0) {
 <p>
 这里就可以看到使用KVM_CAP_DIRTY_LOG_RING cmd去调用ioctl，到了kvm就可以设置kvm:dirty_ring_size非0，这样内核态kvm相关的dirty ring的逻辑就可以运行起来．这里可以看到要想通过kvm_vm_enable_cap的KVM_CAP_DIRTY_LOG_RING到内核里去设置kvm:dirty_ring_size为非0，实际上是有两个条件，一是KVMState:kvm_dirty_ring_size要大于0，二是以KVM_CAP_DIRTY_LOG_RING cmd调用的kvm_vm_check_extension要大于0，这其实是从两个角度共同控制是否使用dirty ring功能．先说第一个条件，这是qemu（以及kvm）开给用户的选项能力控制dirty ring的开启．KVMState:kvm_dirty_ring_size在函数kvm_set_dirty_ring_size设置：
 </p>
-<pre class="example" id="orge755617">
+<pre class="example" id="org7e37a1e">
 static void kvm_set_dirty_ring_size(Object *obj, Visitor *v,
                                     const char *name, void *opaque,
                                     Error **errp)
@@ -1069,7 +1068,7 @@ static void kvm_set_dirty_ring_size(Object *obj, Visitor *v,
 <p>
 kvm_set_dirty_ring_size作为dirty-ring-size这个属性的set函数被添加到ObjectClass:properties这个hash表里，在初始化的时候调用：
 </p>
-<pre class="example" id="org1a26c80">
+<pre class="example" id="orgf9818ae">
 static void kvm_accel_class_init(ObjectClass *oc, void *data)
 {
     ...
@@ -1082,7 +1081,7 @@ static void kvm_accel_class_init(ObjectClass *oc, void *data)
 <p>
 在介绍qemu选项的代码中（文件qemu-options.hx）可以看到如下对dirty-ring-size描述：
 </p>
-<pre class="example" id="orgd2d7fb4">
+<pre class="example" id="orgacae1d6">
 ``dirty-ring-size=n``
      When the KVM accelerator is used, it controls the size of the per-vCPU
      dirty page ring buffer (number of entries for each vCPU). It should
@@ -1096,13 +1095,13 @@ static void kvm_accel_class_init(ObjectClass *oc, void *data)
 <p>
 可以看到，要想使能dirty ring功能，必须将dirty-ring-size设置为非0，一种典型的设置：-accel kvm,dirty-ring-size=4096，目前找了个环境看了下没有显式的设置这个参数，所以目前621环境是没有使用起这个功能的．下面分析第二个控制开启dirty ring的选项：以KVM_CAP_DIRTY_LOG_RING cmd调用kvm_vm_check_extension要大于0．在kvm内核侧这个cmd的实现如下，实际是返回了内核目前支持的最大kvm_dirty_gfn条目数：
 </p>
-<pre class="example" id="org159de2c">
+<pre class="example" id="orgfd82acb">
 #if KVM_DIRTY_LOG_PAGE_OFFSET &gt; 0
 		return KVM_DIRTY_RING_MAX_ENTRIES * sizeof(struct kvm_dirty_gfn);
 #else
 		return 0;
 </pre>
-<pre class="example" id="org2468831">
+<pre class="example" id="orgac28e93">
 /*
  * Arch needs to define the macro after implementing the dirty ring
  * feature.  KVM_DIRTY_LOG_PAGE_OFFSET should be defined as the
@@ -1123,14 +1122,14 @@ static void kvm_accel_class_init(ObjectClass *oc, void *data)
 <p>
 qemu里传统的采用dirty_bmap的方式是通过以下代码链完成从内核侧获取脏页信息到qemu用户态：
 </p>
-<pre class="example" id="orgc2929d1">
+<pre class="example" id="orgdcbf158">
 kvm_log_sync-&gt;kvm_physical_sync_dirty_bitmap-&gt;kvm_slot_get_dirty_log-&gt;kvm_vm_ioctl
 </pre>
 
 <p>
 最后的kvm_slot_get_dirty_log实现如下：
 </p>
-<pre class="example" id="org879c285">
+<pre class="example" id="org7ab48f4">
 static bool kvm_slot_get_dirty_log(KVMState *s, KVMSlot *slot)
 {
     struct kvm_dirty_log d = {};
@@ -1159,7 +1158,7 @@ static bool kvm_slot_get_dirty_log(KVMState *s, KVMSlot *slot)
 上面简单介绍了下传统的dirty_bmap方式，下面主要还是介绍dirty ring的方式，这种方式在qemu的代码里通过以下调用链完成日志收集：
 </p>
 
-<pre class="example" id="org06d5660">
+<pre class="example" id="org9dd61b3">
 kvm_log_sync_global-&gt;kvm_dirty_ring_flush-&gt;kvm_dirty_ring_reap-&gt;kvm_dirty_ring_reap_locked-&gt;kvm_dirty_ring_reap_one-&gt;kvm_dirty_ring_mark_page
 </pre>
 
@@ -1167,7 +1166,7 @@ kvm_log_sync_global-&gt;kvm_dirty_ring_flush-&gt;kvm_dirty_ring_reap-&gt;kvm_dir
 从kvm_log_sync_global再往上，qemu有两种手段/途径去同步内核的脏页信息，一种是在热迁移路径里现做，这种路径是kvm_log_sync_global作为log_sync_global回调函数而被调用，前面dirty bitmap的方式，使用函数kvm_log_sync其实也是作为log_sync回调函数而使用的，这两个回调钩子在如下函数代码里初始化：
 </p>
 
-<pre class="example" id="orgbb16987">
+<pre class="example" id="orgb9379e6">
 void kvm_memory_listener_register(KVMState *s, KVMMemoryListener *kml,
                                   AddressSpace *as, int as_id, const char *name)
 {
@@ -1189,7 +1188,7 @@ void kvm_memory_listener_register(KVMState *s, KVMMemoryListener *kml,
 dirty ring的第一种方式同步内核脏页信息是热迁移现做，这种方式的一个路径比如如下：
 </p>
 
-<pre class="example" id="org185f391">
+<pre class="example" id="orgb329bf8">
 ram_init_bitmaps-&gt;migration_bitmap_sync_precopy-&gt;migration_bitmap_sync-&gt;memory_global_dirty_log_sync-&gt;
 memory_region_sync_dirty_bitmap-&gt;log_sync_global(kvm_log_sync_global)-&gt;kvm_dirty_ring_flush-&gt;
 kvm_dirty_ring_reap-&gt;kvm_dirty_ring_reap_locked-&gt;kvm_dirty_ring_reap_one-&gt;kvm_dirty_ring_mark_page
@@ -1199,7 +1198,7 @@ kvm_dirty_ring_reap-&gt;kvm_dirty_ring_reap_locked-&gt;kvm_dirty_ring_reap_one-&
 对于上面的函数调用链，这里介绍两点，一是ram_init_bitmaps函数里是先调用了memory_global_dirty_log_start再调用migration_bitmap_sync_precopy，也就是热迁移一开启脏页迁移后就做了一次从内核获取脏页信息的动作：
 </p>
 
-<pre class="example" id="orgb5ecb08">
+<pre class="example" id="orge6a90e7">
 static void ram_init_bitmaps(RAMState *rs)
 {
   ...
@@ -1214,7 +1213,7 @@ static void ram_init_bitmaps(RAMState *rs)
 <p>
 第二点是memory_region_sync_dirty_bitmap函数，这个函数屏蔽了dirty_bitmap和dirty ring方式的差异，从它向上的父函数是不知道底层这两种不同的实现方式的：
 </p>
-<pre class="example" id="org164af9a">
+<pre class="example" id="orgbfeae9b">
 static void memory_region_sync_dirty_bitmap(MemoryRegion *mr)
 {
         if (listener-&gt;log_sync) {
@@ -1231,14 +1230,14 @@ static void memory_region_sync_dirty_bitmap(MemoryRegion *mr)
 <p>
 dirty ring的第二种同步内核脏页信息的方式是通过一个线程在后台每隔1s做一次：
 </p>
-<pre class="example" id="org8c5530e">
+<pre class="example" id="org2e0a577">
 kvm_dirty_ring_reaper_thread-&gt;
 kvm_dirty_ring_reap-&gt;kvm_dirty_ring_reap_locked-&gt;kvm_dirty_ring_reap_one-&gt;kvm_dirty_ring_mark_page
 </pre>
 <p>
 上面的调用链第二行和前面的第一种同步脏页信息的路径最后一行是一样的，只有最前面的kvm_dirty_ring_reaper_thread这时是通过创建一个线程来做同步：
 </p>
-<pre class="example" id="orgf3bb2a0">
+<pre class="example" id="orgea9cd48">
 static int kvm_dirty_ring_reaper_init(KVMState *s)
 {
     struct KVMDirtyRingReaper *r = &amp;s-&gt;reaper;
@@ -1281,7 +1280,7 @@ static void *kvm_dirty_ring_reaper_thread(void *data)
 分析完了qemu使用dirty ring的两种同步脏页信息的路径，下面可以具体看下qemu将脏页信息又搬到了哪里，先看kvm_dirty_ring_reap_one函数：
 </p>
 
-<pre class="example" id="org345c1b2">
+<pre class="example" id="org3dfe89d">
 static uint32_t kvm_dirty_ring_reap_one(KVMState *s, CPUState *cpu)
 {
     struct kvm_dirty_gfn *dirty_gfns = cpu-&gt;kvm_dirty_gfns, *cur;
@@ -1314,7 +1313,7 @@ static uint32_t kvm_dirty_ring_reap_one(KVMState *s, CPUState *cpu)
 这个函数从CPUState:kvm_dirty_gfns里取出脏页信息，kvm_dirty_gfn前面的分析提到过，它是内核和qemu都认识的一个结构体，然后在while循环里针对所有设置了KVM_DIRTY_GFN_F_DIRTY标志的kvm_dirty_gfn去调用kvm_dirty_ring_mark_page函数：
 </p>
 
-<pre class="example" id="org2493d1d">
+<pre class="example" id="org3b6d884">
 static bool dirty_gfn_is_dirtied(struct kvm_dirty_gfn *gfn)
 {
     return gfn-&gt;flags == KVM_DIRTY_GFN_F_DIRTY;
@@ -1323,7 +1322,7 @@ static bool dirty_gfn_is_dirtied(struct kvm_dirty_gfn *gfn)
 <p>
 kvm_dirty_ring_mark_page函数里将脏页信息又转移到了KVMSlot:dirty_bmap：
 </p>
-<pre class="example" id="orgf9c43af">
+<pre class="example" id="orgc3459ef">
 static void kvm_dirty_ring_mark_page(KVMState *s, uint32_t as_id,
                                      uint32_t slot_id, uint64_t offset)
 {
@@ -1350,7 +1349,7 @@ static void kvm_dirty_ring_mark_page(KVMState *s, uint32_t as_id,
 先通过as_id找到AddressSpace，再通过slot_id找到是哪个KVMSlot，最后将KVMSlot:dirty_bmap对应offset的位置1，代表对应的这个页面被写过．kvm_dirty_ring_reap_one调用完kvm_dirty_ring_mark_page将脏信息转移到KVMSlot:dirty_bmap后，又调用dirty_gfn_set_collected将对应的kvm_dirty_gfn:flags设置为KVM_DIRTY_GFN_F_RESET，表示我qemu作为consumer，已经使用了脏页信息了，你kvm（内核）作为producer可以清除这个脏信息了，但是发起清除的这个请求由qemu来做，只是kvm执行这个动作，在kvm_dirty_ring_reap_one搜集转移了脏信息后，它的父函数kvm_dirty_ring_reap_locked就可以调用KVM_RESET_DIRTY_RINGS这个cmd的ioctl请求了：
 </p>
 
-<pre class="example" id="org600f513">
+<pre class="example" id="orgb1d0633">
 static uint64_t kvm_dirty_ring_reap_locked(KVMState *s)
 {
     ...
@@ -1369,7 +1368,7 @@ static uint64_t kvm_dirty_ring_reap_locked(KVMState *s)
 <p>
 在内核kvm侧，处理KVM_RESET_DIRTY_RINGS这个ioctl请求是kvm_vm_ioctl_reset_dirty_pages函数：
 </p>
-<pre class="example" id="orgadfe2ce">
+<pre class="example" id="orgfdcfe92">
 static int kvm_vm_ioctl_reset_dirty_pages(struct kvm *kvm)
 {
     ...
@@ -1382,7 +1381,7 @@ static int kvm_vm_ioctl_reset_dirty_pages(struct kvm *kvm)
 而在kvm_dirty_ring_reset函数里会检查kvm_dirty_gfn:flags是否是KVM_DIRTY_GFN_F_RESET，如果是就调用kvm_dirty_gfn_set_invalid将kvm_dirty_gfn:flags设置为0，表示这个脏信息已经被用户态回收过了：
 </p>
 
-<pre class="example" id="orge4e7177">
+<pre class="example" id="org998e0e0">
 int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring)
 {
     ...
@@ -1415,7 +1414,7 @@ static inline void kvm_dirty_gfn_set_invalid(struct kvm_dirty_gfn *gfn)
 以上的分析都是说用户态直接拿来信息用便是，但是这个通路究竟怎么联系起来的，前面层分析传统的dirty_bitmap方式，有介绍到传统的方式是copy_to_user这种内核态/用户态间相互拷贝．但是dirty ring是mmap的方式，之前的层分析过了，kvm_dirty_ring:dirty_gfns是在内核虚拟空间通过vzalloc得到的，而在qemu里，创建完vcpu后通过kvm_init_vcpu初始化vcpu时，有以下代码：
 </p>
 
-<pre class="example" id="org080a45f">
+<pre class="example" id="org4d4615d">
 int kvm_init_vcpu(CPUState *cpu, Error **errp)
 {
     ...
@@ -1439,7 +1438,7 @@ int kvm_init_vcpu(CPUState *cpu, Error **errp)
 也就是说，用户态对cpu-&gt;kvm_fd所指的文件（代表了vcpu，内核抽象出来的fd供用户态操作vcpu）偏移PAGE_SIZE * KVM_DIRTY_LOG_PAGE_OFFSET处的内容映射到了其用户态虚拟空间．这个mmap函数会通过cpu-&gt;kvm_fd参数找到内核里对应这个文件fops即kvm_vcpu_fops：
 </p>
 
-<pre class="example" id="orgf1b0144">
+<pre class="example" id="org4cfcde4">
 static struct file_operations kvm_vcpu_fops = {
 	.release        = kvm_vcpu_release,
 	.unlocked_ioctl = kvm_vcpu_ioctl,
@@ -1453,14 +1452,14 @@ static struct file_operations kvm_vcpu_fops = {
 可以看到，这里设置了mmap回调为kvm_vcpu_mmap，通过如下调用链用户态的mmap系统调用最终会来到这个kvm_vcpu_mmap函数：
 </p>
 
-<pre class="example" id="org7bcdf3d">
+<pre class="example" id="orgc6da2d8">
 SYSCALL_DEFINE6(mmap_pgoff...)-&gt;ksys_mmap_pgoff-&gt;vm_mmap_pgoff-&gt;do_mmap_pgoff-&gt;do_mmap-&gt;mmap_region-&gt;call_mmap: return file-&gt;f_op-&gt;mmap(file, vma);
 </pre>
 <p>
 kvm_vcpu_mmap函数的逻辑很简单，在做了一些合法性判断后，就将vma的vm_ops设置为kvm_vcpu_vm_ops了，这个vm_ops里也很简单，只实现了fault回调函数为kvm_vcpu_fault：
 </p>
 
-<pre class="example" id="orgc914d04">
+<pre class="example" id="org2691ef5">
 static const struct vm_operations_struct kvm_vcpu_vm_ops = {
 	.fault = kvm_vcpu_fault,
 };
@@ -1482,14 +1481,14 @@ static int kvm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
 <p>
 然后用户态访问这个映射的dirty ring时缺页异常里有：
 </p>
-<pre class="example" id="orga8cfa80">
+<pre class="example" id="org6c70775">
 ...-&gt;handle_mm_fault-&gt;__handle_mm_fault-&gt;handle_pte_fault-&gt;do_fault-&gt;do_read_fault-&gt;__do_fault: ret = vma-&gt;vm_ops-&gt;fault(vmf);
 </pre>
 <p>
 最终会来到kvm_vcpu_fault这个fault函数，在这个函数里主要是判断访问的偏移落在了哪个范围，不同的范围得到不同的page，然后给到vmf-&gt;page，这样回到缺页的公共流程里，填充页表，下一次访问时就是dirty ring的内容了：
 </p>
 
-<pre class="example" id="org1234b02">
+<pre class="example" id="orgc02d8b4">
 static vm_fault_t kvm_vcpu_fault(struct vm_fault *vmf)
 {
 	struct kvm_vcpu *vcpu = vmf-&gt;vma-&gt;vm_file-&gt;private_data;
@@ -1528,7 +1527,7 @@ static vm_fault_t kvm_vcpu_fault(struct vm_fault *vmf)
 在前面已经介绍到，内核的脏页信息在kvm_dirty_ring_reap_one-&gt;kvm_dirty_ring_mark_page这个函数里被转移到了KVMSlot:dirty_bmap里，其实这个流程是处于一个更长的虚拟机迁移流程里：
 </p>
 
-<pre class="example" id="orge2a9e0a">
+<pre class="example" id="orge6529ff">
 migration_thread-&gt;migration_iteration_run-&gt;qemu_savevm_state_pending-&gt;save_live_pending(ram_save_pending)-&gt;migration_bitmap_sync_precopy
 -&gt;migration_bitmap_sync-&gt;memory_global_dirty_log_sync-&gt;memory_region_sync_dirty_bitmap-&gt;log_sync_global(kvm_log_sync_global)
 -&gt;kvm_dirty_ring_flush-&gt;kvm_dirty_ring_reap-&gt;kvm_dirty_ring_reap_locked-&gt;kvm_dirty_ring_reap_one-&gt;kvm_dirty_ring_mark_page
@@ -1537,13 +1536,13 @@ migration_thread-&gt;migration_iteration_run-&gt;qemu_savevm_state_pending-&gt;s
 <p>
 从内核里拿到脏页信息并转移到KVMSlot:dirty_bmap：
 </p>
-<pre class="example" id="org240f3d4">
+<pre class="example" id="org5304974">
 set_bit(offset, mem-&gt;dirty_bmap);
 </pre>
 <p>
 后又有流程：
 </p>
-<pre class="example" id="orge5707ed">
+<pre class="example" id="orgedd20ba">
 migration_thread-&gt;migration_iteration_run-&gt;qemu_savevm_state_pending-&gt;save_live_pending(ram_save_pending)-&gt;migration_bitmap_sync_precopy
 -&gt;migration_bitmap_sync-&gt;memory_global_dirty_log_sync-&gt;memory_region_sync_dirty_bitmap-&gt;log_sync_global(kvm_log_sync_global)
 -&gt;kvm_slot_sync_dirty_pages-&gt;cpu_physical_memory_set_dirty_lebitmap
@@ -1552,7 +1551,7 @@ migration_thread-&gt;migration_iteration_run-&gt;qemu_savevm_state_pending-&gt;s
 <p>
 将脏页信息转移到了ram_list.dirty_memory全局脏页信息表里：
 </p>
-<pre class="example" id="org06f9338">
+<pre class="example" id="orgd08fe28">
 static inline void cpu_physical_memory_set_dirty_lebitmap(unsigned long *bitmap,
                                                           ram_addr_t start,
                                                           ram_addr_t pages)
@@ -1590,14 +1589,14 @@ static inline void cpu_physical_memory_set_dirty_lebitmap(unsigned long *bitmap,
 <p>
 随后又有流程：
 </p>
-<pre class="example" id="orgd849bd1">
+<pre class="example" id="orga11586c">
 migration_thread-&gt;migration_iteration_run-&gt;qemu_savevm_state_pending-&gt;save_live_pending(ram_save_pending)-&gt;migration_bitmap_sync_precopy
 -&gt;migration_bitmap_sync-&gt;ramblock_sync_dirty_bitmap-&gt;cpu_physical_memory_sync_dirty_bitmap
 </pre>
 <p>
 将上面全局的bitmap信息又转移到了每RAMBlock:bmap里：
 </p>
-<pre class="example" id="org7a6d0cc">
+<pre class="example" id="org0af4b63">
 static inline
 uint64_t cpu_physical_memory_sync_dirty_bitmap(RAMBlock *rb,
                                                ram_addr_t start,
@@ -1624,14 +1623,14 @@ uint64_t cpu_physical_memory_sync_dirty_bitmap(RAMBlock *rb,
 <p>
 最后迁移发送内存的流程，使用的是最后的RAMBlock:bmap里的脏页信息，比如这样的一个路径：
 </p>
-<pre class="example" id="orgcced5e4">
+<pre class="example" id="org467ddb5">
 migration_thread-&gt;migration_iteration_run
 -&gt;qemu_savevm_state_iterate-&gt;save_live_iterate(ram_save_iterate)-&gt;ram_find_and_save_block-&gt;find_dirty_block-&gt;migration_bitmap_find_dirty
 </pre>
 <p>
 最后的migration_bitmap_find_dirty就是使用RAMBlock:bmap的信息来查询脏页信息，决定只发送脏页：
 </p>
-<pre class="example" id="orgee23265">
+<pre class="example" id="org990fa71">
 static inline
 unsigned long migration_bitmap_find_dirty(RAMState *rs, RAMBlock *rb,
                                           unsigned long start)
@@ -1656,19 +1655,19 @@ unsigned long migration_bitmap_find_dirty(RAMState *rs, RAMBlock *rb,
 </div>
 </div>
 </div>
-<div id="outline-container-org764d003" class="outline-2">
-<h2 id="org764d003"><span class="section-number-2">2.</span> 迁移第一阶段</h2>
+<div id="outline-container-org6ad644e" class="outline-2">
+<h2 id="org6ad644e"><span class="section-number-2">2.</span> 迁移第一阶段</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 前面的层有提到libvirt使用qmp方式使得dst端开启还原流程，那么在src端其实是类似的，libvrit的如下代码流程会使用migrate json命令使得qemu进入到发送虚拟机的流程里：
 </p>
-<pre class="example" id="orgd116634">
+<pre class="example" id="org3e88dc9">
 qemuMigrationSrcRun-&gt;qemuMigrationSrcStart-&gt;qemuMonitorMigrateToSocket-&gt;qemuMonitorJSONMigrate
 </pre>
 <p>
 qemuMonitorJSONMigrate函数使用migrate串构造命令发送给qemu进程进行处理：
 </p>
-<pre class="example" id="org43b8e52">
+<pre class="example" id="orgfe976e8">
 ...
 g_autoptr(virJSONValue) cmd = qemuMonitorJSONMakeCommand("migrate",
                                                          "b:detach", true,
@@ -1681,7 +1680,7 @@ g_autoptr(virJSONValue) cmd = qemuMonitorJSONMakeCommand("migrate",
 <p>
 前面介绍过，这个命令最后对应的qemu里的处理函数就是qmp_migrate．在qemu代码的qapi/migration.json文件里有关于这个命令的描述：
 </p>
-<pre class="example" id="org76df461">
+<pre class="example" id="org965e659">
 ##
 # @migrate:
 #
@@ -1725,7 +1724,7 @@ g_autoptr(virJSONValue) cmd = qemuMonitorJSONMakeCommand("migrate",
 <p>
 从这个例子可以看到使用的是tcp的网络方式（uri参数会指明使用什么通道去传递虚拟机数据），那么在qmp_migrate里就会走socket网络的方式，其它方式还有rdma，本文主要关注tcp网络的方式．tcp网络方式就是qmp_migrate-&gt;socket_start_outgoing_migration：
 </p>
-<pre class="example" id="orgf66150c">
+<pre class="example" id="org555f169">
 void qmp_migrate(const char *uri, bool has_blk, bool blk,
                  bool has_inc, bool inc, bool has_detach, bool detach,
                  bool has_resume, bool resume, Error **errp)
@@ -1746,7 +1745,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
 <p>
 socket_start_outgoing_migration里就是简单的调用socket_start_outgoing_migration_internal，而在socket_start_outgoing_migration_internal函数里：
 </p>
-<pre class="example" id="orgc9550cd">
+<pre class="example" id="orga7458fa">
 socket_start_outgoing_migration_internal(MigrationState *s,
                                          SocketAddress *saddr,
                                          Error **errp)
@@ -1765,7 +1764,7 @@ socket_start_outgoing_migration_internal(MigrationState *s,
 <p>
 可以看到socket_outgoing_migration是一个回调函数，它作为qio_channel_socket_connect_async函数调用的第三个参数，随着后面的分析，可以看到socket_outgoing_migration函数正是真正执行虚拟机发送的函数，继续看qio_channel_socket_connect_async函数：
 </p>
-<pre class="example" id="org934e2a6">
+<pre class="example" id="orgfd4785d">
 void qio_channel_socket_connect_async(QIOChannelSocket *ioc,
                                       SocketAddress *addr,
                                       QIOTaskFunc callback,
@@ -1792,7 +1791,7 @@ void qio_channel_socket_connect_async(QIOChannelSocket *ioc,
 <p>
 这里需要关注callback(socket_outgoing_migration)的去向，因为这涉及到到底在哪执行的它，在qio_task_new里可以看到callback(socket_outgoing_migration)给到了task-&gt;func：
 </p>
-<pre class="example" id="org6882dfb">
+<pre class="example" id="org4051b7e">
 QIOTask *qio_task_new(Object *source,
                       QIOTaskFunc func,
                       gpointer opaque,
@@ -1806,7 +1805,7 @@ QIOTask *qio_task_new(Object *source,
 <p>
 继续看qio_channel_socket_connect_async后面的代码，由于socket_connect里会有DNS查询，这可能会长时间block住，所以连接操作在qio_task_run_in_thread里另开线程来做：
 </p>
-<pre class="example" id="org18541e5">
+<pre class="example" id="org05eb889">
 void qio_task_run_in_thread(QIOTask *task,
                             QIOTaskWorker worker,
                             gpointer opaque,
@@ -1838,7 +1837,7 @@ void qio_task_run_in_thread(QIOTask *task,
 <p>
 在这个函数里，将新开线程要执行的函数放到了task-&gt;thread-&gt;worker（也就是qio_channel_socket_connect_worker函数），qemu_thread_create一旦创建新的线程后，其执行的起点函数就是qio_task_thread_worker：
 </p>
-<pre class="example" id="orgcf4ece7">
+<pre class="example" id="orgbc541fd">
 static gpointer qio_task_thread_worker(gpointer opaque)
 {
     QIOTask *task = opaque;
@@ -1873,7 +1872,7 @@ static gpointer qio_task_thread_worker(gpointer opaque)
 <p>
 从这个函数可以看到，首先task-&gt;thread-&gt;worker(qio_channel_socket_connect_worker)-&gt;qio_channel_socket_connect_sync-&gt;socket_connect会完成和对端（dst）的连接，然后创建了一个idle source，其回调函数是qio_task_thread_result，关联的参数是task，task-&gt;func是前面关注过的socket_outgoing_migration函数，通过qio_task_thread_result-&gt;qio_task_complete会完成对socket_outgoing_migration的调用：
 </p>
-<pre class="example" id="org6a26412">
+<pre class="example" id="org3a0a115">
 void qio_task_complete(QIOTask *task)
 {
     task-&gt;func(task, task-&gt;opaque);
@@ -1884,7 +1883,7 @@ void qio_task_complete(QIOTask *task)
 <p>
 那么qio_task_thread_result自身是怎么调用起来的呢，这涉及到glib GMainLoop事件驱动模型和qemu主循环，过多的细节不是本文的主题，只简单介绍下，在qio_task_thread_worker函数里，创建glib的idle completion(g_idle_source_new函数)，completion事件用于确保连接完成后，回调qio_task_thread_result在主线程执行，实现手段是通过g_source_attach将这个事件加到默认的GMainContext（通常是主线程的GMainLoop）。然后在qemu_main_loop-&gt;main_loop_wait-&gt;os_host_main_loop_wait中会轮询并调用起qio_task_thread_result这个回调函数：
 </p>
-<pre class="example" id="org0158128">
+<pre class="example" id="org5c9db24">
 if (g_poll_ret &gt; 0) {
     for (i = 0; i &lt; w-&gt;num; i++) {
         w-&gt;revents[i] = poll_fds[n_poll_fds + i].revents;
@@ -1908,7 +1907,7 @@ migration_thread-&gt;qemu_savevm_state_setup里面会统一处理虚拟机热迁
 所有需要热迁移的模块，都需要提供一个SaveVMHandlers的结构体，调用register_savevm_live函数，去分配一个SaveStateEntry，并将SaveVMHandlers给到SaveStateEntry里的SaveVMHandlers类型的ops，SaveVMHandlers里就定义了迁移各个阶段需要调用的函数，比如对于内存模块（内存肯定需要迁移），如下函数调用使用savevm_ram_handlers作为参数去分配注册一个SaveStateEntry，并通过savevm_state_handler_insert插入到savevm_state.handlers里：
 </p>
 
-<pre class="example" id="orgfe1c1a3">
+<pre class="example" id="org9bb6918">
 void ram_mig_init(void)
 {
     qemu_mutex_init(&amp;XBZRLE.lock);
@@ -1919,7 +1918,7 @@ void ram_mig_init(void)
 <p>
 savevm_ram_handlers的定义如下：
 </p>
-<pre class="example" id="org2a832db">
+<pre class="example" id="org9f82848">
 static SaveVMHandlers savevm_ram_handlers = {
     .save_setup = ram_save_setup,
     .save_live_iterate = ram_save_iterate,
@@ -1942,7 +1941,7 @@ static SaveVMHandlers savevm_ram_handlers = {
 有了上面的注册逻辑，再来看上面提到的migration_thread-&gt;qemu_savevm_state_setup处理的第一阶段的逻辑：
 </p>
 
-<pre class="example" id="org043dd5a">
+<pre class="example" id="orge7e9813">
 void qemu_savevm_state_setup(QEMUFile *f)
 {
     SaveStateEntry *se;
@@ -1978,7 +1977,7 @@ void qemu_savevm_state_setup(QEMUFile *f)
 在这里可以很清楚的看到，通过QTAILQ_FOREACH去遍历所有注册到savevm_state.handlers上的SaveStateEntry，并调用对应的save_setup函数，去做一些对应模块迁移前的准备工作，是为第一阶段，这里目前主要关注内存模块的save_setup函数也就是ram_save_setup的实现，它主要干了两件事情，一是分配并初始化记录脏页信息的bitmap，二是将可迁移的RAMBlock的一些信息比如idstr串，used_length等先传到dst端，下面分析这个函数，ram_save_setup-&gt;ram_init_all里分配并初始化了记录脏页的bitmap图：
 </p>
 
-<pre class="example" id="orgb6bfb9e">
+<pre class="example" id="org3f2a529">
 static int ram_init_all(RAMState **rsp)
 {
     if (ram_state_init(rsp)) {
@@ -1998,7 +1997,7 @@ static int ram_init_all(RAMState **rsp)
 <p>
 xbzrle主要是用于内存压缩发送，可以减低某些workload的内存发送总量，这里不做详细介绍，留待其它节．ram_state_init里主要功能是算了下总的RAMBlock.used_length的长度并给到RAMState.migration_dirty_pages：
 </p>
-<pre class="example" id="orgb0ffb53">
+<pre class="example" id="orgc3ebb61">
 static int ram_state_init(RAMState **rsp)
 {
     ...
@@ -2014,7 +2013,7 @@ static int ram_state_init(RAMState **rsp)
 <p>
 分配bitmap主要是在ram_init_all-&gt;ram_init_bitmaps里：
 </p>
-<pre class="example" id="org85c4998">
+<pre class="example" id="org77b0372">
 static void ram_init_bitmaps(RAMState *rs)
 {
     /* For memory_global_dirty_log_start below.  */
@@ -2046,7 +2045,7 @@ ram_init_bitmaps-&gt;ram_list_init_bitmaps去分配每个RAMBlock用的bmap，�
 <p>
 后面继续看下ram_list_init_bitmaps里分配bmap的逻辑：
 </p>
-<pre class="example" id="orge5fef0f">
+<pre class="example" id="org81953a5">
 static void ram_list_init_bitmaps(void)
 {
     ...
@@ -2078,7 +2077,7 @@ static void ram_list_init_bitmaps(void)
 在第一阶段的最后，分析下前面提到的ram_save_setup函数的第二部分，将可迁移RAMBlock的一些信息比如idstr串，used_length等先传到dst端，并借此契机看下qemu里发送数据的简单流程：
 </p>
 
-<pre class="example" id="org3c1a98d">
+<pre class="example" id="org007b54e">
 static int ram_save_setup(QEMUFile *f, void *opaque)
 {
       RAMBlock *block;
@@ -2107,7 +2106,7 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
 qemu_put*类的接口实际就是在网f-&gt;buf里存放数据并添加到iov里，参数f的类型是QEMUFile，这个是qemu里抽象出来表示数据传送的两端，具体和网络socket肯定有一个关联过程，本文不详述．总之在qemu_put*类的接口填好数据，在合适的时机（比如buffer填满）会将数据通过qemu_fflush函数发送出去，以下是一个调用路径：
 </p>
 
-<pre class="example" id="org30b5f5c">
+<pre class="example" id="orge45dc18">
 qemu_fflush-&gt;writev_buffer(channel_writev_buffer)-&gt;qio_channel_writev-&gt;qio_channel_writev_full-&gt;
 io_writev(qio_channel_socket_writev/qio_channel_rdma_writev)-&gt;sendmsg
 </pre>
@@ -2120,13 +2119,13 @@ io_writev(qio_channel_socket_writev/qio_channel_rdma_writev)-&gt;sendmsg
 </p>
 </div>
 </div>
-<div id="outline-container-org8973656" class="outline-2">
-<h2 id="org8973656"><span class="section-number-2">3.</span> 迁移第二阶段</h2>
+<div id="outline-container-org2ddf50f" class="outline-2">
+<h2 id="org2ddf50f"><span class="section-number-2">3.</span> 迁移第二阶段</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 第二阶段主要是迭代发送src端的虚拟机状态给dst，其实现函数主要是migration_iteration_run，在migration_thread里调用它：
 </p>
-<pre class="example" id="orgb325612">
+<pre class="example" id="org64a0566">
 static void *migration_thread(void *opaque)
 {
     ...
@@ -2165,7 +2164,7 @@ static void *migration_thread(void *opaque)
 <p>
 可以看到当migration_iteration_run返回的状态为MIG_ITERATE_BREAK时，就可以退出迭代发送的阶段，进入第三阶段，这是数据正常发送导致的break的情况．但是退出while循环的迭代发送还可能有其它条件，一个是migration_is_active函数：
 </p>
-<pre class="example" id="org3227624">
+<pre class="example" id="org4075eed">
 bool migration_is_active(MigrationState *s)
 {
     return (s-&gt;state == MIGRATION_STATUS_ACTIVE ||
@@ -2175,7 +2174,7 @@ bool migration_is_active(MigrationState *s)
 <p>
 这个大的条件要求迁移状态是MIGRATION_STATUS_ACTIVE，这在migration_thread-&gt;migration_iteration_run之前通过migration_thread-&gt;qemu_savevm_wait_unplug已经设置了，一般是满足的．再一个条件是发生有urgent的事情，也可以使得进入migration_iteration_run进行迭代发送，或者qemu_file_rate_limit返回0（判断出过去的一次传输没有超过速率限制）也可以再次进入迭代发送，这里主要想分析下qemu_file_rate_limit判断，假如热迁移因为带宽不足而失败时，其调整原理就是来自这里的分析，qemu_file_rate_limit实现如下：
 </p>
-<pre class="example" id="org48f3407">
+<pre class="example" id="org0de76a4">
 int qemu_file_rate_limit(QEMUFile *f)
 {
     if (f-&gt;shutdown) {
@@ -2193,20 +2192,20 @@ int qemu_file_rate_limit(QEMUFile *f)
 <p>
 可以看到，当传送的bytes_xfer大于xfer_limit时，就会返回1导致进不了迭代发送，bytes_xfer会在会在qemu_put*类的接口增加，而在每一轮迭代发送结束由以下路径：
 </p>
-<pre class="example" id="org5c2c6b0">
+<pre class="example" id="orga439e6d">
 migration_thread-&gt;migration_rate_limit-&gt;migration_update_counters-&gt;qemu_file_reset_rate_limit
 </pre>
 <p>
 或者在一轮迭代发送时有成功发送页面时通过如下路径：
 </p>
-<pre class="example" id="orgf4db7f9">
+<pre class="example" id="org7ab3549">
 migration_thread-&gt;migration_iteration_run-&gt;qemu_savevm_state_iterate(save_live_iterate)-&gt;ram_save_iterate-&gt;ram_find_and_save_block-&gt;ram_save_host_page-&gt;
 migration_rate_limit-&gt;migration_update_counters-&gt;qemu_file_reset_rate_limit
 </pre>
 <p>
 最终在qemu_file_reset_rate_limit里进行进行重置：
 </p>
-<pre class="example" id="orgf220423">
+<pre class="example" id="org124726c">
 void qemu_file_reset_rate_limit(QEMUFile *f)
 {
     f-&gt;bytes_xfer = 0;
@@ -2215,7 +2214,7 @@ void qemu_file_reset_rate_limit(QEMUFile *f)
 <p>
 而xfer_limit通过调用qemu_file_set_rate_limit来设置：
 </p>
-<pre class="example" id="orgb97144f">
+<pre class="example" id="orgabf772b">
 void qemu_file_set_rate_limit(QEMUFile *f, int64_t limit)
 {
     f-&gt;xfer_limit = limit;
@@ -2224,7 +2223,7 @@ void qemu_file_set_rate_limit(QEMUFile *f, int64_t limit)
 <p>
 不论是migrate_params_apply-&gt;qemu_file_set_rate_limit还是migrate_fd_connect-&gt;qemu_file_set_rate_limit，在未开启postcopy时，其值都被设置成s-&gt;parameters.max_bandwidth / XFER_LIMIT_RATIO)，所以这里比较关键的就是max_bandwidth，max_bandwidth在如下代码定义：
 </p>
-<pre class="example" id="orgdd307b2">
+<pre class="example" id="org43a284b">
 DEFINE_PROP_SIZE("x-max-bandwidth", MigrationState,
                   parameters.max_bandwidth, MAX_THROTTLE),
 </pre>
@@ -2235,7 +2234,7 @@ DEFINE_PROP_SIZE("x-max-bandwidth", MigrationState,
 <p>
 假设上次发送带宽没有超限，进入到了本节关注的第二阶段：迭代发送，继续往下分析migration_iteration_run函数：
 </p>
-<pre class="example" id="orge8d6f55">
+<pre class="example" id="org08126c5">
 static MigIterateState migration_iteration_run(MigrationState *s)
 {
     uint64_t pending_size, pend_pre, pend_compat, pend_post;
@@ -2271,7 +2270,7 @@ static MigIterateState migration_iteration_run(MigrationState *s)
 <p>
 可以看到如果待发送的pending_size大于threshold_size，就会通过qemu_savevm_state_iterate再次进入迭代发送的流程，此时migration_iteration_run函数自然结束，返回MIG_ITERATE_RESUME状态到了migration_thread的while循环里，在调用migration_rate_limit更新一些统计信息后，就又会进入migration_iteration_run函数进行再一次的迭代发送，这就是整个迭代发送的过程．下面就继续详细分析migration_iteration_run函数．首先是pending_size的获取，通过qemu_savevm_state_pending函数获得pending_size，这可以由三部分组成，只能在dst端虚拟机启动前就要迁移到位的pre部分，在dst端虚拟机运行后可以做page fault从src现拉取的post方式，还有二者兼容的方式．qemu_savevm_state_pending的实现如下：
 </p>
-<pre class="example" id="org8958fe0">
+<pre class="example" id="orgdcc1574">
 void qemu_savevm_state_pending(QEMUFile *f, uint64_t threshold_size,
                                uint64_t *res_precopy_only,
                                uint64_t *res_compatible,
@@ -2302,7 +2301,7 @@ void qemu_savevm_state_pending(QEMUFile *f, uint64_t threshold_size,
 <p>
 可以看到，该函数就是遍历每个save_state.handlers句柄，并调用save_live_pending回调函数去获得还有多少脏页需要发送，对于内存来说这个回调函数的实现就是ram_save_pending：
 </p>
-<pre class="example" id="org415444b">
+<pre class="example" id="orgd5eae4e">
 static void ram_save_pending(QEMUFile *f, void *opaque, uint64_t max_size,
                              uint64_t *res_precopy_only,
                              uint64_t *res_compatible,
@@ -2335,7 +2334,7 @@ static void ram_save_pending(QEMUFile *f, void *opaque, uint64_t max_size,
 <p>
 可以看到其主要的来源就是migration_dirty_pages量，这个量的更新在之前的脏页跟踪机制里介绍过，它通过如下流程在ramblock_sync_dirty_bitmap里更新：
 </p>
-<pre class="example" id="orgde9f8e0">
+<pre class="example" id="orgcecc124">
 static void ramblock_sync_dirty_bitmap(RAMState *rs, RAMBlock *rb)
 {
     uint64_t new_dirty_pages =
@@ -2348,17 +2347,528 @@ static void ramblock_sync_dirty_bitmap(RAMState *rs, RAMBlock *rb)
 migration_bitmap_sync_precopy-&gt;migration_bitmap_sync-&gt;ramblock_sync_dirty_bitmap
 </pre>
 <p>
-其中migration_bitmap_sync_precopy-&gt;migration_bitmap_sync-&gt;memory_global_dirty_log_sync先到内核里拿取脏页信息．在ram_save_pending函数里，如果不是postcopy（默认配置）且本次计算出的remaing_size小于max_size，就会调用migration_bitmap_sync_precopy去同步内核脏页信息到qemu，同步完再重新计算下remaining_size．max_size其实就是之前传入的threshold_size，threshold_size是根据当前轮实际发送时达到的带宽乘以可以接受的停机时间downtime_limit，也就是说threshold_size的值反映了在最后一轮能够发送的大小，关于它的详细计算后面分析migration_update_counters函数时还会涉及到．也就是说在可以进入第三阶段最后一轮发送时，还需要通过migration_bitmap_sync_precopy再次拉取脏页看看有没有更多的脏页可以发送的，这就是动态脏页更新与发送的机制．现在假如pending_size大于threshold_size，那么就会调用qemu_savevm_state_iterate进行迭代发送：
+其中migration_bitmap_sync_precopy-&gt;migration_bitmap_sync-&gt;memory_global_dirty_log_sync先到内核里拿取脏页信息．在ram_save_pending函数里，如果不是postcopy（默认配置）且本次计算出的remaing_size小于max_size，就会调用migration_bitmap_sync_precopy去同步内核脏页信息到qemu，同步完再重新计算下remaining_size．max_size其实就是之前传入的threshold_size，threshold_size是根据当前轮实际发送时达到的带宽乘以可以接受的停机时间downtime_limit，也就是说threshold_size的值反映了在最后一轮能够发送的大小，关于它的详细计算后面分析migration_update_counters函数时还会涉及到．也就是说在可以进入第三阶段最后一轮发送时，还需要通过migration_bitmap_sync_precopy再次拉取脏页看看有没有更多的脏页可以发送的，这就是动态脏页更新与发送的机制．现在假如pending_size大于threshold_size，那么就会调用qemu_savevm_state_iterate进行迭代发送，qemu_savevm_state_iterate的主体逻辑很简单，也是遍历savevm_state.handlers上的回调句柄，依次调用save_live_iterate回调函数，这里主要关注内存模块的迭代回调函数ram_save_iterate：
+</p>
+<pre class="example" id="org247d199">
+while ((ret = qemu_file_rate_limit(f)) == 0 ||
+        !QSIMPLEQ_EMPTY(&amp;rs-&gt;src_page_requests)) {
+    int pages;
+
+    if (qemu_file_get_error(f)) {
+        break;
+    }
+
+    pages = ram_find_and_save_block(rs, false);
+    /* no more pages to sent */
+    if (pages == 0) {
+        done = 1;
+        break;
+    }
+
+    if (pages &lt; 0) {
+        qemu_file_set_error(f, pages);
+        break;
+    }
+
+    rs-&gt;target_page_count += pages;
+
+    /*
+     * During postcopy, it is necessary to make sure one whole host
+     * page is sent in one chunk.
+     */
+    if (migrate_postcopy_ram()) {
+        flush_compressed_data(rs);
+    }
+
+    /*
+     * we want to check in the 1st loop, just in case it was the 1st
+     * time and we had to sync the dirty bitmap.
+     * qemu_clock_get_ns() is a bit expensive, so we only check each
+     * some iterations
+     */
+    if ((i &amp; 63) == 0) {
+        uint64_t t1 = (qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - t0) /
+                      1000000;
+        if (t1 &gt; MAX_WAIT) {
+            trace_ram_save_iterate_big_wait(t1, i);
+            break;
+        }
+    }
+    i++;
+}
+</pre>
+<p>
+ram_save_iterate函数的主体就是一个不断寻找脏页并发送的过程，条件qemu_file_rate_limit之前介绍过，src_page_requests其实是支持postcopy的方式，就是dst端已经开始运行了，现在需要的页还在src端，所以发送请求，这些请求都挂在src_page_requests上，然后就是进一步调用ram_find_and_save_block去寻找脏页并发送：
+</p>
+<pre class="example" id="org80b5ca0">
+static int ram_find_and_save_block(RAMState *rs, bool last_stage)
+{
+    PageSearchStatus pss;
+    int pages = 0;
+    bool again, found;
+
+    /* No dirty page as there is zero RAM */
+    if (!ram_bytes_total()) {
+        return pages;
+    }
+
+    pss.block = rs-&gt;last_seen_block;
+    pss.page = rs-&gt;last_page;
+    pss.complete_round = false;
+
+    if (!pss.block) {
+        pss.block = QLIST_FIRST_RCU(&amp;ram_list.blocks);
+    }
+
+    do {
+        again = true;
+        found = get_queued_page(rs, &amp;pss);
+
+        if (!found) {
+            /* priority queue empty, so just search for something dirty */
+            found = find_dirty_block(rs, &amp;pss, &amp;again);
+        }
+
+        if (found) {
+            pages = ram_save_host_page(rs, &amp;pss, last_stage);
+        }
+    } while (!pages &amp;&amp; again);
+
+    rs-&gt;last_seen_block = pss.block;
+    rs-&gt;last_page = pss.page;
+
+    return pages;
+}
+</pre>
+<p>
+该函数首先是通过get_queued_page去处理是否有postcopy的请求，然后才是通过find_dirty_block找到脏页，最后调用ram_save_host_page发送，find_dirty_block-&gt;migration_bitmap_find_dirty使用RAMBlock.bmap去找到脏页信息，这点在之前的脏页机制节也介绍过，find_dirty_block的细节就不再介绍了，ram_save_host_page往下的流程本节也不打算详细分析了，因为脏页信息有了，现在无非就是遍历并发送，这里只是列出下后面的代码路径：
+</p>
+<pre class="example" id="org772f6e1">
+ram_save_host_page-&gt;ram_save_target_page-&gt;ram_save_page-&gt;save_normal_page-&gt;qemu_put_buffer*
+</pre>
+<p>
+qemu_put_buffer*类的接口往后最终会走到sendmsg套接字接口，前面的分析提到过．
+</p>
+
+<p>
+这里还想分析下migration_rate_limit函数，之前提到过migration_rate_limit-&gt;migration_update_counters里会计算threshold_size，而这个值是控制能否进入第三阶段的一个关键阀值条件：
+</p>
+<pre class="example" id="orga89d3ec">
+static void migration_update_counters(MigrationState *s,
+                                      int64_t current_time)
+{
+    uint64_t transferred, transferred_pages, time_spent;
+    uint64_t current_bytes; /* bytes transferred since the beginning */
+    double bandwidth;
+
+    if (current_time &lt; s-&gt;iteration_start_time + BUFFER_DELAY) {
+        return;
+    }
+
+    current_bytes = migration_total_bytes(s);
+    transferred = current_bytes - s-&gt;iteration_initial_bytes;
+    time_spent = current_time - s-&gt;iteration_start_time;
+    bandwidth = (double)transferred / time_spent;
+    s-&gt;threshold_size = bandwidth * s-&gt;parameters.downtime_limit;
+
+    s-&gt;mbps = (((double) transferred * 8.0) /
+               ((double) time_spent / 1000.0)) / 1000.0 / 1000.0;
+
+    transferred_pages = ram_get_total_transferred_pages() -
+                            s-&gt;iteration_initial_pages;
+    s-&gt;pages_per_second = (double) transferred_pages /
+                             (((double) time_spent / 1000.0));
+
+    /*
+     * if we haven't sent anything, we don't want to
+     * recalculate. 10000 is a small enough number for our purposes
+     */
+    if (ram_counters.dirty_pages_rate &amp;&amp; transferred &gt; 10000) {
+        s-&gt;expected_downtime = ram_counters.remaining / bandwidth;
+    }
+
+    qemu_file_reset_rate_limit(s-&gt;to_dst_file);
+
+    update_iteration_initial_status(s);
+
+    trace_migrate_transferred(transferred, time_spent,
+                              bandwidth, s-&gt;threshold_size);
+}
+</pre>
+<p>
+这里可以很清楚的看到，bandwidth是实际上次发送能达到的带宽，而downtime_limit是配置所能允许的停机时间，和实际带宽相乘，就是在这么多的停机时间里能发送多少数据，bandwidth之前提到过，没有其它原因的话，它就是配置能允许的最大带宽，这里主要看下downtime_limit的设置，其由如下代码定义：
+</p>
+<pre class="example" id="org3e6050f">
+DEFINE_PROP_UINT64("x-downtime-limit", MigrationState,
+                  parameters.downtime_limit,
+                  DEFAULT_MIGRATE_SET_DOWNTIME),
+</pre>
+<p>
+这里可以看到，其默认的时间设置就是300ms：
+</p>
+<pre class="example" id="org0d4815f">
+/* Time in milliseconds we are allowed to stop the source,
+ * for sending the last part */
+#define DEFAULT_MIGRATE_SET_DOWNTIME 300
+</pre>
+<p>
+在migration.json文件里也有解释：
+</p>
+<pre class="example" id="org9361bd9">
+# @downtime-limit: set maximum tolerated downtime for migration. maximum
+#                  downtime in milliseconds (Since 2.8)
+</pre>
+<p>
+如果因为downtime_limit设置的较低而引起threshold_size过小而不能进入第三阶段，可以适当的调大downtime_limit．
+</p>
+
+<p>
+在第二节的最后想分析下qemu提供的节流功能，该功能是解决虚拟机业务快速大量的产生脏页，但是发送脏页的线程其速率没有产生脏页的速率快，这就导致虚拟机迁移一直不能成功进入第三阶段，导致迁移失败．
+</p>
+
+<p>
+在跌代发送函数migration_iteration_run里会通过qemu_savevm_state_pending去获取剩余还没迁移的内存，qemu_savevm_state_pending里调用ram提供的pending函数为ram_save_pending，ram_save_pending之前也分析过，这次主要关注其节流的逻辑：
+</p>
+<pre class="example" id="org1d25b63">
+static void ram_save_pending(QEMUFile *f, void *opaque, uint64_t max_size,
+                             uint64_t *res_precopy_only,
+                             uint64_t *res_compatible,
+                             uint64_t *res_postcopy_only)
+{
+    ...    
+    if (!migration_in_postcopy() &amp;&amp;
+        remaining_size &lt; max_size) {
+        qemu_mutex_lock_iothread();
+        WITH_RCU_READ_LOCK_GUARD() {
+            migration_bitmap_sync_precopy(rs);
+        }
+        qemu_mutex_unlock_iothread();
+        remaining_size = rs-&gt;migration_dirty_pages * TARGET_PAGE_SIZE;
+    }
+    ...
+}
+</pre>
+<p>
+之前有提到过，max_size就是threshold_size，每当剩余要发送的内存小于进入第三阶段的阀值时，就再次尝试通过migration_bitmap_sync_precopy去拉取新的可能的脏内存信息，也就是在migration_bitmap_sync_precopy-&gt;migration_bitmap_sync里有了节流的逻辑：
+</p>
+<pre class="example" id="org31123c0">
+/* more than 1 second = 1000 millisecons */
+if (end_time &gt; rs-&gt;time_last_bitmap_sync + 1000) {
+    migration_trigger_throttle(rs);
+
+    migration_update_rates(rs, end_time);
+
+    rs-&gt;target_page_count_prev = rs-&gt;target_page_count;
+
+    /* reset period counters */
+    rs-&gt;time_last_bitmap_sync = end_time;
+    rs-&gt;num_dirty_pages_period = 0;
+    rs-&gt;bytes_xfer_prev = ram_counters.transferred;
+}
+</pre>
+<p>
+分析这段代码，节流动作的发生并不每次拉取脏页信息时都会发生，必须要超过1s才会进入这个逻辑，判断是否要节流是在migration_trigger_throttle函数里：
+</p>
+<pre class="example" id="orgf812803">
+static void migration_trigger_throttle(RAMState *rs)
+{
+    MigrationState *s = migrate_get_current();
+    uint64_t threshold = s-&gt;parameters.throttle_trigger_threshold;
+
+    uint64_t bytes_xfer_period = ram_counters.transferred - rs-&gt;bytes_xfer_prev;
+    uint64_t bytes_dirty_period = rs-&gt;num_dirty_pages_period * TARGET_PAGE_SIZE;
+    uint64_t bytes_dirty_threshold = bytes_xfer_period * threshold / 100;
+
+    /* During block migration the auto-converge logic incorrectly detects
+     * that ram migration makes no progress. Avoid this by disabling the
+     * throttling logic during the bulk phase of block migration. */
+    if (migrate_auto_converge() &amp;&amp; !blk_mig_bulk_active()) {
+        /* The following detection logic can be refined later. For now:
+           Check to see if the ratio between dirtied bytes and the approx.
+           amount of bytes that just got transferred since the last time
+           we were in this routine reaches the threshold. If that happens
+           twice, start or increase throttling. */
+
+        if ((bytes_dirty_period &gt; bytes_dirty_threshold) &amp;&amp;
+            (++rs-&gt;dirty_rate_high_cnt &gt;= 2)) {
+            trace_migration_throttle();
+            rs-&gt;dirty_rate_high_cnt = 0;
+            mig_throttle_guest_down(bytes_dirty_period,
+                                    bytes_dirty_threshold);
+        }
+    }
+}
+</pre>
+<p>
+这里有几个计算，一个是bytes_xfer_period表示上一个间隔里发送了多少字节，bytes_dirty_period表示上一个间隔里产生了多少字节的脏页，bytes_dirty_threshold是bytes_xfer_period按某个比例进行缩小的值，控制了后面能否调用mig_throttle_guest_down进行节流的动作，其实际表示的是初始脏页速率达到多少的比例就可以开始节流：
+</p>
+<pre class="example" id="orgf760bd7">
+DEFINE_PROP_UINT8("x-throttle-trigger-threshold", MigrationState,
+                  parameters.throttle_trigger_threshold,
+                  DEFAULT_MIGRATE_THROTTLE_TRIGGER_THRESHOLD),
+</pre>
+<pre class="example" id="org86bd0a0">
+# @throttle-trigger-threshold: The ratio of bytes_dirty_period and bytes_xfer_period
+#                              to trigger throttling. It is expressed as percentage.
+#                              The default value is 50. (Since 5.0)
+</pre>
+<p>
+继续往下分析，控制是否要节流的还有一个条件migrate_auto_converge函数：
+</p>
+<pre class="example" id="orge5c9dbc">
+bool migrate_auto_converge(void)
+{
+    MigrationState *s;
+
+    s = migrate_get_current();
+
+    return s-&gt;enabled_capabilities[MIGRATION_CAPABILITY_AUTO_CONVERGE];
+}
+</pre>
+<p>
+这其实表明了是否开启节流功能（自动聚合），它默认是不开启：
+</p>
+<pre class="example" id="org48a24da">
+DEFINE_PROP_MIG_CAP("x-auto-converge", MIGRATION_CAPABILITY_AUTO_CONVERGE),
+</pre>
+<pre class="example" id="org24f5436">
+# @auto-converge: If enabled, QEMU will automatically throttle down the guest
+#                 to speed up convergence of RAM migration. (since 1.6)
+</pre>
+<p>
+另外一个条件本文不关注，如果条件都满足，就会继续往下调用mig_throttle_guest_down：
+</p>
+<pre class="example" id="org3bb15bf">
+static void mig_throttle_guest_down(uint64_t bytes_dirty_period,
+                                    uint64_t bytes_dirty_threshold)
+{
+    MigrationState *s = migrate_get_current();
+    uint64_t pct_initial = s-&gt;parameters.cpu_throttle_initial;
+    uint64_t pct_increment = s-&gt;parameters.cpu_throttle_increment;
+    bool pct_tailslow = s-&gt;parameters.cpu_throttle_tailslow;
+    int pct_max = s-&gt;parameters.max_cpu_throttle;
+
+    uint64_t throttle_now = cpu_throttle_get_percentage();
+    uint64_t cpu_now, cpu_ideal, throttle_inc;
+
+    /* We have not started throttling yet. Let's start it. */
+    if (!cpu_throttle_active()) {
+        cpu_throttle_set(pct_initial);
+    } else {
+        /* Throttling already on, just increase the rate */
+        if (!pct_tailslow) {
+            throttle_inc = pct_increment;
+        } else {
+            /* Compute the ideal CPU percentage used by Guest, which may
+             * make the dirty rate match the dirty rate threshold. */
+            cpu_now = 100 - throttle_now;
+            cpu_ideal = cpu_now * (bytes_dirty_threshold * 1.0 /
+                        bytes_dirty_period);
+            throttle_inc = MIN(cpu_now - cpu_ideal, pct_increment);
+        }
+        cpu_throttle_set(MIN(throttle_now + throttle_inc, pct_max));
+    }
+}
+</pre>
+<p>
+该函数涉及到了迁移的很多参数，先看下这些参数的作用，先是cpu_throttle_initial，它指定了第一次激活节流操作时，应该限制多少cpu运行时间：
+</p>
+<pre class="example" id="orgec4cef4">
+# @cpu-throttle-initial: Initial percentage of time guest cpus are throttled
+#                        when migration auto-converge is activated. The
+#                        default value is 20. (Since 2.7)
+</pre>
+<pre class="example" id="orgc05b34c">
+DEFINE_PROP_UINT8("x-cpu-throttle-initial", MigrationState,
+                  parameters.cpu_throttle_initial,
+                  DEFAULT_MIGRATE_CPU_THROTTLE_INITIAL),
+</pre>
+<pre class="example" id="orgaf0db14">
+#define DEFAULT_MIGRATE_CPU_THROTTLE_INITIAL 20
+</pre>
+<p>
+所以cpu_throttle_active发现throttle_percentage为0还没有设置时，就会以这个cpu_throttle_initial去设置．
+</p>
+
+<p>
+再看cpu_throttle_increment，它表示在每次需要加大节流的力度时，每次递增多少节流的量：
+</p>
+<pre class="example" id="orga6332bd">
+# @cpu-throttle-increment: throttle percentage increase each time
+#                          auto-converge detects that migration is not making
+#                          progress. The default value is 10. (Since 2.7)
+
+</pre>
+<pre class="example" id="org529c04b">
+DEFINE_PROP_UINT8("x-cpu-throttle-increment", MigrationState,
+                  parameters.cpu_throttle_increment,
+                  DEFAULT_MIGRATE_CPU_THROTTLE_INCREMENT),
+</pre>
+<pre class="example" id="org7ce6b9d">
+#define DEFAULT_MIGRATE_CPU_THROTTLE_INCREMENT 10
+</pre>
+<p>
+可以看到默认就是增加10，不过这个值要看是否开启了tailslow，没开才会有用．下面看下cpu_throttle_tailslow参数的作用：
+</p>
+<pre class="example" id="orgd169f6e">
+# @cpu-throttle-tailslow: Make CPU throttling slower at tail stage
+#                         At the tail stage of throttling, the Guest is very
+#                         sensitive to CPU percentage while the @cpu-throttle
+#                         -increment is excessive usually at tail stage.
+#                         If this parameter is true, we will compute the ideal
+#                         CPU percentage used by the Guest, which may exactly make
+#                         the dirty rate match the dirty rate threshold. Then we
+#                         will choose a smaller throttle increment between the
+#                         one specified by @cpu-throttle-increment and the one
+#                         generated by ideal CPU percentage.
+#                         Therefore, it is compatible to traditional throttling,
+#                         meanwhile the throttle increment won't be excessive
+#                         at tail stage.
+#                         The default value is false. (Since 5.1)
+</pre>
+<pre class="example" id="org9a078f7">
+DEFINE_PROP_BOOL("x-cpu-throttle-tailslow", MigrationState,
+                  parameters.cpu_throttle_tailslow, false),
+</pre>
+<p>
+如果开启了这个参数，先要算下理想的cpu能使用的算力cpu_ideal，它是现在的cpu算里cpu_now乘以一个比率，这个比率是传送速率的一半（在父函数migration_trigger_throttle里默认折算为一半）比上脏页产生的速率，换句话说，只有脏页产生速率是传送速率的一半时，cpu_ideal才会稳定下来而不会被一个0-1的比率值缩放小，都了cpu_ideal，再来看现在的cpu算力cpu_now和cpu_ideal的差距，就是还需要节流多少cpu算力，最后在throttle_inc和默认的增加节流的幅度pct_increment间选择较小的，然后通过cpu_throttle_set去设置节流的值，但是现在要设置的throttle_now+throttle_inc和pct_max之间也要取最小值，这里就又涉及一个参数max_cpu_throttle：
+</p>
+<pre class="example" id="org9820f0d">
+# @max-cpu-throttle: maximum cpu throttle percentage.
+#                    Defaults to 99.
+#                    (Since 3.1)
+</pre>
+<pre class="example" id="orge8ae912">
+DEFINE_PROP_UINT8("max-cpu-throttle", MigrationState,
+                  parameters.max_cpu_throttle,
+                  DEFAULT_MIGRATE_MAX_CPU_THROTTLE),
+</pre>
+<pre class="example" id="org8b8f033">
+#define DEFAULT_MIGRATE_MAX_CPU_THROTTLE 99
+</pre>
+<p>
+max_cpu_throttle控制了最大能节流多少cpu算力，现在继续往下分析cpu_throttle_set：
+</p>
+<pre class="example" id="org8e96f27">
+void cpu_throttle_set(int new_throttle_pct)
+{
+    /*
+     * boolean to store whether throttle is already active or not,
+     * before modifying throttle_percentage
+     */
+    bool throttle_active = cpu_throttle_active();
+
+    /* Ensure throttle percentage is within valid range */
+    new_throttle_pct = MIN(new_throttle_pct, CPU_THROTTLE_PCT_MAX);
+    new_throttle_pct = MAX(new_throttle_pct, CPU_THROTTLE_PCT_MIN);
+
+    qatomic_set(&amp;throttle_percentage, new_throttle_pct);
+
+    if (!throttle_active) {
+        cpu_throttle_timer_tick(NULL);
+    }
+}
+</pre>
+<p>
+这个函数继续将要节流的百分比钳制在CPU_THROTTLE_PCT_MAX和CPU_THROTTLE_PCT_MIN之间，同时通过qatomic_set来设置全局的节流比分比变量throttle_percentage为new_throttle_pct，如果这个值还没有被设置过（之前为0），那么就是首次开启节流功能，通过调用cpu_throttle_timer_tick函数来开启：
+</p>
+<pre class="example" id="org79f4fc2">
+static void cpu_throttle_timer_tick(void *opaque)
+{
+    CPUState *cpu;
+    double pct;
+
+    /* Stop the timer if needed */
+    if (!cpu_throttle_get_percentage()) {
+        return;
+    }
+    CPU_FOREACH(cpu) {
+        if (!qatomic_xchg(&amp;cpu-&gt;throttle_thread_scheduled, 1)) {
+            async_run_on_cpu(cpu, cpu_throttle_thread,
+                             RUN_ON_CPU_NULL);
+        }
+    }
+
+    pct = (double)cpu_throttle_get_percentage() / 100;
+    timer_mod(throttle_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL_RT) +
+                                   CPU_THROTTLE_TIMESLICE_NS / (1 - pct));
+}
+</pre>
+<p>
+这个函数逻辑还是简单的，首先通过cpu_throttle_get_percentage判断下当前的节流的百分比为0话意味着没有必要进行节流操作，然后就是CPU_FOREACH针对每个虚拟cpu运行cpu_throttle_thread进行节流，不过条件是每个vcpu还没有开始节流，也就是qatomic_xchg返回的throttle_thread_scheduled的旧值为0．
+</p>
+
+<p>
+最后的两行代码是比较有意思的，它需要结合cpu_throttle_thread函数才能理解深刻，现在先单就理解这两句，首先pct表示的是节流的一个百分比，本来节流的值是0-99的整型数值，现在就是把她转换成了一个0-1的百分比的小数．timer_mod调用是想修改throttle_timer这个定时器的下一次超时时间，timer_mod的回调函数就是cpu_throttle_timer_tick:
+</p>
+<pre class="example" id="org81b6884">
+void cpu_throttle_init(void)
+{
+    throttle_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL_RT,
+                                  cpu_throttle_timer_tick, NULL);
+}
+</pre>
+<p>
+也就是说，在经过CPU_THROTTLE_TIMESLICE_NS / (1 - pct)了这么多时间后，就会再次进入cpu_throttle_timer_tick进行节流．CPU_THROTTLE_TIMESLICE_NS是默认的时间片：
+</p>
+<pre class="example" id="orge41b75e">
+#define CPU_THROTTLE_TIMESLICE_NS 10000000
+</pre>
+<p>
+可以看到为10ms，那为什么不直接使用这个时间片作为周期而要乘以1/(1-pct)，这里个人分析作者的意图是，在cpu节流过程中，cpu的算力是逐步降低的，按固定频率运行某个回调函数（或者说成按固定频率执行某项任务）这种节奏本身就是不对的，因为cpu算力不是恒定不变的，所以执行节流回调这件任务也当以一个变化的周期来执行，而不是恒定的．那么这个变化的周期应当怎么变化呢，是变大还是变小？可以想见，随着cpu算力的下降，那么这个周期应该拉长变大，也就是说，cpu算力既然已经下降了，就不能花费太多的cpu执行时间去执行一个回调，所以pct越大1/(1-pct)越大，隔的越久才再次执行节流回调．继续看cpu_throttle_thread函数：
+</p>
+<pre class="example" id="org541bc3c">
+static void cpu_throttle_thread(CPUState *cpu, run_on_cpu_data opaque)
+{
+    double pct;
+    double throttle_ratio;
+    int64_t sleeptime_ns, endtime_ns;
+
+    if (!cpu_throttle_get_percentage()) {
+        return;
+    }
+
+    pct = (double)cpu_throttle_get_percentage() / 100;
+    throttle_ratio = pct / (1 - pct);
+    /* Add 1ns to fix double's rounding error (like 0.9999999...) */
+    sleeptime_ns = (int64_t)(throttle_ratio * CPU_THROTTLE_TIMESLICE_NS + 1);
+    endtime_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME) + sleeptime_ns;
+    while (sleeptime_ns &gt; 0 &amp;&amp; !cpu-&gt;stop) {
+        if (sleeptime_ns &gt; SCALE_MS) {
+            qemu_cond_timedwait_iothread(cpu-&gt;halt_cond,
+                                         sleeptime_ns / SCALE_MS);
+        } else {
+            qemu_mutex_unlock_iothread();
+            g_usleep(sleeptime_ns / SCALE_US);
+            qemu_mutex_lock_iothread();
+        }
+        sleeptime_ns = endtime_ns - qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
+    }
+    qatomic_set(&amp;cpu-&gt;throttle_thread_scheduled, 0);
+}
+</pre>
+<p>
+这个函数里终于看到了所谓节流到底是什么操作，其实就是sleep，将vcpu对应的线程睡眠就是类似于物理cpu的降频操作，这里最关键的是睡多久，1/(1-pct)相当于是整个周期的长度，用pct睡眠占比除以(1-pct)就是睡眠的时间了，这样可以保证在某个（变化的）周期内，睡眠占pct，而运行占1-pct，然后在while循环里，只要没睡够这么多时间，就会循环一直睡．而一旦睡够了，throttle_thread_scheduled就会被设置为0，这会使得cpu_throttle_timer_tick定时器回调函数执行时看到它为0，进而开启新一轮的睡眠．
+</p>
+
+<p>
+以上就是迁移第二阶段的分析．
 </p>
 </div>
 </div>
 
-<div id="outline-container-org93e0ffa" class="outline-2">
-<h2 id="org93e0ffa"><span class="section-number-2">4.</span> 迁移第三阶段</h2>
+<div id="outline-container-org4eadc6a" class="outline-2">
+<h2 id="org4eadc6a"><span class="section-number-2">4.</span> 迁移第三阶段</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+最后一个阶段不打算详细分析了，因为这一阶段就没有多少数据需要传送了，之前的分析已经详细说明了进入第三阶段的条件．第三阶段主要就是停止src端的虚拟机，并统计一下downtime的时间等，代码就略过不详加分析了．
+</p>
+</div>
 </div>
 
-<div id="outline-container-org04b57c2" class="outline-2">
-<h2 id="org04b57c2"><span class="section-number-2">5.</span> dst端还原虚拟机</h2>
+
+<div id="outline-container-org5c3b99c" class="outline-2">
+<h2 id="org5c3b99c"><span class="section-number-2">5.</span> dst端还原虚拟机</h2>
 <div class="outline-text-2" id="text-5">
 <p>
 dst还原虚拟机需要以migrate-incoming命令运行qemu进程，这样qemu起来后走qmp_migrate_incoming函数去接受src发来的内存．
@@ -2371,7 +2881,7 @@ qemu里qmp相关的代码用于处理json数据格式的命令，主要针对编
 <p>
 libvirt里启动虚拟机的流程都会来到qemuProcessStart函数，对于热迁移的情况，其migrateFrom参数有值，这样就会生成一个qemuProcessIncomingDef结构体，用来描述从哪里接受内存：
 </p>
-<pre class="example" id="orgc73fb36">
+<pre class="example" id="org2d043da">
 int
 qemuProcessStart(virConnectPtr conn,
                  virQEMUDriver *driver,
@@ -2399,13 +2909,13 @@ qemuProcessStart(virConnectPtr conn,
 <p>
 有了incoming，随后qemuProcessStart先通过qemuProcessLaunch函数使用execv系统调用启动/usr/libexec/qemu-kvm，然后qemuProcessStart又会调用qemuMigrationDstRun给这个qemu-kvm进程以json的格式发送migrate-incoming命令，先看启动/usr/libexec/qemu-kvm的过程：
 </p>
-<pre class="example" id="org4b403c4">
+<pre class="example" id="org53d0c0b">
 qemuProcessStart-&gt;qemuProcessLaunch-&gt;virCommandRun-&gt;virCommandRunAsync-&gt;virExec
 </pre>
 <p>
 在最后的virExec便有：
 </p>
-<pre class="example" id="orga3981f6">
+<pre class="example" id="org82b20b3">
 if (cmd-&gt;env)
     execve(binary, cmd-&gt;args, cmd-&gt;env);
 else
@@ -2419,13 +2929,13 @@ binary先就通过virExec-&gt;virCommandGetBinaryPath调用从virCommand结构�
 再来看给起来的qemu进程发送migrate-incoming json命令的过程：
 </p>
 
-<pre class="example" id="org17120ef">
+<pre class="example" id="org5b85a75">
 qemuProcessStart-&gt;qemuMigrationDstRun-&gt;qemuMonitorMigrateIncoming-&gt;qemuMonitorJSONMigrateIncoming
 </pre>
 <p>
 qemuMonitorJSONMigrateIncoming的实现如下：
 </p>
-<pre class="example" id="org1440236">
+<pre class="example" id="orgf729a71">
 int
 qemuMonitorJSONMigrateIncoming(qemuMonitor *mon,
                                const char *uri)
@@ -2452,7 +2962,7 @@ qemuMonitorJSONMigrateIncoming(qemuMonitor *mon,
 下面介绍下qemu接收到命令的处理过程，qemu侧收到migrate-incoming命令时，其对应的处理函数其实就是qmp_migrate_incoming，但是这种对应的调用关系并不是那么明晰．这涉及到qapi接口，qemu有一个文件叫qapi/migration.json，里面描述了迁移相关的一些命令，比如对于migrate-incoming来说有：
 </p>
 
-<pre class="example" id="org7a75dfa">
+<pre class="example" id="org3233d9d">
 ##
 # @migrate-incoming:
 #
@@ -2490,13 +3000,13 @@ qemuMonitorJSONMigrateIncoming(qemuMonitor *mon,
 最后一行是真正libvirt以json格式发送给qemu的数据，可以看到里面有要执行的命令migrate-incoming，以及数据．前面的描述都是注释，解释这个命令是干嘛的，并且可以看到，一般迁移使用的端口是4446，协议是tcp．一旦在migration.json里配置了一个命令，在编译构建的时候，scripts/qapi下的脚本会解析这个json文件，最终会在build/qapi/qapi-init-commands.c里生成C函数调用qmp_register_command以绑定命令以及对应命令的处理函数，scripts/qapi下的Python脚本解析.json配置文件，其中一个最主要的工作就是将migrate-incoming这样配置的串，转换成migrate_incoming，并在其前拼上qmp_串，最终组成qmp_migrate_incoming串（符号），这个名字的函数在qemu代码里是有定义的，这其实就对qemu侧编写qmp接口和libvirt交互提出了命名约束，比如.json有aaa-bbb这样的命令，那么在qemu里就要有qmp_aaa_bbb这样的函数来处理aaa-bbb命令，简单的使用：
 </p>
 
-<pre class="example" id="org9992c5c">
+<pre class="example" id="orgaa96692">
 grep qmp_ scripts/qapi -Rn
 </pre>
 <p>
 可以看到：
 </p>
-<pre class="example" id="org815a919">
+<pre class="example" id="org30b8e09">
 scripts/qapi/commands.py:46:%(c_type)s qmp_%(c_name)s(%(params)s);
 </pre>
 <p>
@@ -2506,14 +3016,14 @@ scripts/qapi/commands.py:46:%(c_type)s qmp_%(c_name)s(%(params)s);
 <p>
 以社区较新的qemu代码（而不是qemu 6.2，但原理一样）一份编译结果可以看到json里的命令名字和对应的处理函数的绑定动作，对qmp_register_command的调用诚如前面提到的，是由py脚本在编译时自动生成在build/qapi/qapi-init-commands.c文件里：
 </p>
-<pre class="example" id="org6c74c6a">
+<pre class="example" id="org659fac9">
 qmp_register_command(cmds, "migrate-incoming",
                      qmp_marshal_migrate_incoming, 0, 0);
 </pre>
 <p>
 而qmp_register_command的实现如下：
 </p>
-<pre class="example" id="orgada319d">
+<pre class="example" id="orgf840517">
 void qmp_register_command(QmpCommandList *cmds, const char *name,
                           QmpCommandFunc *fn, QmpCommandOptions options,
                           unsigned special_features)
@@ -2538,7 +3048,7 @@ void qmp_register_command(QmpCommandList *cmds, const char *name,
 <p>
 libvirt的命令发过来后，最终就会来到qmp_dispatch取出cmd里的fn去执行：
 </p>
-<pre class="example" id="orge18fde4">
+<pre class="example" id="orgdf0a19f">
 if (!!(cmd-&gt;options &amp; QCO_COROUTINE) == qemu_in_coroutine()) {
     monitor_set_cur(qemu_coroutine_self(), cur_mon);
     cmd-&gt;fn(args, &amp;ret, &amp;err);
@@ -2548,38 +3058,21 @@ if (!!(cmd-&gt;options &amp; QCO_COROUTINE) == qemu_in_coroutine()) {
 <p>
 以上就是QMP的工作流程，总之最后就是通过qmp_migrate_incoming函数，dst进入了接收内存并还原的流程里．对于迁移了需要还原状态的模块（典型的比如内存），都会在SaveVMHandlers:load_state这个成员里实现还原的办法，所以最终针对内存的还原通过以下流程可以到达load_state（ram_load）函数：
 </p>
-<pre class="example" id="org1c3293e">
+<pre class="example" id="org6f3c431">
 qmp_migrate_incoming-&gt;qemu_start_incoming_migration-&gt;socket_start_incoming_migration-&gt;socket_start_incoming_migration_internal-&gt;
 socket_accept_incoming_migration-&gt;migration_channel_process_incoming-&gt;migration_ioc_process_incoming-&gt;migration_incoming_process-&gt;
 process_incoming_migration_co-&gt;qemu_loadvm_state-&gt;qemu_loadvm_state_main-&gt;qemu_loadvm_section_part_end/qemu_loadvm_section_start_full-&gt;
 vmstate_load-&gt;load_state(ram_load)
 </pre>
 <p>
-本节后面的部分将分析下这个还原过程的具体工作．
+后续的ram_load本文不再介绍，这可以另开一个大的主题在另外的文档介绍．
 </p>
-</div>
-</div>
-
-<div id="outline-container-org4d71a32" class="outline-2">
-<h2 id="org4d71a32"><span class="section-number-2">6.</span> 几个问题</h2>
-<div class="outline-text-2" id="text-6">
-<p>
-本层具体的研究几个问题的细节：
-</p>
-<ul class="org-ul">
-<li>发送的内存页面，其内容具体是在哪里的代码获取的．</li>
-<li>RDMA方式如何用起来．</li>
-<li>PML是否开启使用．</li>
-<li>设备状态的迁移流程．</li>
-<li>做实验，针对不同的虚拟机内存写速率，调优几个参数．</li>
-<li>详细分析，测试，应用几个迁移阶段的功能，dirty ring，x-colo，x-background-snapshot，x-xbzrle，x-compress，multifd．</li>
-</ul>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-02-10 Mon 21:42</p>
+<p class="date">Created: 2025-02-13 Thu 22:43</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

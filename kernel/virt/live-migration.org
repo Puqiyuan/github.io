@@ -1927,9 +1927,458 @@ static void ramblock_sync_dirty_bitmap(RAMState *rs, RAMBlock *rb)
 
 migration_bitmap_sync_precopy->migration_bitmap_sync->ramblock_sync_dirty_bitmap
 #+end_example
-其中migration_bitmap_sync_precopy->migration_bitmap_sync->memory_global_dirty_log_sync先到内核里拿取脏页信息．在ram_save_pending函数里，如果不是postcopy（默认配置）且本次计算出的remaing_size小于max_size，就会调用migration_bitmap_sync_precopy去同步内核脏页信息到qemu，同步完再重新计算下remaining_size．max_size其实就是之前传入的threshold_size，threshold_size是根据当前轮实际发送时达到的带宽乘以可以接受的停机时间downtime_limit，也就是说threshold_size的值反映了在最后一轮能够发送的大小，关于它的详细计算后面分析migration_update_counters函数时还会涉及到．也就是说在可以进入第三阶段最后一轮发送时，还需要通过migration_bitmap_sync_precopy再次拉取脏页看看有没有更多的脏页可以发送的，这就是动态脏页更新与发送的机制．现在假如pending_size大于threshold_size，那么就会调用qemu_savevm_state_iterate进行迭代发送：
+其中migration_bitmap_sync_precopy->migration_bitmap_sync->memory_global_dirty_log_sync先到内核里拿取脏页信息．在ram_save_pending函数里，如果不是postcopy（默认配置）且本次计算出的remaing_size小于max_size，就会调用migration_bitmap_sync_precopy去同步内核脏页信息到qemu，同步完再重新计算下remaining_size．max_size其实就是之前传入的threshold_size，threshold_size是根据当前轮实际发送时达到的带宽乘以可以接受的停机时间downtime_limit，也就是说threshold_size的值反映了在最后一轮能够发送的大小，关于它的详细计算后面分析migration_update_counters函数时还会涉及到．也就是说在可以进入第三阶段最后一轮发送时，还需要通过migration_bitmap_sync_precopy再次拉取脏页看看有没有更多的脏页可以发送的，这就是动态脏页更新与发送的机制．现在假如pending_size大于threshold_size，那么就会调用qemu_savevm_state_iterate进行迭代发送，qemu_savevm_state_iterate的主体逻辑很简单，也是遍历savevm_state.handlers上的回调句柄，依次调用save_live_iterate回调函数，这里主要关注内存模块的迭代回调函数ram_save_iterate：
+#+begin_example
+        while ((ret = qemu_file_rate_limit(f)) == 0 ||
+                !QSIMPLEQ_EMPTY(&rs->src_page_requests)) {
+            int pages;
+
+            if (qemu_file_get_error(f)) {
+                break;
+            }
+
+            pages = ram_find_and_save_block(rs, false);
+            /* no more pages to sent */
+            if (pages == 0) {
+                done = 1;
+                break;
+            }
+
+            if (pages < 0) {
+                qemu_file_set_error(f, pages);
+                break;
+            }
+
+            rs->target_page_count += pages;
+
+            /*
+             * During postcopy, it is necessary to make sure one whole host
+             * page is sent in one chunk.
+             */
+            if (migrate_postcopy_ram()) {
+                flush_compressed_data(rs);
+            }
+
+            /*
+             * we want to check in the 1st loop, just in case it was the 1st
+             * time and we had to sync the dirty bitmap.
+             * qemu_clock_get_ns() is a bit expensive, so we only check each
+             * some iterations
+             */
+            if ((i & 63) == 0) {
+                uint64_t t1 = (qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - t0) /
+                              1000000;
+                if (t1 > MAX_WAIT) {
+                    trace_ram_save_iterate_big_wait(t1, i);
+                    break;
+                }
+            }
+            i++;
+        }
+#+end_example
+ram_save_iterate函数的主体就是一个不断寻找脏页并发送的过程，条件qemu_file_rate_limit之前介绍过，src_page_requests其实是支持postcopy的方式，就是dst端已经开始运行了，现在需要的页还在src端，所以发送请求，这些请求都挂在src_page_requests上，然后就是进一步调用ram_find_and_save_block去寻找脏页并发送：
+#+begin_example
+static int ram_find_and_save_block(RAMState *rs, bool last_stage)
+{
+    PageSearchStatus pss;
+    int pages = 0;
+    bool again, found;
+
+    /* No dirty page as there is zero RAM */
+    if (!ram_bytes_total()) {
+        return pages;
+    }
+
+    pss.block = rs->last_seen_block;
+    pss.page = rs->last_page;
+    pss.complete_round = false;
+
+    if (!pss.block) {
+        pss.block = QLIST_FIRST_RCU(&ram_list.blocks);
+    }
+
+    do {
+        again = true;
+        found = get_queued_page(rs, &pss);
+
+        if (!found) {
+            /* priority queue empty, so just search for something dirty */
+            found = find_dirty_block(rs, &pss, &again);
+        }
+
+        if (found) {
+            pages = ram_save_host_page(rs, &pss, last_stage);
+        }
+    } while (!pages && again);
+
+    rs->last_seen_block = pss.block;
+    rs->last_page = pss.page;
+
+    return pages;
+}
+#+end_example
+该函数首先是通过get_queued_page去处理是否有postcopy的请求，然后才是通过find_dirty_block找到脏页，最后调用ram_save_host_page发送，find_dirty_block->migration_bitmap_find_dirty使用RAMBlock.bmap去找到脏页信息，这点在之前的脏页机制节也介绍过，find_dirty_block的细节就不再介绍了，ram_save_host_page往下的流程本节也不打算详细分析了，因为脏页信息有了，现在无非就是遍历并发送，这里只是列出下后面的代码路径：
+#+begin_example
+ram_save_host_page->ram_save_target_page->ram_save_page->save_normal_page->qemu_put_buffer*
+#+end_example
+qemu_put_buffer*类的接口往后最终会走到sendmsg套接字接口，前面的分析提到过．
+
+这里还想分析下migration_rate_limit函数，之前提到过migration_rate_limit->migration_update_counters里会计算threshold_size，而这个值是控制能否进入第三阶段的一个关键阀值条件：
+#+begin_example
+static void migration_update_counters(MigrationState *s,
+                                      int64_t current_time)
+{
+    uint64_t transferred, transferred_pages, time_spent;
+    uint64_t current_bytes; /* bytes transferred since the beginning */
+    double bandwidth;
+
+    if (current_time < s->iteration_start_time + BUFFER_DELAY) {
+        return;
+    }
+
+    current_bytes = migration_total_bytes(s);
+    transferred = current_bytes - s->iteration_initial_bytes;
+    time_spent = current_time - s->iteration_start_time;
+    bandwidth = (double)transferred / time_spent;
+    s->threshold_size = bandwidth * s->parameters.downtime_limit;
+
+    s->mbps = (((double) transferred * 8.0) /
+               ((double) time_spent / 1000.0)) / 1000.0 / 1000.0;
+
+    transferred_pages = ram_get_total_transferred_pages() -
+                            s->iteration_initial_pages;
+    s->pages_per_second = (double) transferred_pages /
+                             (((double) time_spent / 1000.0));
+
+    /*
+     * if we haven't sent anything, we don't want to
+     * recalculate. 10000 is a small enough number for our purposes
+     */
+    if (ram_counters.dirty_pages_rate && transferred > 10000) {
+        s->expected_downtime = ram_counters.remaining / bandwidth;
+    }
+
+    qemu_file_reset_rate_limit(s->to_dst_file);
+
+    update_iteration_initial_status(s);
+
+    trace_migrate_transferred(transferred, time_spent,
+                              bandwidth, s->threshold_size);
+}
+#+end_example
+这里可以很清楚的看到，bandwidth是实际上次发送能达到的带宽，而downtime_limit是配置所能允许的停机时间，和实际带宽相乘，就是在这么多的停机时间里能发送多少数据，bandwidth之前提到过，没有其它原因的话，它就是配置能允许的最大带宽，这里主要看下downtime_limit的设置，其由如下代码定义：
+#+begin_example
+    DEFINE_PROP_UINT64("x-downtime-limit", MigrationState,
+                      parameters.downtime_limit,
+                      DEFAULT_MIGRATE_SET_DOWNTIME),
+#+end_example
+这里可以看到，其默认的时间设置就是300ms：
+#+begin_example
+/* Time in milliseconds we are allowed to stop the source,
+ * for sending the last part */
+#define DEFAULT_MIGRATE_SET_DOWNTIME 300
+#+end_example
+在migration.json文件里也有解释：
+#+begin_example
+# @downtime-limit: set maximum tolerated downtime for migration. maximum
+#                  downtime in milliseconds (Since 2.8)
+#+end_example
+如果因为downtime_limit设置的较低而引起threshold_size过小而不能进入第三阶段，可以适当的调大downtime_limit．
+
+在第二节的最后想分析下qemu提供的节流功能，该功能是解决虚拟机业务快速大量的产生脏页，但是发送脏页的线程其速率没有产生脏页的速率快，这就导致虚拟机迁移一直不能成功进入第三阶段，导致迁移失败．
+
+在跌代发送函数migration_iteration_run里会通过qemu_savevm_state_pending去获取剩余还没迁移的内存，qemu_savevm_state_pending里调用ram提供的pending函数为ram_save_pending，ram_save_pending之前也分析过，这次主要关注其节流的逻辑：
+#+begin_example
+static void ram_save_pending(QEMUFile *f, void *opaque, uint64_t max_size,
+                             uint64_t *res_precopy_only,
+                             uint64_t *res_compatible,
+                             uint64_t *res_postcopy_only)
+{
+    ...    
+    if (!migration_in_postcopy() &&
+        remaining_size < max_size) {
+        qemu_mutex_lock_iothread();
+        WITH_RCU_READ_LOCK_GUARD() {
+            migration_bitmap_sync_precopy(rs);
+        }
+        qemu_mutex_unlock_iothread();
+        remaining_size = rs->migration_dirty_pages * TARGET_PAGE_SIZE;
+    }
+    ...
+}
+#+end_example
+之前有提到过，max_size就是threshold_size，每当剩余要发送的内存小于进入第三阶段的阀值时，就再次尝试通过migration_bitmap_sync_precopy去拉取新的可能的脏内存信息，也就是在migration_bitmap_sync_precopy->migration_bitmap_sync里有了节流的逻辑：
+#+begin_example
+    /* more than 1 second = 1000 millisecons */
+    if (end_time > rs->time_last_bitmap_sync + 1000) {
+        migration_trigger_throttle(rs);
+
+        migration_update_rates(rs, end_time);
+
+        rs->target_page_count_prev = rs->target_page_count;
+
+        /* reset period counters */
+        rs->time_last_bitmap_sync = end_time;
+        rs->num_dirty_pages_period = 0;
+        rs->bytes_xfer_prev = ram_counters.transferred;
+    }
+#+end_example
+分析这段代码，节流动作的发生并不每次拉取脏页信息时都会发生，必须要超过1s才会进入这个逻辑，判断是否要节流是在migration_trigger_throttle函数里：
+#+begin_example
+static void migration_trigger_throttle(RAMState *rs)
+{
+    MigrationState *s = migrate_get_current();
+    uint64_t threshold = s->parameters.throttle_trigger_threshold;
+
+    uint64_t bytes_xfer_period = ram_counters.transferred - rs->bytes_xfer_prev;
+    uint64_t bytes_dirty_period = rs->num_dirty_pages_period * TARGET_PAGE_SIZE;
+    uint64_t bytes_dirty_threshold = bytes_xfer_period * threshold / 100;
+
+    /* During block migration the auto-converge logic incorrectly detects
+     * that ram migration makes no progress. Avoid this by disabling the
+     * throttling logic during the bulk phase of block migration. */
+    if (migrate_auto_converge() && !blk_mig_bulk_active()) {
+        /* The following detection logic can be refined later. For now:
+           Check to see if the ratio between dirtied bytes and the approx.
+           amount of bytes that just got transferred since the last time
+           we were in this routine reaches the threshold. If that happens
+           twice, start or increase throttling. */
+
+        if ((bytes_dirty_period > bytes_dirty_threshold) &&
+            (++rs->dirty_rate_high_cnt >= 2)) {
+            trace_migration_throttle();
+            rs->dirty_rate_high_cnt = 0;
+            mig_throttle_guest_down(bytes_dirty_period,
+                                    bytes_dirty_threshold);
+        }
+    }
+}
+#+end_example
+这里有几个计算，一个是bytes_xfer_period表示上一个间隔里发送了多少字节，bytes_dirty_period表示上一个间隔里产生了多少字节的脏页，bytes_dirty_threshold是bytes_xfer_period按某个比例进行缩小的值，控制了后面能否调用mig_throttle_guest_down进行节流的动作，其实际表示的是初始脏页速率达到多少的比例就可以开始节流：
+#+begin_example
+    DEFINE_PROP_UINT8("x-throttle-trigger-threshold", MigrationState,
+                      parameters.throttle_trigger_threshold,
+                      DEFAULT_MIGRATE_THROTTLE_TRIGGER_THRESHOLD),
+#+end_example
+#+begin_example
+# @throttle-trigger-threshold: The ratio of bytes_dirty_period and bytes_xfer_period
+#                              to trigger throttling. It is expressed as percentage.
+#                              The default value is 50. (Since 5.0)
+#+end_example
+继续往下分析，控制是否要节流的还有一个条件migrate_auto_converge函数：
+#+begin_example
+bool migrate_auto_converge(void)
+{
+    MigrationState *s;
+
+    s = migrate_get_current();
+
+    return s->enabled_capabilities[MIGRATION_CAPABILITY_AUTO_CONVERGE];
+}
+#+end_example
+这其实表明了是否开启节流功能（自动聚合），它默认是不开启：
+#+begin_example
+    DEFINE_PROP_MIG_CAP("x-auto-converge", MIGRATION_CAPABILITY_AUTO_CONVERGE),
+#+end_example
+#+begin_example
+# @auto-converge: If enabled, QEMU will automatically throttle down the guest
+#                 to speed up convergence of RAM migration. (since 1.6)
+#+end_example
+另外一个条件本文不关注，如果条件都满足，就会继续往下调用mig_throttle_guest_down：
+#+begin_example
+static void mig_throttle_guest_down(uint64_t bytes_dirty_period,
+                                    uint64_t bytes_dirty_threshold)
+{
+    MigrationState *s = migrate_get_current();
+    uint64_t pct_initial = s->parameters.cpu_throttle_initial;
+    uint64_t pct_increment = s->parameters.cpu_throttle_increment;
+    bool pct_tailslow = s->parameters.cpu_throttle_tailslow;
+    int pct_max = s->parameters.max_cpu_throttle;
+
+    uint64_t throttle_now = cpu_throttle_get_percentage();
+    uint64_t cpu_now, cpu_ideal, throttle_inc;
+
+    /* We have not started throttling yet. Let's start it. */
+    if (!cpu_throttle_active()) {
+        cpu_throttle_set(pct_initial);
+    } else {
+        /* Throttling already on, just increase the rate */
+        if (!pct_tailslow) {
+            throttle_inc = pct_increment;
+        } else {
+            /* Compute the ideal CPU percentage used by Guest, which may
+             * make the dirty rate match the dirty rate threshold. */
+            cpu_now = 100 - throttle_now;
+            cpu_ideal = cpu_now * (bytes_dirty_threshold * 1.0 /
+                        bytes_dirty_period);
+            throttle_inc = MIN(cpu_now - cpu_ideal, pct_increment);
+        }
+        cpu_throttle_set(MIN(throttle_now + throttle_inc, pct_max));
+    }
+}
+#+end_example
+该函数涉及到了迁移的很多参数，先看下这些参数的作用，先是cpu_throttle_initial，它指定了第一次激活节流操作时，应该限制多少cpu运行时间：
+#+begin_example
+# @cpu-throttle-initial: Initial percentage of time guest cpus are throttled
+#                        when migration auto-converge is activated. The
+#                        default value is 20. (Since 2.7)
+#+end_example
+#+begin_example
+    DEFINE_PROP_UINT8("x-cpu-throttle-initial", MigrationState,
+                      parameters.cpu_throttle_initial,
+                      DEFAULT_MIGRATE_CPU_THROTTLE_INITIAL),
+#+end_example
+#+begin_example
+#define DEFAULT_MIGRATE_CPU_THROTTLE_INITIAL 20
+#+end_example
+所以cpu_throttle_active发现throttle_percentage为0还没有设置时，就会以这个cpu_throttle_initial去设置．
+
+再看cpu_throttle_increment，它表示在每次需要加大节流的力度时，每次递增多少节流的量：
+#+begin_example
+# @cpu-throttle-increment: throttle percentage increase each time
+#                          auto-converge detects that migration is not making
+#                          progress. The default value is 10. (Since 2.7)
+
+#+end_example
+#+begin_example
+    DEFINE_PROP_UINT8("x-cpu-throttle-increment", MigrationState,
+                      parameters.cpu_throttle_increment,
+                      DEFAULT_MIGRATE_CPU_THROTTLE_INCREMENT),
+#+end_example
+#+begin_example
+#define DEFAULT_MIGRATE_CPU_THROTTLE_INCREMENT 10
+#+end_example
+可以看到默认就是增加10，不过这个值要看是否开启了tailslow，没开才会有用．下面看下cpu_throttle_tailslow参数的作用：
+#+begin_example
+# @cpu-throttle-tailslow: Make CPU throttling slower at tail stage
+#                         At the tail stage of throttling, the Guest is very
+#                         sensitive to CPU percentage while the @cpu-throttle
+#                         -increment is excessive usually at tail stage.
+#                         If this parameter is true, we will compute the ideal
+#                         CPU percentage used by the Guest, which may exactly make
+#                         the dirty rate match the dirty rate threshold. Then we
+#                         will choose a smaller throttle increment between the
+#                         one specified by @cpu-throttle-increment and the one
+#                         generated by ideal CPU percentage.
+#                         Therefore, it is compatible to traditional throttling,
+#                         meanwhile the throttle increment won't be excessive
+#                         at tail stage.
+#                         The default value is false. (Since 5.1)
+#+end_example
+#+begin_example
+    DEFINE_PROP_BOOL("x-cpu-throttle-tailslow", MigrationState,
+                      parameters.cpu_throttle_tailslow, false),
+#+end_example
+如果开启了这个参数，先要算下理想的cpu能使用的算力cpu_ideal，它是现在的cpu算里cpu_now乘以一个比率，这个比率是传送速率的一半（在父函数migration_trigger_throttle里默认折算为一半）比上脏页产生的速率，换句话说，只有脏页产生速率是传送速率的一半时，cpu_ideal才会稳定下来而不会被一个0-1的比率值缩放小，都了cpu_ideal，再来看现在的cpu算力cpu_now和cpu_ideal的差距，就是还需要节流多少cpu算力，最后在throttle_inc和默认的增加节流的幅度pct_increment间选择较小的，然后通过cpu_throttle_set去设置节流的值，但是现在要设置的throttle_now+throttle_inc和pct_max之间也要取最小值，这里就又涉及一个参数max_cpu_throttle：
+#+begin_example
+# @max-cpu-throttle: maximum cpu throttle percentage.
+#                    Defaults to 99.
+#                    (Since 3.1)
+#+end_example
+#+begin_example
+    DEFINE_PROP_UINT8("max-cpu-throttle", MigrationState,
+                      parameters.max_cpu_throttle,
+                      DEFAULT_MIGRATE_MAX_CPU_THROTTLE),
+#+end_example
+#+begin_example
+#define DEFAULT_MIGRATE_MAX_CPU_THROTTLE 99
+#+end_example
+max_cpu_throttle控制了最大能节流多少cpu算力，现在继续往下分析cpu_throttle_set：
+#+begin_example
+void cpu_throttle_set(int new_throttle_pct)
+{
+    /*
+     * boolean to store whether throttle is already active or not,
+     * before modifying throttle_percentage
+     */
+    bool throttle_active = cpu_throttle_active();
+
+    /* Ensure throttle percentage is within valid range */
+    new_throttle_pct = MIN(new_throttle_pct, CPU_THROTTLE_PCT_MAX);
+    new_throttle_pct = MAX(new_throttle_pct, CPU_THROTTLE_PCT_MIN);
+
+    qatomic_set(&throttle_percentage, new_throttle_pct);
+
+    if (!throttle_active) {
+        cpu_throttle_timer_tick(NULL);
+    }
+}
+#+end_example
+这个函数继续将要节流的百分比钳制在CPU_THROTTLE_PCT_MAX和CPU_THROTTLE_PCT_MIN之间，同时通过qatomic_set来设置全局的节流比分比变量throttle_percentage为new_throttle_pct，如果这个值还没有被设置过（之前为0），那么就是首次开启节流功能，通过调用cpu_throttle_timer_tick函数来开启：
+#+begin_example
+static void cpu_throttle_timer_tick(void *opaque)
+{
+    CPUState *cpu;
+    double pct;
+
+    /* Stop the timer if needed */
+    if (!cpu_throttle_get_percentage()) {
+        return;
+    }
+    CPU_FOREACH(cpu) {
+        if (!qatomic_xchg(&cpu->throttle_thread_scheduled, 1)) {
+            async_run_on_cpu(cpu, cpu_throttle_thread,
+                             RUN_ON_CPU_NULL);
+        }
+    }
+
+    pct = (double)cpu_throttle_get_percentage() / 100;
+    timer_mod(throttle_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL_RT) +
+                                   CPU_THROTTLE_TIMESLICE_NS / (1 - pct));
+}
+#+end_example
+这个函数逻辑还是简单的，首先通过cpu_throttle_get_percentage判断下当前的节流的百分比为0话意味着没有必要进行节流操作，然后就是CPU_FOREACH针对每个虚拟cpu运行cpu_throttle_thread进行节流，不过条件是每个vcpu还没有开始节流，也就是qatomic_xchg返回的throttle_thread_scheduled的旧值为0．
+
+最后的两行代码是比较有意思的，它需要结合cpu_throttle_thread函数才能理解深刻，现在先单就理解这两句，首先pct表示的是节流的一个百分比，本来节流的值是0-99的整型数值，现在就是把她转换成了一个0-1的百分比的小数．timer_mod调用是想修改throttle_timer这个定时器的下一次超时时间，timer_mod的回调函数就是cpu_throttle_timer_tick:
+#+begin_example
+void cpu_throttle_init(void)
+{
+    throttle_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL_RT,
+                                  cpu_throttle_timer_tick, NULL);
+}
+#+end_example
+也就是说，在经过CPU_THROTTLE_TIMESLICE_NS / (1 - pct)了这么多时间后，就会再次进入cpu_throttle_timer_tick进行节流．CPU_THROTTLE_TIMESLICE_NS是默认的时间片：
+#+begin_example
+#define CPU_THROTTLE_TIMESLICE_NS 10000000
+#+end_example
+可以看到为10ms，那为什么不直接使用这个时间片作为周期而要乘以1/(1-pct)，这里个人分析作者的意图是，在cpu节流过程中，cpu的算力是逐步降低的，按固定频率运行某个回调函数（或者说成按固定频率执行某项任务）这种节奏本身就是不对的，因为cpu算力不是恒定不变的，所以执行节流回调这件任务也当以一个变化的周期来执行，而不是恒定的．那么这个变化的周期应当怎么变化呢，是变大还是变小？可以想见，随着cpu算力的下降，那么这个周期应该拉长变大，也就是说，cpu算力既然已经下降了，就不能花费太多的cpu执行时间去执行一个回调，所以pct越大1/(1-pct)越大，隔的越久才再次执行节流回调．继续看cpu_throttle_thread函数：
+#+begin_example
+static void cpu_throttle_thread(CPUState *cpu, run_on_cpu_data opaque)
+{
+    double pct;
+    double throttle_ratio;
+    int64_t sleeptime_ns, endtime_ns;
+
+    if (!cpu_throttle_get_percentage()) {
+        return;
+    }
+
+    pct = (double)cpu_throttle_get_percentage() / 100;
+    throttle_ratio = pct / (1 - pct);
+    /* Add 1ns to fix double's rounding error (like 0.9999999...) */
+    sleeptime_ns = (int64_t)(throttle_ratio * CPU_THROTTLE_TIMESLICE_NS + 1);
+    endtime_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME) + sleeptime_ns;
+    while (sleeptime_ns > 0 && !cpu->stop) {
+        if (sleeptime_ns > SCALE_MS) {
+            qemu_cond_timedwait_iothread(cpu->halt_cond,
+                                         sleeptime_ns / SCALE_MS);
+        } else {
+            qemu_mutex_unlock_iothread();
+            g_usleep(sleeptime_ns / SCALE_US);
+            qemu_mutex_lock_iothread();
+        }
+        sleeptime_ns = endtime_ns - qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
+    }
+    qatomic_set(&cpu->throttle_thread_scheduled, 0);
+}
+#+end_example
+这个函数里终于看到了所谓节流到底是什么操作，其实就是sleep，将vcpu对应的线程睡眠就是类似于物理cpu的降频操作，这里最关键的是睡多久，1/(1-pct)相当于是整个周期的长度，用pct睡眠占比除以(1-pct)就是睡眠的时间了，这样可以保证在某个（变化的）周期内，睡眠占pct，而运行占1-pct，然后在while循环里，只要没睡够这么多时间，就会循环一直睡．而一旦睡够了，throttle_thread_scheduled就会被设置为0，这会使得cpu_throttle_timer_tick定时器回调函数执行时看到它为0，进而开启新一轮的睡眠．
+
+以上就是迁移第二阶段的分析．
 
 * 迁移第三阶段
+最后一个阶段不打算详细分析了，因为这一阶段就没有多少数据需要传送了，之前的分析已经详细说明了进入第三阶段的条件．第三阶段主要就是停止src端的虚拟机，并统计一下downtime的时间等，代码就略过不详加分析了．
+
 
 * dst端还原虚拟机
 dst还原虚拟机需要以migrate-incoming命令运行qemu进程，这样qemu起来后走qmp_migrate_incoming函数去接受src发来的内存．
@@ -2090,13 +2539,13 @@ socket_accept_incoming_migration->migration_channel_process_incoming->migration_
 process_incoming_migration_co->qemu_loadvm_state->qemu_loadvm_state_main->qemu_loadvm_section_part_end/qemu_loadvm_section_start_full->
 vmstate_load->load_state(ram_load)
 #+end_example
-本节后面的部分将分析下这个还原过程的具体工作．
+后续的ram_load本文不再介绍，这可以另开一个大的主题在另外的文档介绍．
 
-* 几个问题
-本层具体的研究几个问题的细节：
-+ 发送的内存页面，其内容具体是在哪里的代码获取的．
-+ RDMA方式如何用起来．
-+ PML是否开启使用．
-+ 设备状态的迁移流程．
-+ 做实验，针对不同的虚拟机内存写速率，调优几个参数．
-+ 详细分析，测试，应用几个迁移阶段的功能，dirty ring，x-colo，x-background-snapshot，x-xbzrle，x-compress，multifd．
+# * 几个问题
+# 本层具体的研究几个问题的细节：
+# + 发送的内存页面，其内容具体是在哪里的代码获取的．
+# + RDMA方式如何用起来．
+# + PML是否开启使用．
+# + 设备状态的迁移流程．
+# + 做实验，针对不同的虚拟机内存写速率，调优几个参数．
+# + 详细分析，测试，应用几个迁移阶段的功能，dirty ring，x-colo，x-background-snapshot，x-xbzrle，x-compress，multifd．
