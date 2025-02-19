@@ -2553,6 +2553,7 @@ static inline bool want_init_on_alloc(gfp_t flags)
 
 这个配置在笔者的环境是打开的。最后一个条件主要是针对arm64环境的硬件内存标签功能，它依赖于ARMv8.5+提供的Memory Tagging Extension，本文不详细探究，总之第三个条件一般也是true，所以在笔者的环境就是init为true。
 
+<<page_private>>
 再往下set_page_private将page: private成员给赋值成0，因为这个成员可能表示之前使用者有意义的值，比如buffer head可以使用它，也可以表示一个swap_entry_t，当该页面在伙伴系统里，又可以存放页面的order信息，所以在分配完成返回给用户前，先将这个值清0。
 
 set_page_refcounted函数又设置page: _refcount为1。在设置前判断当前页面应该不是tail page，因为tail page不能单独拿出来分配，操作tail page只能通过head page，如果一个页面是tail page，那么page: compound_head的bit 0被设置为1。
@@ -3232,6 +3233,59 @@ enum pagetype {
 
 	PGTY_mapcount_underflow = 0xff
 };
+#+end_example
+这里使用了buddy_order去获得该页面对应的order：
+#+begin_example
+static inline unsigned int buddy_order(struct page *page)
+{
+	/* PageBuddy() must be checked by the caller */
+	return page_private(page);
+}
+#define page_private(page)		((page)->private)
+#+end_example
+关于private前面其实[[page_private][有介绍]]，在buddy system里，它表示空闲页面的order，在释放页面时通过__free_one_page->set_buddy_order->set_page_private设置这个private值，得到了order后以它为参数调用move_to_free_list：
+#+begin_example
+/*
+ * Used for pages which are on another list. Move the pages to the tail
+ * of the list - so the moved pages won't immediately be considered for
+ * allocation again (e.g., optimization for memory onlining).
+ */
+static inline void move_to_free_list(struct page *page, struct zone *zone,
+				     unsigned int order, int old_mt, int new_mt)
+{
+	struct free_area *area = &zone->free_area[order];
+
+	/* Free page moving can fail, so it happens before the type update */
+	VM_WARN_ONCE(get_pageblock_migratetype(page) != old_mt,
+		     "page type is %lu, passed migratetype is %d (nr=%d)\n",
+		     get_pageblock_migratetype(page), old_mt, 1 << order);
+
+	list_move_tail(&page->buddy_list, &area->free_list[new_mt]);
+
+	account_freepages(zone, -(1 << order), old_mt);
+	account_freepages(zone, 1 << order, new_mt);
+}
+#+end_example
+该函数真正最后的移动页面到指定新的迁移类型new_mt的函数，从这个函数里可以看出来，zone按多个order划分了多个free_area，而每个free_area里又有多个链表free_list用于链接不同迁移类型的页面，所以这里最后是通过list_move_tail来将页面链入到free_area->free_list对应new_mt迁移类型的链表里，使用的是buddy_list这个list_head来代表这个页面。
+
+最后这里还想分析下account_freepages函数，因为这个函数里体现了总体/部分的性能优化思想。下面是这个函数的实现：
+#+begin_example
+static inline void account_freepages(struct zone *zone, int nr_pages,
+				     int migratetype)
+{
+	lockdep_assert_held(&zone->lock);
+
+	if (is_migrate_isolate(migratetype))
+		return;
+
+	__mod_zone_page_state(zone, NR_FREE_PAGES, nr_pages);
+
+	if (is_migrate_cma(migratetype))
+		__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, nr_pages);
+	else if (is_migrate_highatomic(migratetype))
+		WRITE_ONCE(zone->nr_free_highatomic,
+			   zone->nr_free_highatomic + nr_pages);
+}
 #+end_example
 
 * rmqueue
