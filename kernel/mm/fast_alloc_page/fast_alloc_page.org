@@ -3141,6 +3141,99 @@ static int move_freepages_block(struct zone *zone, struct page *page,
 	return __move_freepages_block(zone, start_pfn, old_mt, new_mt);
 }
 #+end_example
+prep_move_freepages_block函数如果最后两个参数有地址的话，会返回空闲的页面以及可移动页面的数量，但是此处调用是不关心这两个值的，这里只关心一个pageblock内开始的pfn是多少，有了start_pfn就可以调用__move_freepages_block了：
+#+begin_example
+/*
+ * Change the type of a block and move all its free pages to that
+ * type's freelist.
+ */
+static int __move_freepages_block(struct zone *zone, unsigned long start_pfn,
+				  int old_mt, int new_mt)
+{
+	struct page *page;
+	unsigned long pfn, end_pfn;
+	unsigned int order;
+	int pages_moved = 0;
+
+	VM_WARN_ON(start_pfn & (pageblock_nr_pages - 1));
+	end_pfn = pageblock_end_pfn(start_pfn);
+
+	for (pfn = start_pfn; pfn < end_pfn;) {
+		page = pfn_to_page(pfn);
+		if (!PageBuddy(page)) {
+			pfn++;
+			continue;
+		}
+
+		/* Make sure we are not inadvertently changing nodes */
+		VM_BUG_ON_PAGE(page_to_nid(page) != zone_to_nid(zone), page);
+		VM_BUG_ON_PAGE(page_zone(page) != zone, page);
+
+		order = buddy_order(page);
+
+		move_to_free_list(page, zone, order, old_mt, new_mt);
+
+		pfn += 1 << order;
+		pages_moved += 1 << order;
+	}
+
+	set_pageblock_migratetype(pfn_to_page(start_pfn), new_mt);
+
+	return pages_moved;
+}
+#+end_example
+在循环的主体里，从pageblock的第一个pfn到最后一个pfn，依次通过move_to_free_list接口将这些pfn对应的page移动到新的迁移类型里，注意移动的步子是page.order里记录的1<<order这么多个页面，通过PageBuddy判断页面要由buddy管理（是空闲的）才可以移动：
+#+begin_example
+#define PAGE_TYPE_OPS(uname, lname, fname)				\
+FOLIO_TYPE_OPS(lname, fname)						\
+static __always_inline int Page##uname(const struct page *page)		\
+{									\
+	return data_race(page->page_type >> 24) == PGTY_##lname;	\
+}									\
+static __always_inline void __SetPage##uname(struct page *page)		\
+{									\
+	if (Page##uname(page))						\
+		return;							\
+	VM_BUG_ON_PAGE(data_race(page->page_type) != UINT_MAX, page);	\
+	page->page_type = (unsigned int)PGTY_##lname << 24;		\
+}									\
+static __always_inline void __ClearPage##uname(struct page *page)	\
+{									\
+	if (page->page_type == UINT_MAX)				\
+		return;							\
+	VM_BUG_ON_PAGE(!Page##uname(page), page);			\
+	page->page_type = UINT_MAX;					\
+}
+/*
+ * PageBuddy() indicates that the page is free and in the buddy system
+ * (see mm/page_alloc.c).
+ */
+PAGE_TYPE_OPS(Buddy, buddy, buddy)
+#+end_example
+以上定义在include/linux/page-flags.h里，可以看到最后判断的其实是page.page_type成员的高8比特的内容，这个8个bit定义了页面的类型，这些类型包括：
+#+begin_example
+/*
+ * For pages that do not use mapcount, page_type may be used.
+ * The low 24 bits of pagetype may be used for your own purposes, as long
+ * as you are careful to not affect the top 8 bits.  The low bits of
+ * pagetype will be overwritten when you clear the page_type from the page.
+ */
+enum pagetype {
+	/* 0x00-0x7f are positive numbers, ie mapcount */
+	/* Reserve 0x80-0xef for mapcount overflow. */
+	PGTY_buddy	= 0xf0,
+	PGTY_offline	= 0xf1,
+	PGTY_table	= 0xf2,
+	PGTY_guard	= 0xf3,
+	PGTY_hugetlb	= 0xf4,
+	PGTY_slab	= 0xf5,
+	PGTY_zsmalloc	= 0xf6,
+	PGTY_unaccepted	= 0xf7,
+
+	PGTY_mapcount_underflow = 0xff
+};
+#+end_example
+
 * rmqueue
 
 * 附节
