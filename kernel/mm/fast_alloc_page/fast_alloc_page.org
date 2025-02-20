@@ -3287,7 +3287,59 @@ static inline void account_freepages(struct zone *zone, int nr_pages,
 			   zone->nr_free_highatomic + nr_pages);
 }
 #+end_example
+account_freepages主要是通过__mod_zone_page_state修改NR_FREE_PAGES项里面记录的空闲页面的数量，对于是迁移到MIGRATE_HIGHATOMIC类型的页面，需要增加nr_free_highatomic量以反应增长了多少
+个这个类型的页面，这里主要往下介绍__mod_zone_page_state函数：
+#+begin_example
+/*
+ * For use when we know that interrupts are disabled,
+ * or when we know that preemption is disabled and that
+ * particular counter cannot be updated from interrupt context.
+ */
+void __mod_zone_page_state(struct zone *zone, enum zone_stat_item item,
+			   long delta)
+{
+	struct per_cpu_zonestat __percpu *pcp = zone->per_cpu_zonestats;
+	s8 __percpu *p = pcp->vm_stat_diff + item;
+	long x;
+	long t;
 
+	/*
+	 * Accurate vmstat updates require a RMW. On !PREEMPT_RT kernels,
+	 * atomicity is provided by IRQs being disabled -- either explicitly
+	 * or via local_lock_irq. On PREEMPT_RT, local_lock_irq only disables
+	 * CPU migrations and preemption potentially corrupts a counter so
+	 * disable preemption.
+	 */
+	preempt_disable_nested();
+
+	x = delta + __this_cpu_read(*p);
+
+	t = __this_cpu_read(pcp->stat_threshold);
+
+	if (unlikely(abs(x) > t)) {
+		zone_page_state_add(x, zone, item);
+		x = 0;
+	}
+	__this_cpu_write(*p, x);
+
+	preempt_enable_nested();
+}
+
+#+end_example
+zone里有per_cpu_zonestats，用于记录percpu里的各种页面状态的计数，item参数指明了是哪种类型的计数，而delta参数代表添加到该类的差量，stat_threshold表示了一个阀值，当加上本次的差量超过了阀值时，意味着页面类型统计计数需要转移到zone.vm_stat这个zone级别的量里去，同时更新全局的vm_node_stat统计计数：
+#+begin_example
+static inline void zone_page_state_add(long x, struct zone *zone,
+				 enum zone_stat_item item)
+{
+	atomic_long_add(x, &zone->vm_stat[item]);
+	atomic_long_add(x, &vm_zone_stat[item]);
+}
+#+end_example
+统计计数转移后那么本次写到percpu里的统计计数就是0了，也就是x = 0，如果不转移那么是多少就写入多少了。
+
+这就是前面提到的总体/部分性能优化，就是每次需要更新计数时，不必每次都去争抢全局的量，大部分都是在更新percpu里的值。
+
+set_pfnblock_flags_mask和前面介绍过的get_pfnblock_flags_mask总体逻辑类似，这里只是
 * rmqueue
 
 * 附节
