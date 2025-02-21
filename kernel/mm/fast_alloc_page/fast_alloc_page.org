@@ -3339,7 +3339,34 @@ static inline void zone_page_state_add(long x, struct zone *zone,
 
 这就是前面提到的总体/部分性能优化，就是每次需要更新计数时，不必每次都去争抢全局的量，大部分都是在更新percpu里的值。
 
-set_pfnblock_flags_mask和前面介绍过的get_pfnblock_flags_mask总体逻辑类似，这里只是
+set_pfnblock_flags_mask和前面介绍过的get_pfnblock_flags_mask总体逻辑类似，这里只是介绍下最后的设置动作：
+#+begin_example
+	word = READ_ONCE(bitmap[word_bitidx]);
+	do {
+	} while (!try_cmpxchg(&bitmap[word_bitidx], &word, (word & ~mask) | flags));
+#+end_example
+mask是传进来的参数MIGRATETYPE_MASK，表示关心哪些bit位，这里先从bitmap读出来word，然后和~mask相与，相当于是先清除关心的哪些位的值，因为这些位上的值要被设置成新的flags。
+
+然后回到reserve_highatomic_pageblock函数，下一种情况就是本次分得页面的order是大于pageblock的order，那么这种情况更改页面的迁移属性就是以整个pageblock为单位的：
+#+begin_example
+static void change_pageblock_range(struct page *pageblock_page,
+					int start_order, int migratetype)
+{
+	int nr_pageblocks = 1 << (start_order - pageblock_order);
+
+	while (nr_pageblocks--) {
+		set_pageblock_migratetype(pageblock_page, migratetype);
+		pageblock_page += pageblock_nr_pages;
+	}
+}
+#+end_example
+可以看到先算出本次page对应的order里包含多少个pageblock，然后把这些pageblock的迁移类型都更改成对应migratetype参数类型的。
+
+以上就是对reserve_highatomic_pageblock的分析，回到get_page_from_freelist可以看到对reserve_highatomic_pageblock的调用其实是一个较低概率发生的事情（unlikely），这里对其详细分析主要是为了介绍页面的移动、页面迁移类型的管理以及页面按mem section分组等知识。
+
+继续往下分析get_page_from_freelist，就是如果没有分配到页面（page为NULL），那么就会尝试一些手段看能否获得一些内存，比如前面提到过的accepted内存。
+
+以上就是对get_page_from_freelist的全部分析。
 * rmqueue
 
 * 附节
