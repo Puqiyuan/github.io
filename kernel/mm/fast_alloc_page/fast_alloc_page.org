@@ -3368,6 +3368,146 @@ static void change_pageblock_range(struct page *pageblock_page,
 
 以上就是对get_page_from_freelist的全部分析。
 * rmqueue
+下面开始分析rmqueue函数，rmqueue主要调用两个函数，一是rmqueue_pcplist函数用于分配order小于3的情况，从per-cpu缓存的页面里去分配，另外一个函数是rmqueue_buddy是针对order大于3的情况，从伙伴分配器里直接分配，下面先整体介绍rmqueue函数，再分两节介绍这两个函数：
+#+begin_example
+/*
+ * Allocate a page from the given zone.
+ * Use pcplists for THP or "cheap" high-order allocations.
+ */
 
+/*
+ * Do not instrument rmqueue() with KMSAN. This function may call
+ * __msan_poison_alloca() through a call to set_pfnblock_flags_mask().
+ * If __msan_poison_alloca() attempts to allocate pages for the stack depot, it
+ * may call rmqueue() again, which will result in a deadlock.
+ */
+__no_sanitize_memory
+static inline
+struct page *rmqueue(struct zone *preferred_zone,
+			struct zone *zone, unsigned int order,
+			gfp_t gfp_flags, unsigned int alloc_flags,
+			int migratetype)
+{
+	struct page *page;
+
+	if (likely(pcp_allowed_order(order))) {
+		page = rmqueue_pcplist(preferred_zone, zone, order,
+				       migratetype, alloc_flags);
+		if (likely(page))
+			goto out;
+	}
+
+	page = rmqueue_buddy(preferred_zone, zone, order, alloc_flags,
+							migratetype);
+
+out:
+	/* Separate test+clear to avoid unnecessary atomics */
+	if ((alloc_flags & ALLOC_KSWAPD) &&
+	    unlikely(test_bit(ZONE_BOOSTED_WATERMARK, &zone->flags))) {
+		clear_bit(ZONE_BOOSTED_WATERMARK, &zone->flags);
+		wakeup_kswapd(zone, 0, 0, zone_idx(zone));
+	}
+
+	VM_BUG_ON_PAGE(page && bad_range(zone, page), page);
+	return page;
+}
+#+end_example
+该函数本身比较简单，先是按两种情况各自调用相应的接口去分配页面，最后如果zone->flags设置了ZONE_BOOSTED_WATERMARK标志，就会唤醒kswapd线程以回收内存。这个标志是临时提高了水位线，提前触发kswapd进行回收，以避免后续更严重的内存紧缺情况，因为内存回收往往伴随着I/Oswap out或drop cache），提前回收可以降低突发I/O延迟，保证系统流畅运行。
+** rmqueue_pcplist
+pcp（per-cpu page）机制主要为了减少对zone->lock的争用，提前缓存部分页面到pcp链表里，这样分配的时候只需要从per-cpu的缓存页面拿，而不需要动zone，rmqueue_pcplist的实现如下：
+#+begin_example
+/* Lock and remove page from the per-cpu list */
+static struct page *rmqueue_pcplist(struct zone *preferred_zone,
+			struct zone *zone, unsigned int order,
+			int migratetype, unsigned int alloc_flags)
+{
+	struct per_cpu_pages *pcp;
+	struct list_head *list;
+	struct page *page;
+	unsigned long __maybe_unused UP_flags;
+
+	/* spin_trylock may fail due to a parallel drain or IRQ reentrancy. */
+	pcp_trylock_prepare(UP_flags);
+	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
+	if (!pcp) {
+		pcp_trylock_finish(UP_flags);
+		return NULL;
+	}
+
+	/*
+	 * On allocation, reduce the number of pages that are batch freed.
+	 * See nr_pcp_free() where free_factor is increased for subsequent
+	 * frees.
+	 */
+	pcp->free_count >>= 1;
+	list = &pcp->lists[order_to_pindex(migratetype, order)];
+	page = __rmqueue_pcplist(zone, order, migratetype, alloc_flags, pcp, list);
+	pcp_spin_unlock(pcp);
+	pcp_trylock_finish(UP_flags);
+	if (page) {
+		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
+		zone_statistics(preferred_zone, zone, 1);
+	}
+	return page;
+}
+#+end_example
+pcp_spin_trylock实际上拿的就是per_cpu_pages:lock这个自选锁了，而不是zone:lock。list指明应该从哪个链表上摘取页面，per_cpu_pages:lists成员是个链表数组：
+#+begin_example
+struct per_cpu_pages {
+	spinlock_t lock;	/* Protects lists field */
+	int count;		/* number of pages in the list */
+	int high;		/* high watermark, emptying needed */
+	int high_min;		/* min high watermark */
+	int high_max;		/* max high watermark */
+	int batch;		/* chunk size for buddy add/remove */
+	u8 flags;		/* protected by pcp->lock */
+	u8 alloc_factor;	/* batch scaling factor during allocate */
+#ifdef CONFIG_NUMA
+	u8 expire;		/* When 0, remote pagesets are drained */
+#endif
+	short free_count;	/* consecutive free count */
+
+	/* Lists of pages, one per migrate type stored on the pcp-lists */
+	struct list_head lists[NR_PCP_LISTS];
+} ____cacheline_aligned_in_smp;
+#+end_example
+这个链表数组有NR_PCP_LISTS个成员：
+#+begin_example
+/*
+ * One per migratetype for each PAGE_ALLOC_COSTLY_ORDER. Two additional lists
+ * are added for THP. One PCP list is used by GPF_MOVABLE, and the other PCP list
+ * is used by GFP_UNMOVABLE and GFP_RECLAIMABLE.
+ */
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#define NR_PCP_THP 2
+#else
+#define NR_PCP_THP 0
+#endif
+#define NR_LOWORDER_PCP_LISTS (MIGRATE_PCPTYPES * (PAGE_ALLOC_COSTLY_ORDER + 1))
+#define NR_PCP_LISTS (NR_LOWORDER_PCP_LISTS + NR_PCP_THP)
+#+end_example
+可以看到对于0-3的每个阶都有MIGRATE_PCPTYPES（3）个链表，对于透明大页打开的情况，额外还有两个链表在数组的最后。
+
+这里简单介绍下____cacheline_aligned_in_smp这个属性，它其实就是编译器的对齐属性：
+#+begin_example
+#define CONFIG_X86_L1_CACHE_SHIFT 6
+/* L1 cache line size */
+#define L1_CACHE_SHIFT	(CONFIG_X86_L1_CACHE_SHIFT)
+
+#define L1_CACHE_BYTES		(1 << L1_CACHE_SHIFT)
+
+#ifndef SMP_CACHE_BYTES
+#define SMP_CACHE_BYTES L1_CACHE_BYTES
+#endif
+
+#ifndef ____cacheline_aligned
+#define ____cacheline_aligned __attribute__((__aligned__(SMP_CACHE_BYTES)))
+#endif
+#+end_example
+所以在x86架构上一般就是对齐到64B，也就是一个cache line的大小，这个对齐属性主要是为了解决伪共享问题，假如一个结构体跨缓存行了，由于缓存是以一行64B为单位同步的，一个CPU写了缓存行会引
+起另外一个CPU在该缓存上的数据也无效，产生MESI同步协议开销，所以对齐到缓存行并控制结构体的大小在一个缓存行内就可以避免这种伪共享问题。
+
+回到rmqueue_pcplist函数，通过order_to_pindex
+** rmqueue_buddy
 * 附节
 ** get_vma_policy生成ilx
