@@ -3,6 +3,46 @@
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
 #+HTML_HEAD: <link rel="stylesheet" href="../../org-manual.css" type="text/css">
+* 虚拟机热迁移总体流程
+虚拟机热迁移主要迁移内存数据（其它设备可以是block块设备等），所谓热迁移是src端的虚拟机并不会立即停止，而是虚拟机边运行，内存边往dst端迁移．这样就要求能够记录下哪些页面是脏的，Intel硬件可以使用PML硬件机制记录脏页，这些脏页信息一开始保存在内核kvm态，最终qemu会去拉取，并决定将哪些脏的页面发送出去．
+
+脏页数据发送的通路可以是socket网络，也可以是rdma等其它方式．
+
+由于虚拟机还在运行，那么产生脏页速率和发送脏页速率之间就有一个匹配问题，如果产生脏页的速率大于了发送脏页速率，热迁移是不会成功的．所以qemu里实现了一些机制，可以限制guest的运行频率．以下先按大的两两方面来总结下qemu虚拟机热迁移机制，后续的节将对这些细节代码进行分析，第一个方面是脏页跟踪机制，第二个方面虚拟机热迁移流程，从流程上说，脏页信息的流转相对虚拟机内存发送到dst端来说更加复杂些，因为脏页信息的维护要在kvm和qemu里各处流转处理，而虚拟机内存的发送主要就是qemu里开一个线程通过某种通道发送到dst即可，有了脏页信息就参考这个信息来发送哪些内存完事．
+** 脏页跟踪
+1，虚拟机脏页跟踪有两种实现方式，一是通过修改页表属性，使其成为写保护，这样每次guest访问内存都会走page-fault流程，可以记录下虚拟机访问了哪些脏页，但是这种机制效率低下，intel cpu硬件上支持了自动记录虚拟机访问了哪些gfn到内存里，这个机制叫PML（Page-Modification Log）．
+
+2，PML需要qemu侧主动开启，这以KVM_MEM_LOG_DIRTY_PAGES这个标志来决定，它是qemu和kvm都能识别的一个标志，最终的开启动作是kvm来做，qemu guest通过ioctl接口（kvm_vm_ioctl，cmd: KVM_SET_USER_MEMORY__REGION）去调用．
+
+3，guest侧开启PML的请求来到kvm后，会往vcpu的requests上挂入KVM_REQ_UPDATE_CPU_DIRTY_LOGGING请求，也就是说当时并没有立即设置相应的PML enable比特位．
+
+4，等到下一次通过vcpu_enter_guest进入虚拟机时，就会处理挂在这上面的KVM_REQ_UPDATE_CPU_DIRTY_LOGGING请求，主要就是通过secondary_exec_controls_setbit来设置Secondary Processor-Based VM-Execution Controls的第17个bit位．
+
+5，现代intel cpu一般都是支持PML的，所以vcpu创建初始化时，会通过alloc_page分配一个页面并将虚拟地址给到vmx->pml_pg，同时将这页的物理地址填到vmcs的PML_ADDRESS，物理上还有一个PML index的概念，指示某次guest访问gfn时，应将这个gfn填到这页的哪个位置．一页4KB大，每个访问条目信息占用8字节，64比特，所以共计可以有512个条目．
+
+6，当PML页面被写满或者虚拟机因为其它原因退出时，在vm-exit的流程里，都会走vmx_flush_pml_buffer来将PML页面里的脏页信息vcpu->dirty_ring环形buffer里（较早版本的qemu不支持dirty_ring，但dirty_ring效率更高，主要基于这种方式分析），这样PML页面又可以被guest循环利用记录其它的guest对gfn的访问了．
+
+7，一个脏页信息条目由结构体kvm_dirty_gfn表示，在同步到vcpu->dirty_ring时，会通过kvm_dirty_gfn_set_dirtied接口置上kvm_dirty_gfn.flags的KVM_DIRTY_GFN_F_DIRTY的位，表示现在这个条目被虚拟机访问过，需要qemu里热迁移相关的代码将其消耗发送给dst端，这里就可以看到一个生产者－消费者模型，kvm是生产者，而热迁移代码是消费者．
+
+8，一旦热迁移代码将entry记录的页面发送给dst端后，就会通过dirty_gfn_set_collected将对应kvm_dirty_gfn.flags置上KVM_DIRTY_GFN_F_RESET，表示我热迁移代码作为消费者已经消费了脏页信息，现在通过kvm_vm_ioctl接口发送KVM_RESET_DIRTY_RINGS命令．
+
+9，一旦kvm侧接受到KVM_RESET_DIRTY_RINGS的命令，检查vcpu->ring->dirty_gfns里所有的gfn，只要其kvm_dirty_gfn.flags为KVM_DIRTY_GFN_F_RESET时，就可以调用kvm_dirty_gfn_set_invalid将flags设置为0，表示前次对这个脏页的写已经全部处理完毕，未来再有guest访问这个gfn时，可以再次记录下．注意，原来为脏，没有及时发送对应页面数据又写了这个gfn对应的页面，这没什么问题，脏后脏是最新的信息，只要没漏就行．这些kvm_dirty_gfn:flags的状态转换实际上构成了一个简单的状态机．
+
+10，dirty ring的方式就是避免了内核态和用户态的拷贝，这是怎么做到的呢？首先用户态在cpu->kvm_fd上调用mmap系统调用，将这个文件PAGE_SIZE * KVM_DIRTY_LOG_PAGE_OFFSET处映射到内核里（kvm）里的vcpu->dirty_ring，映射出来的地址给到用户态（qemu guest）CPUState:kvm_dirty_gfns，这样最终的效果就是，热迁移代码读取CPUState:kvm_dirty_gfns就是直接读取的内核里的脏页信息．
+
+11，上面的＂映射＂依旧说的比较笼统，具体是怎么做的呢？对cpu->kvm_fd调用mmap时，最后会来到该文件对应的kvm_vcpu_mmap回调钩子来，里面就是初始化了PAGE*KVM_DIRTY_LOG_PAGE_OFFSET开始处的这个vma的vm_ops为kvm_vcpu_vm_ops，这个ops就是将来用户态进程访问CPUState:kvm_dirty_gfns时，查找的vma会调用的vma回调钩子集合，里面有自定义的缺页处理函数kvm_vcpu_fault，一旦用户态因为额访问CPUState:kvm_dirty_gfns触发缺页来到自定义的kvm_vcpu_fault缺页修复函数，就会将内核侧（kvm）里vcpu->dirty_ring所在的页面给到vm_fault:page，然后mm的公共流程里就会拿着这个page完成用户态进程对应CPUState:kvm_dirty_gfns虚拟地址的页表，这样下次再访问时，就可以访问到脏页所在的页面了．这种机制最后所造成的一个情况就是，用户态和内核态各有一个虚拟地址映射到同一个物理页面，这个页面最开始来自内核态分配，以实现共享避免内核态/用户态拷贝．
+
+12，从内核里拿到的脏页信息在qemu里也是有流转过程的，首先是CPUState:kvm_dirty_gfns->KVMSlot:dirty_bmap，然后又到了全局的ram_list.dirty_memory里，最后又拆分到每个RAMBlock:bmap里，最终热迁移代码（函数migration_bitmap_find_dirty）其实直接看的是RAMBlock:bmap里的信息来决定发送脏页．
+** 热迁移流程
+相比于脏信息的流转以及状态记录，热迁移本身的流程是简单直接的．
+
+1，所有需要热迁移的模块（除了最重要的内存模块，还有其它模块也可能需要热迁移，比如block），自行通过register_savevm_live函数注册SaveStateEntry到全局savevm_state量里．
+
+2，SaveStateEntry里最重要的成员就是SaveVMHandlers，这里面都是迁移各个阶段需要调用的回调函数，比如对于ram模块就是savevm_ram_handlers，在第一阶段需要调用的就是save_setup（ram模块就是ram_save_setup）进行发送前的准备，比如分配bmap脏页信息图，第二阶段要调用的就是save_live_iterate（ram_save_iterate）进行迭代发送，也包括了dst端需要运行的还原函数（ram_load）．
+
+3，虚拟机热迁移开始时，虚拟机并不会立即停止，而是边运行产生脏页，边发送，这也是催生复杂的脏页跟踪机制的原因．由此划分了迭代发送和最后一阶段的划分点，那就是剩下待发送的内存小于一轮能发送的阀值时，就可以停机src端的虚拟机了，进入第三阶段最后一轮发送．
+
+4，如果虚拟机产生脏页的速率bytes_dirty_period > bytes_dirty_threshold时，可以通过mig_throttle_guest_down函数让vcpu线程睡眠，降低其运行频率，这样自然产生脏页的速率也就降低了．
 * 脏页跟踪机制
 脏页信息最开始在内核侧kvm里记录，现在记录虚拟机写了哪些页面信息有两种方式，一是软件方式，将所有虚拟机使用的内存属性都改成写保护，这样每次虚拟机访问内存时，都会触发写保护异常，在异常流程里可以记录虚拟机访问了哪些页面，并且这次记录好了之后，退出异常流程前还要再次开启写保护，以使得下次可能还会访问该页面时，可以再次得到记录．
 
@@ -2540,6 +2580,13 @@ process_incoming_migration_co->qemu_loadvm_state->qemu_loadvm_state_main->qemu_l
 vmstate_load->load_state(ram_load)
 #+end_example
 后续的ram_load本文不再介绍，这可以另开一个大的主题在另外的文档介绍．
+
+* 调参指南
+虚拟机热迁移，有众多参数可以调节以影响迁移的成功率，以下对这些参数逐一介绍，不同的场景最合适的参数肯定是不一样的，这里给出解释和调节的影响，具体的场景需要具体的调测适配，注意以下参数是有优先的，排在前面的是尽量先尝试的，本表没提到的其它参数建议保持默认值（或者将来会继续出其它参数的建议设置和原理解释，但是这个表的参数是最重要最关键能影响热迁移是否成功）．以下主要针对6.2的qemu，不过有些参数4.2也是有的：
+#+CAPTION: 热迁移调参数指南
+#+ATTR_HTML: :width 37%
+#+ATTR_LATEX: :width 0.6\textwidth
+[[file:./param-guide.png]]
 
 # * 几个问题
 # 本层具体的研究几个问题的细节：

@@ -3507,7 +3507,44 @@ struct per_cpu_pages {
 所以在x86架构上一般就是对齐到64B，也就是一个cache line的大小，这个对齐属性主要是为了解决伪共享问题，假如一个结构体跨缓存行了，由于缓存是以一行64B为单位同步的，一个CPU写了缓存行会引
 起另外一个CPU在该缓存上的数据也无效，产生MESI同步协议开销，所以对齐到缓存行并控制结构体的大小在一个缓存行内就可以避免这种伪共享问题。
 
-回到rmqueue_pcplist函数，通过order_to_pindex
+回到rmqueue_pcplist函数，通过order_to_pindex得到对应迁移类型和order的list链表，随后可以从这个链表里分配页面：
+#+begin_example
+static inline unsigned int order_to_pindex(int migratetype, int order)
+{
+	bool __maybe_unused movable;
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (order > PAGE_ALLOC_COSTLY_ORDER) {
+		VM_BUG_ON(order != HPAGE_PMD_ORDER);
+
+		movable = migratetype == MIGRATE_MOVABLE;
+
+		return NR_LOWORDER_PCP_LISTS + movable;
+	}
+#else
+	VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER);
+#endif
+
+	return (MIGRATE_PCPTYPES * order) + migratetype;
+}
+#+end_example
+由于每个order都有MIGRATE_PCPTYPES这么多个链表，所以将分配请求的order乘以每个order多少个迁移类型，再加上目标迁移类型，得到在哪个链表上去分配页面，如果是大于PAGE_ALLOC_COSTLY_ORDER，则只按是否可移动选择最后两个链表之一。有了链表继续调用__rmqueue_pcplist去分配页面。
+
+后面继续分析__rmqueue_pcplist函数，现在先看成功分配了的两个统计函数，一是__count_zid_vm_events：
+#+begin_example
+#define __count_zid_vm_events(item, zid, delta) \
+	__count_vm_events(item##_NORMAL - ZONE_NORMAL + zid, delta)
+static inline void __count_vm_events(enum vm_event_item item, long delta)
+{
+	raw_cpu_add(vm_event_states.event[item], delta);
+}
+#+end_example
+这里是对PGALLOC事件项调用__count_vm_events去增加调用分配内存的计数，实际操作的是一个全局的percpu量vm_event_states：
+#+begin_example
+DEFINE_PER_CPU(struct vm_event_state, vm_event_states) = {{0}};
+EXPORT_PER_CPU_SYMBOL(vm_event_states);
+#+end_example
+配置CONFIG_VM_EVENT_COUNTERS控制了是否启用VM（虚拟内存）事件计数器，该配置可以在/proc/vmstat中显示各种VM相关的事件统计信息。
 ** rmqueue_buddy
 * 附节
 ** get_vma_policy生成ilx
