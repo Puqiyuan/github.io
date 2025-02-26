@@ -245,7 +245,8 @@ struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 #+end_example
 
 *作用：*\\
-分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略，这在本文[[get_vma_policy生成ilx][附节: get_vma_policy生成ilx]]中有介绍。
+分配2^order个页面，第一个参数是内存分配标志gfp，最后一个参数nid是前面使用numa_node_id获得的该运行CPU所在的node。针对第四个参数ilx，在交错策略下时，ilx表明是否使用task_struct里的il_prev作为依据来选择内存分配的节点，为NO_INTERLEAVE_INDEX时表明使用task_struct:ilx_prev，而当通过get_vma_policy来获得一个有效的ilx值时就使用这个值来确定如何选择哪个节点来分配内存。第三个参数pol就是前面通过get_task_policy获得的内存策略，当然还有其它的调用路径通过get_vma_policy来获得内存策略。
+# 这在本文[[get_vma_policy生成ilx][附节: get_vma_policy生成ilx]]中有介绍。
 
 *详细分析：*\\
 alloc_pages_mpol_noprof主要分为三个部分来完成其功能：
@@ -3544,7 +3545,53 @@ static inline void __count_vm_events(enum vm_event_item item, long delta)
 DEFINE_PER_CPU(struct vm_event_state, vm_event_states) = {{0}};
 EXPORT_PER_CPU_SYMBOL(vm_event_states);
 #+end_example
-配置CONFIG_VM_EVENT_COUNTERS控制了是否启用VM（虚拟内存）事件计数器，该配置可以在/proc/vmstat中显示各种VM相关的事件统计信息。
+配置CONFIG_VM_EVENT_COUNTERS控制了是否启用VM（虚拟内存）事件计数器，该配置可以在/proc/vmstat中显示各种VM相关的事件统计信息，默认一般是开启的。具体有哪些事件，可以查看vm_event_iterm枚举类型的定义。
+
+zone_statistics统计的信息也可以在/proc/vmstat里查看的，它就主要是关注NUMA_HIT、NUMA_MISS等这种numa信息的内存分配情况，细节代码不再分析了。
+
+rmqueue_pcplist本身就分析完毕了，后面继续分析它调用的核心子函数__rmqueue_pcplist。
+*** __rmqueue_pcplist
+该函数的实现如下：
+#+begin_example
+/* Remove page from the per-cpu list, caller must protect the list */
+static inline
+struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
+			int migratetype,
+			unsigned int alloc_flags,
+			struct per_cpu_pages *pcp,
+			struct list_head *list)
+{
+	struct page *page;
+
+	do {
+		if (list_empty(list)) {
+			int batch = nr_pcp_alloc(pcp, zone, order);
+			int alloced;
+
+			alloced = rmqueue_bulk(zone, order,
+					batch, list,
+					migratetype, alloc_flags);
+
+			pcp->count += alloced << order;
+			if (unlikely(list_empty(list)))
+				return NULL;
+		}
+
+		page = list_first_entry(list, struct page, pcp_list);
+		list_del(&page->pcp_list);
+		pcp->count -= 1 << order;
+	} while (check_new_pages(page, order));
+
+	return page;
+}
+#+end_example
+该函数首先会检查list链表里是否还有页面，如果没有页面是空链表了，就会通过下节将要介绍的rmqueue_bulk去buddy分配器（系统）里批量的移动一些页面到list链表里。如果list链表里有页面，那么就直接使用list_first_entry去获取链表上的第一个页面，然后使用list_del从list链表上删除这个页面，注意pcp链表里的页面通过page:pcp_list链入，而buddy系统里的页面通过page:buddy_list链入，per_cpu_pages:count是按单个页面计数方式的空闲页面数量。
+
+分配出来的页面还要通过check_new_pages进行检验，如果检验返回true代表这个页面不能使用（页面是bad的有问题），还要返回继续重新分配，is_check_pages_enabled一般是判断check_pages_enabled这个量，大概率是不满足，所以一般也就不检验了，假如要检验，也就是检查page未被映射（_mapcount==-1）、page未被任何进程或内核组件引用（ref_count==0）等条件，如果这些检查没有通过就会在check_new_page_bad->bad_page里打印具体什么原因。
+**** rmqueue_bulk
+****** __rmqueue
+******* __rmqueue_smallest
+******* __rmqueue_fallback
 ** rmqueue_buddy
-* 附节
-** get_vma_policy生成ilx
+# * 附节
+# ** get_vma_policy生成ilx
