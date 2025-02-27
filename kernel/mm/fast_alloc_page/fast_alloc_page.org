@@ -3589,6 +3589,58 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 
 分配出来的页面还要通过check_new_pages进行检验，如果检验返回true代表这个页面不能使用（页面是bad的有问题），还要返回继续重新分配，is_check_pages_enabled一般是判断check_pages_enabled这个量，大概率是不满足，所以一般也就不检验了，假如要检验，也就是检查page未被映射（_mapcount==-1）、page未被任何进程或内核组件引用（ref_count==0）等条件，如果这些检查没有通过就会在check_new_page_bad->bad_page里打印具体什么原因。
 **** rmqueue_bulk
+在分析rmqueue_bulk前，需要分析其第三个参数batch的来源，其通过nr_pcp_alloc函数而得到，它代表了一次从buddy分配器里批量的移动多少页面到pcp链表，nr_pcp_alloc实现如下：
+#+begin_example
+static int nr_pcp_alloc(struct per_cpu_pages *pcp, struct zone *zone, int order)
+{
+	int high, base_batch, batch, max_nr_alloc;
+	int high_max, high_min;
+
+	base_batch = READ_ONCE(pcp->batch);
+	high_min = READ_ONCE(pcp->high_min);
+	high_max = READ_ONCE(pcp->high_max);
+	high = pcp->high = clamp(pcp->high, high_min, high_max);
+
+	/* Check for PCP disabled or boot pageset */
+	if (unlikely(high < base_batch))
+		return 1;
+
+	if (order)
+		batch = base_batch;
+	else
+		batch = (base_batch << pcp->alloc_factor);
+
+	/*
+	 * If we had larger pcp->high, we could avoid to allocate from
+	 * zone.
+	 */
+	if (high_min != high_max && !test_bit(ZONE_BELOW_HIGH, &zone->flags))
+		high = pcp->high = min(high + batch, high_max);
+
+	if (!order) {
+		max_nr_alloc = max(high - pcp->count - base_batch, base_batch);
+		/*
+		 * Double the number of pages allocated each time there is
+		 * subsequent allocation of order-0 pages without any freeing.
+		 */
+		if (batch <= max_nr_alloc &&
+		    pcp->alloc_factor < CONFIG_PCP_BATCH_SCALE_MAX)
+			pcp->alloc_factor++;
+		batch = min(batch, max_nr_alloc);
+	}
+
+	/*
+	 * Scale batch relative to order if batch implies free pages
+	 * can be stored on the PCP. Batch can be 1 for small zones or
+	 * for boot pagesets which should never store free pages as
+	 * the pages may belong to arbitrary zones.
+	 */
+	if (batch > 1)
+		batch = max(batch >> order, 2);
+
+	return batch;
+}
+#+end_example
 ****** __rmqueue
 ******* __rmqueue_smallest
 ******* __rmqueue_fallback
