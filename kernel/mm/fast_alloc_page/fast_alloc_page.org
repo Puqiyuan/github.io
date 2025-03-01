@@ -3768,7 +3768,183 @@ static __always_inline void page_del_and_expand(struct zone *zone,
 	account_freepages(zone, -nr_pages, migratetype);
 }
 #+end_example
+先看下__del_page_from_free_list函数：
+#+begin_example
+static inline void __del_page_from_free_list(struct page *page, struct zone *zone,
+					     unsigned int order, int migratetype)
+{
+        VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
+		     "page type is %lu, passed migratetype is %d (nr=%d)\n",
+		     get_pageblock_migratetype(page), migratetype, 1 << order);
+
+	/* clear reported state and update reported page count */
+	if (page_reported(page))
+		__ClearPageReported(page);
+
+	list_del(&page->buddy_list);
+	__ClearPageBuddy(page);
+	set_page_private(page, 0);
+	zone->free_area[order].nr_free--;
+}
+#+end_example
+该函数首先通过__del_page_from_free_list将页面从原来order的迁移类型链表里删除，这里删除是通过page:buddy_list成员，因为往buddy系统里挂入页面也是通过这个成员。__ClearPageBuddy的定义在前面介绍PAGE_TYPE_OPS宏已经涉及到了，它清的其实是page:page_type成员里的某个比特。随后调用set_page_private将page:private设置为0，因为只有buddy allocator需要通过page:private记录页面的阶，返回给其它模块（pcp list）时不需要了。最后就是对应order的nr_free需要递减，这个nr_free里记录的单位是按2^order个页面每单位。
+
+__del_page_from_free_list删除页面完毕后，就可以调用exapnd函数来扩展高阶页面到低阶页面了。
+#+begin_example
+/*
+ * The order of subdivision here is critical for the IO subsystem.
+ * Please do not alter this order without good reasons and regression
+ * testing. Specifically, as large blocks of memory are subdivided,
+ * the order in which smaller blocks are delivered depends on the order
+ * they're subdivided in this function. This is the primary factor
+ * influencing the order in which pages are delivered to the IO
+ * subsystem according to empirical testing, and this is also justified
+ * by considering the behavior of a buddy system containing a single
+ * large block of memory acted on by a series of small allocations.
+ * This behavior is a critical factor in sglist merging's success.
+ *
+ * -- nyc
+ */
+static inline unsigned int expand(struct zone *zone, struct page *page, int low,
+				  int high, int migratetype)
+{
+	unsigned int size = 1 << high;
+	unsigned int nr_added = 0;
+
+	while (high > low) {
+		high--;
+		size >>= 1;
+		VM_BUG_ON_PAGE(bad_range(zone, &page[size]), &page[size]);
+
+		/*
+		 * Mark as guard pages (or page), that will allow to
+		 * merge back to allocator when buddy will be freed.
+		 * Corresponding page table entries will not be touched,
+		 * pages will stay not present in virtual address space
+		 */
+		if (set_page_guard(zone, &page[size], high))
+			continue;
+
+		__add_to_free_list(&page[size], zone, high, migratetype, false);
+		set_buddy_order(&page[size], high);
+		nr_added += size;
+	}
+
+	return nr_added;
+}
+#+end_example
+expand函数由当前high参数指明的order阶向下扩展页面，也就是把2^order这么多个页面依次挪到(high - 1)，(high - 2)...low这些阶对应的迁移类型的链表上去，最后的low这个阶也就是本次分配页面的阶。这里可以看下__add_to_free_list的实现：
+#+begin_example
+/* Used for pages not on another list */
+static inline void __add_to_free_list(struct page *page, struct zone *zone,
+				      unsigned int order, int migratetype,
+				      bool tail)
+{
+	struct free_area *area = &zone->free_area[order];
+
+	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
+		     "page type is %lu, passed migratetype is %d (nr=%d)\n",
+		     get_pageblock_migratetype(page), migratetype, 1 << order);
+
+	if (tail)
+		list_add_tail(&page->buddy_list, &area->free_list[migratetype]);
+	else
+		list_add(&page->buddy_list, &area->free_list[migratetype]);
+	area->nr_free++;
+}
+#+end_example
+还是操作buddy_list成员加到其它链表，注意expand扩展完了，除了最后low这个order对应的页面（它在返回时要加入到pcp链表），其它order的页面还是在buddy系统里，只是换到了低阶的链表里去，在buddy系统里，自然要通过set_buddy_order设置页面的order阶。
 ******* __rmqueue_fallback
+如果前面的__rmqueue_smallest没能获得页面，这说明所有order对应migratetype的链表里都没有空闲页面，这时可以考虑调用__rmqueue_fallback去其它迁移类型尝试：
+#+begin_example
+/*
+ * Try finding a free buddy page on the fallback list and put it on the free
+ * list of requested migratetype, possibly along with other pages from the same
+ * block, depending on fragmentation avoidance heuristics. Returns true if
+ * fallback was found so that __rmqueue_smallest() can grab it.
+ *
+ * The use of signed ints for order and current_order is a deliberate
+ * deviation from the rest of this file, to make the for loop
+ * condition simpler.
+ */
+static __always_inline struct page *
+__rmqueue_fallback(struct zone *zone, int order, int start_migratetype,
+						unsigned int alloc_flags)
+{
+	struct free_area *area;
+	int current_order;
+	int min_order = order;
+	struct page *page;
+	int fallback_mt;
+	bool can_steal;
+
+	/*
+	 * Do not steal pages from freelists belonging to other pageblocks
+	 * i.e. orders < pageblock_order. If there are no local zones free,
+	 * the zonelists will be reiterated without ALLOC_NOFRAGMENT.
+	 */
+	if (order < pageblock_order && alloc_flags & ALLOC_NOFRAGMENT)
+		min_order = pageblock_order;
+
+	/*
+	 * Find the largest available free page in the other list. This roughly
+	 * approximates finding the pageblock with the most free pages, which
+	 * would be too costly to do exactly.
+	 */
+	for (current_order = MAX_PAGE_ORDER; current_order >= min_order;
+				--current_order) {
+		area = &(zone->free_area[current_order]);
+		fallback_mt = find_suitable_fallback(area, current_order,
+				start_migratetype, false, &can_steal);
+		if (fallback_mt == -1)
+			continue;
+
+		/*
+		 * We cannot steal all free pages from the pageblock and the
+		 * requested migratetype is movable. In that case it's better to
+		 * steal and split the smallest available page instead of the
+		 * largest available page, because even if the next movable
+		 * allocation falls back into a different pageblock than this
+		 * one, it won't cause permanent fragmentation.
+		 */
+		if (!can_steal && start_migratetype == MIGRATE_MOVABLE
+					&& current_order > order)
+			goto find_smallest;
+
+		goto do_steal;
+	}
+
+	return NULL;
+
+find_smallest:
+	for (current_order = order; current_order < NR_PAGE_ORDERS; current_order++) {
+		area = &(zone->free_area[current_order]);
+		fallback_mt = find_suitable_fallback(area, current_order,
+				start_migratetype, false, &can_steal);
+		if (fallback_mt != -1)
+			break;
+	}
+
+	/*
+	 * This should not happen - we already found a suitable fallback
+	 * when looking for the largest page.
+	 */
+	VM_BUG_ON(current_order > MAX_PAGE_ORDER);
+
+do_steal:
+	page = get_page_from_free_area(area, fallback_mt);
+
+	/* take off list, maybe claim block, expand remainder */
+	page = steal_suitable_fallback(zone, page, current_order, order,
+				       start_migratetype, alloc_flags, can_steal);
+
+	trace_mm_page_alloc_extfrag(page, order, current_order,
+		start_migratetype, fallback_mt);
+
+	return page;
+}
+#+end_example
+
 ** rmqueue_buddy
 # * 附节
 # ** get_vma_policy生成ilx
