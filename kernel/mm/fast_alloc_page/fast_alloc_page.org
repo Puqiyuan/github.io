@@ -3588,8 +3588,8 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 该函数首先会检查list链表里是否还有页面，如果没有页面是空链表了，就会通过下节将要介绍的rmqueue_bulk去buddy分配器（系统）里批量的移动一些页面到list链表里。如果list链表里有页面，那么就直接使用list_first_entry去获取链表上的第一个页面，然后使用list_del从list链表上删除这个页面，注意pcp链表里的页面通过page:pcp_list链入，而buddy系统里的页面通过page:buddy_list链入，per_cpu_pages:count是按单个页面计数方式的空闲页面数量。
 
 分配出来的页面还要通过check_new_pages进行检验，如果检验返回true代表这个页面不能使用（页面是bad的有问题），还要返回继续重新分配，is_check_pages_enabled一般是判断check_pages_enabled这个量，大概率是不满足，所以一般也就不检验了，假如要检验，也就是检查page未被映射（_mapcount==-1）、page未被任何进程或内核组件引用（ref_count==0）等条件，如果这些检查没有通过就会在check_new_page_bad->bad_page里打印具体什么原因。
-**** rmqueue_bulk
-在分析rmqueue_bulk前，需要分析其第三个参数batch的来源，其通过nr_pcp_alloc函数而得到，它代表了一次从buddy分配器里批量的移动多少页面到pcp链表，nr_pcp_alloc实现如下：
+
+下面分析rmqeue_bulk，在分析rmqueue_bulk前，需要分析其第三个参数batch的来源，其通过nr_pcp_alloc函数而得到，它代表了一次从buddy分配器里批量的移动多少页面到pcp链表，nr_pcp_alloc实现如下：
 #+begin_example
 static int nr_pcp_alloc(struct per_cpu_pages *pcp, struct zone *zone, int order)
 {
@@ -3682,7 +3682,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 }
 #+end_example
 参数count代表需要分配多少次，每次按2^order个页面分配，参数list是调用者提供的将分配出来的页面加入到哪个列表上，这里可以看到buddyallocator需要拿到zone->lock自旋锁才能到buddy里去分配页面。
-****** __rmqueue
+
 该函数实现如下：
 #+begin_example
 /*
@@ -3723,7 +3723,7 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 }
 #+end_example
 如果配置了CMA（Contiguous Memory Allocator）并且CMA页面多到一定程度，是可以从cma类型的页面里拿出来到pcp链表的，这里考虑没有开启这个配置的情况。该函数首先经由__rmqueue_smallest从目标migratetype里分配页面，如果没有能分配出来页面，就需要fallback（回退）到其它类型再次尝试。
-******* __rmqueue_smallest
+
 #+begin_example
 /*
  * Go through the free lists for the given migratetype and remove
@@ -3854,7 +3854,7 @@ static inline void __add_to_free_list(struct page *page, struct zone *zone,
 }
 #+end_example
 还是操作buddy_list成员加到其它链表，注意expand扩展完了，除了最后low这个order对应的页面（它在返回时要加入到pcp链表），其它order的页面还是在buddy系统里，只是换到了低阶的链表里去，在buddy系统里，自然要通过set_buddy_order设置页面的order阶。
-******* __rmqueue_fallback
+
 如果前面的__rmqueue_smallest没能获得页面，这说明所有order对应migratetype的链表里都没有空闲页面，这时可以考虑调用__rmqueue_fallback去其它迁移类型尝试：
 #+begin_example
 /*
@@ -3941,6 +3941,197 @@ do_steal:
 	trace_mm_page_alloc_extfrag(page, order, current_order,
 		start_migratetype, fallback_mt);
 
+	return page;
+}
+#+end_example
+该函数首先尝试从高的order（大的块）向下进行检查，看是否有满足条件的order的块可以偷取页面，因为回退拆分小的块会越拆越小，导致碎片化严重。但如果caller请求的migratetype是MIGRATE_MOVABLE的又不能偷取整个较大的块，就要避免污染大的页块，跳到find_smallest从最小的order块开始查找满足条件的pageblock。
+
+判断是否能偷取块里页面的关键函数是find_suitable_fallback，该函数如果没有找到合适的migratetype就返回-1：
+#+begin_example
+/*
+ * Check whether there is a suitable fallback freepage with requested order.
+ * If only_stealable is true, this function returns fallback_mt only if
+ * we can steal other freepages all together. This would help to reduce
+ * fragmentation due to mixed migratetype pages in one pageblock.
+ */
+int find_suitable_fallback(struct free_area *area, unsigned int order,
+			int migratetype, bool only_stealable, bool *can_steal)
+{
+	int i;
+	int fallback_mt;
+
+	if (area->nr_free == 0)
+		return -1;
+
+	*can_steal = false;
+	for (i = 0; i < MIGRATE_PCPTYPES - 1 ; i++) {
+		fallback_mt = fallbacks[migratetype][i];
+		if (free_area_empty(area, fallback_mt))
+			continue;
+
+		if (can_steal_fallback(order, migratetype))
+			*can_steal = true;
+
+		if (!only_stealable)
+			return fallback_mt;
+
+		if (*can_steal)
+			return fallback_mt;
+	}
+
+	return -1;
+}
+#+end_example
+这里的可迁移类型一般就是三类，一是MIGRATE_MOVABLE，二是MIGRATE_UNMOVABLE，三是MIGRATE_RECLAIMABLE，针对每种类型，都定义了当发生回退到其它类型时，这些类型有个优先级数组，就是fallbacks数组：
+#+begin_example
+/*
+ * This array describes the order lists are fallen back to when
+ * the free lists for the desirable migrate type are depleted
+ *
+ * The other migratetypes do not have fallbacks.
+ */
+static int fallbacks[MIGRATE_PCPTYPES][MIGRATE_PCPTYPES - 1] = {
+	[MIGRATE_UNMOVABLE]   = { MIGRATE_RECLAIMABLE, MIGRATE_MOVABLE   },
+	[MIGRATE_MOVABLE]     = { MIGRATE_RECLAIMABLE, MIGRATE_UNMOVABLE },
+	[MIGRATE_RECLAIMABLE] = { MIGRATE_UNMOVABLE,   MIGRATE_MOVABLE   },
+};
+#+end_example
+定义这个优先级的一个原则就是，MIGRATE_UNMOVABLE尽量避免混入MIGRATE_MOVABLE的页面里去，这会导致原来MIGRATE_MOVABLE页面所在的块变得不能通过compaction机制去移动进而构成一个大的MOVABLE的块，也就是避免内存碎片化。
+
+can_steal_fallback用于判断是否能偷取整个页面，这里only_stealable参数为false，所以并不关心can_steal_fallback的返回值，不过这里可以看下这个函数的实现：
+#+begin_example
+/*
+ * When we are falling back to another migratetype during allocation, try to
+ * steal extra free pages from the same pageblocks to satisfy further
+ * allocations, instead of polluting multiple pageblocks.
+ *
+ * If we are stealing a relatively large buddy page, it is likely there will
+ * be more free pages in the pageblock, so try to steal them all. For
+ * reclaimable and unmovable allocations, we steal regardless of page size,
+ * as fragmentation caused by those allocations polluting movable pageblocks
+ * is worse than movable allocations stealing from unmovable and reclaimable
+ * pageblocks.
+ */
+static bool can_steal_fallback(unsigned int order, int start_mt)
+{
+	/*
+	 * Leaving this order check is intended, although there is
+	 * relaxed order check in next check. The reason is that
+	 * we can actually steal whole pageblock if this condition met,
+	 * but, below check doesn't guarantee it and that is just heuristic
+	 * so could be changed anytime.
+	 */
+	if (order >= pageblock_order)
+		return true;
+
+	/*
+	 * Movable pages won't cause permanent fragmentation, so when you alloc
+	 * small pages, you just need to temporarily steal unmovable or
+	 * reclaimable pages that are closest to the request size.  After a
+	 * while, memory compaction may occur to form large contiguous pages,
+	 * and the next movable allocation may not need to steal.  Unmovable and
+	 * reclaimable allocations need to actually steal pages.
+	 */
+	if (order >= pageblock_order / 2 ||
+		start_mt == MIGRATE_RECLAIMABLE ||
+		start_mt == MIGRATE_UNMOVABLE ||
+		page_group_by_mobility_disabled)
+		return true;
+
+	return false;
+}
+#+end_example
+一就是分配的order本来就比较大，大于pageblock_order，这自然是满足条件的，也就是多个整的pageblock都被偷取了，自然不会存在一个pageblock里混入其它迁移类型的情况，另外一种就是尽管order较小（小于pageblock order但大于pageblock order的一半），但由于caller请求的迁移类型不是MOVABLE的，这种情况下也把整个pageblock交给调用者拿去fallback，这同样是为了避免MOVABLE的pageblock里混入其它两种迁移类型的页面引起碎片化（不能通过移动页面整理出大片的连续空间了）。
+
+回到__rmqueue_fallback函数，假设现在已经找到了回退的类型，首先通过get_page_from_area从空闲链表里去把页面摘取出来，随后通过stral_suitable_fallback执行真正的偷取动作：
+#+begin_example
+/*
+ * This function implements actual steal behaviour. If order is large enough, we
+ * can claim the whole pageblock for the requested migratetype. If not, we check
+ * the pageblock for constituent pages; if at least half of the pages are free
+ * or compatible, we can still claim the whole block, so pages freed in the
+ * future will be put on the correct free list. Otherwise, we isolate exactly
+ * the order we need from the fallback block and leave its migratetype alone.
+ */
+static struct page *
+steal_suitable_fallback(struct zone *zone, struct page *page,
+			int current_order, int order, int start_type,
+			unsigned int alloc_flags, bool whole_block)
+{
+	int free_pages, movable_pages, alike_pages;
+	unsigned long start_pfn;
+	int block_type;
+
+	block_type = get_pageblock_migratetype(page);
+
+	/*
+	 * This can happen due to races and we want to prevent broken
+	 * highatomic accounting.
+	 */
+	if (is_migrate_highatomic(block_type))
+		goto single_page;
+
+	/* Take ownership for orders >= pageblock_order */
+	if (current_order >= pageblock_order) {
+		unsigned int nr_added;
+
+		del_page_from_free_list(page, zone, current_order, block_type);
+		change_pageblock_range(page, current_order, start_type);
+		nr_added = expand(zone, page, order, current_order, start_type);
+		account_freepages(zone, nr_added, start_type);
+		return page;
+	}
+
+	/*
+	 * Boost watermarks to increase reclaim pressure to reduce the
+	 * likelihood of future fallbacks. Wake kswapd now as the node
+	 * may be balanced overall and kswapd will not wake naturally.
+	 */
+	if (boost_watermark(zone) && (alloc_flags & ALLOC_KSWAPD))
+		set_bit(ZONE_BOOSTED_WATERMARK, &zone->flags);
+
+	/* We are not allowed to try stealing from the whole block */
+	if (!whole_block)
+		goto single_page;
+
+	/* moving whole block can fail due to zone boundary conditions */
+	if (!prep_move_freepages_block(zone, page, &start_pfn, &free_pages,
+				       &movable_pages))
+		goto single_page;
+
+	/*
+	 * Determine how many pages are compatible with our allocation.
+	 * For movable allocation, it's the number of movable pages which
+	 * we just obtained. For other types it's a bit more tricky.
+	 */
+	if (start_type == MIGRATE_MOVABLE) {
+		alike_pages = movable_pages;
+	} else {
+		/*
+		 * If we are falling back a RECLAIMABLE or UNMOVABLE allocation
+		 * to MOVABLE pageblock, consider all non-movable pages as
+		 * compatible. If it's UNMOVABLE falling back to RECLAIMABLE or
+		 * vice versa, be conservative since we can't distinguish the
+		 * exact migratetype of non-movable pages.
+		 */
+		if (block_type == MIGRATE_MOVABLE)
+			alike_pages = pageblock_nr_pages
+						- (free_pages + movable_pages);
+		else
+			alike_pages = 0;
+	}
+	/*
+	 * If a sufficient number of pages in the block are either free or of
+	 * compatible migratability as our allocation, claim the whole block.
+	 */
+	if (free_pages + alike_pages >= (1 << (pageblock_order-1)) ||
+			page_group_by_mobility_disabled) {
+		__move_freepages_block(zone, start_pfn, block_type, start_type);
+		return __rmqueue_smallest(zone, order, start_type);
+	}
+
+single_page:
+	page_del_and_expand(zone, page, order, current_order, block_type);
 	return page;
 }
 #+end_example
