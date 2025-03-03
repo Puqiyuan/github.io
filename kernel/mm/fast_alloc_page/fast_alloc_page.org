@@ -198,7 +198,7 @@ MAX_NUMNODES定义了系统支持的最大NUMA节点数量：
 
 <<nodes_shift>>
 而NODES_SHIFT的值依据不同的架构有不同的配置，这主要体现在比如arch/x86/Kconfig中有如下代码：
-#+begin_exampleonf
+#+begin_example
 config NODES_SHIFT
 	int "Maximum NUMA Nodes (as a power of 2)" if !MAXSMP
 	range 1 10
