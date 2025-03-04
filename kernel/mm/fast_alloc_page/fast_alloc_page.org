@@ -2897,7 +2897,7 @@ out_unlock:
 有了上面的背景再来分析reserve_highatomic_pageblock函数开头的判断，为high-order atomic分配保留的页面最多就是zone:managed_pages的百分之一。当百分之一的managed_pages还小于pageblock_nr_pages时，就不需要做预留页面了，因为最小也是预留一个pageblock。
 
 在加锁前后都判断了zone->nr_reserved_highatomic >= max_managed，这种编程模式叫做double-checked locking，便于在条件满足时快速返回而不用获取锁。
-
+<<get_pageblock_migratetype>>
 继续往下看通过get_pageblock_migratetype获得了分配出来的page对应的迁移类型：
 #+begin_example
 #define get_pageblock_migratetype(page)					\
@@ -4135,7 +4135,27 @@ single_page:
 	return page;
 }
 #+end_example
+该函数所谓的steal页面，其实就是把目标页面page的迁移类型改成caller请求的start_type，同时返回分配好的page。
 
+首先通过[[get_pageblock_migratetype][get_pageblock_migratetype]]获得当前目标返回页面的迁移类型block_type，如果准备使用的页面的迁移类型是MIGRATE_HIGHATOMIC，则直接跳转到single_page逻辑，而不尝试去占用整个pageblock。这是因为MIGRATE_HIGHATOMIC页面需要保持一定的可用性，不能随意更改其迁移类型，否则可能影响系统的关键分配路径。进入single_page逻辑后，只会尝试拆分所需的order大小的页面，而不会影响整个pageblock，确保MIGRATE_HIGHATOMIC类型的页面不会被整体替换或迁移。
+
+如果current_order大于等于pageblock_order，直接窃取整个pageblock，current_order >= pageblock_order说明这个page占据了整个pageblock，所以直接：
+
+1，从free list中删除该page。
+
+2，修改pageblock的migratetype以适应start_type（就是修改为新的start_type类型）。
+
+3，调用expand()处理剩余的页，如果current_order > order，就分割页块。
+
+4，更新zone的freepage计数。
+
+5，返回page以满足分配。
+
+接下来可能会增加回收压力，设置ZONE_BOOSTED_WATERMARK标志以在rmqueue函数里判断这个标志被设置进而唤醒kswapd回收更多的内存，稍后会详细分析这个boost_watermark函数。
+
+如果whole_block == false，就不尝试整块窃取，直接进入单页处理。如果whole_block允许，尝试窃取整个pageblock，当然这还需要接下来的一些逻辑判断到底能不能窃取整个块。
+
+其中一个重要条件是prep_move_freepages_block的返回值，如果prep_move_freepages_block返回false，代表不能窃取整个块。
 ** rmqueue_buddy
 # * 附节
 # ** get_vma_policy生成ilx
