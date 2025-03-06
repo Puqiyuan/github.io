@@ -4155,7 +4155,89 @@ single_page:
 
 如果whole_block == false，就不尝试整块窃取，直接进入单页处理。如果whole_block允许，尝试窃取整个pageblock，当然这还需要接下来的一些逻辑判断到底能不能窃取整个块。
 
-其中一个重要条件是prep_move_freepages_block的返回值，如果prep_move_freepages_block返回false，代表不能窃取整个块。
+其中一个重要条件是prep_move_freepages_block的返回值，如果prep_move_freepages_block返回false，代表不能窃取整个块，去往single_page只摘取满足本次的页面，这个函数前面遇到过，里面的逻辑也较为简单，此处不再分析。
+
+继续往下的逻辑：
+#+begin_example
+	/*
+	 * Determine how many pages are compatible with our allocation.
+	 * For movable allocation, it's the number of movable pages which
+	 * we just obtained. For other types it's a bit more tricky.
+	 */
+	if (start_type == MIGRATE_MOVABLE) {
+		alike_pages = movable_pages;
+	} else {
+		/*
+		 * If we are falling back a RECLAIMABLE or UNMOVABLE allocation
+		 * to MOVABLE pageblock, consider all non-movable pages as
+		 * compatible. If it's UNMOVABLE falling back to RECLAIMABLE or
+		 * vice versa, be conservative since we can't distinguish the
+		 * exact migratetype of non-movable pages.
+		 */
+		if (block_type == MIGRATE_MOVABLE)
+			alike_pages = pageblock_nr_pages
+						- (free_pages + movable_pages);
+		else
+			alike_pages = 0;
+	}
+#+end_example
+如果请求的页面迁移类型是MIGRATE_MOVABLE，那么要fallback到MIGRATE_UNMOVABLE或MIGRATE_RECLAMIMABLE，这样的block里面不会有多余的页面变成MIGRATE_MOVABLE，否则会导致MIGRATE_UNMOVABLE/MIGRATE_RECLAIMABLE变少，使得将来fallback进MIGRATE_MOVABLE变得更容易，也就是非movable的页面变少了需要去movable的页面拿，这种情况是要避免的，相当于moveable页面变得
+没法移动了。
+
+继续往下看，如果现在的block_type是MIGRATE_MOVABLE，就是将要拆一个moveable的块给非moveable的页面用，这时要看看这个块里还有没有不可移动的页面，数量赋给alike_pages，这样所有不可移动的页面就是free_pages和alike_pages之和，如果free_pages + alike_pages足够多，整个pageblock会被改为start_type（即MIGRATE_UNMOVABLE或MIGRATE_RECLAIMABLE），这样可以保证，避免继续尝试将pageblock作为MIGRATE_MOVABLE处理（因为已经有太多非MOVABLE页面），保证未来的MOVABLE分配不会再误进入这个pageblock，防止MOVABLE页面被UNMOVABLE污染，这就是如下代码的逻辑：
+#+begin_example
+	/*
+	 * If a sufficient number of pages in the block are either free or of
+	 * compatible migratability as our allocation, claim the whole block.
+	 */
+	if (free_pages + alike_pages >= (1 << (pageblock_order-1)) ||
+			page_group_by_mobility_disabled) {
+		__move_freepages_block(zone, start_pfn, block_type, start_type);
+		return __rmqueue_smallest(zone, order, start_type);
+	}
+#+end_example
+
+最后的single_page不会更改整个pageblock的迁移类型，只取特定大小的页面，具体的动作page_del_and_expand前面分析过了。
+
+下面想分析下boost_watermark函数：
+#+begin_example
+static inline bool boost_watermark(struct zone *zone)
+{
+	unsigned long max_boost;
+
+	if (!watermark_boost_factor)
+		return false;
+	/*
+	 * Don't bother in zones that are unlikely to produce results.
+	 * On small machines, including kdump capture kernels running
+	 * in a small area, boosting the watermark can cause an out of
+	 * memory situation immediately.
+	 */
+	if ((pageblock_nr_pages * 4) > zone_managed_pages(zone))
+		return false;
+
+	max_boost = mult_frac(zone->_watermark[WMARK_HIGH],
+			watermark_boost_factor, 10000);
+
+	/*
+	 * high watermark may be uninitialised if fragmentation occurs
+	 * very early in boot so do not boost. We do not fall
+	 * through and boost by pageblock_nr_pages as failing
+	 * allocations that early means that reclaim is not going
+	 * to help and it may even be impossible to reclaim the
+	 * boosted watermark resulting in a hang.
+	 */
+	if (!max_boost)
+		return false;
+
+	max_boost = max(pageblock_nr_pages, max_boost);
+
+	zone->watermark_boost = min(zone->watermark_boost + pageblock_nr_pages,
+		max_boost);
+
+	return true;
+}
+#+end_example
 ** rmqueue_buddy
 # * 附节
 # ** get_vma_policy生成ilx
