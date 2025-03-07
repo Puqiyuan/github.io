@@ -4238,6 +4238,54 @@ static inline bool boost_watermark(struct zone *zone)
 	return true;
 }
 #+end_example
+该函数主要是临时提高水位，用于短暂地提高WMARK_HIGH，从而影响内存回收的触发阈值，使得系统在内存回收（reclaim）过程中回收更多的页面，以改善高阶页面分配的成功率。尤其是balance_pgdat()在触发内存回收时会参考WMARK_HIGH，如果watermark_boost提高了WMARK_HIGH，那么kswapd线程就会更积极地回收内存，从而腾出更多的可用页面。boost_watermark()触发时，watermark_boost逐步增加（但不会超过max_boost）。在kswapd或direct reclaim过程中，当内存压力缓解，watermark_boost可能会被逐步清零，从而恢复正常的WMARK_HIGH。watermark_boost仅是临时性的，不会永久提高水位，在内存回收机制执行后，系统最终会回归正常状态。
+
+具体的逻辑本函数较为简单就不分析细节了。
 ** rmqueue_buddy
+该函数只是列下其代码，具体的也不会分析了，因为其涉及到的__rmqueue_smallest和__rmqueue前面都分析过了：
+#+begin_example
+static __always_inline
+struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
+			   unsigned int order, unsigned int alloc_flags,
+			   int migratetype)
+{
+	struct page *page;
+	unsigned long flags;
+
+	do {
+		page = NULL;
+		spin_lock_irqsave(&zone->lock, flags);
+		if (alloc_flags & ALLOC_HIGHATOMIC)
+			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
+		if (!page) {
+			page = __rmqueue(zone, order, migratetype, alloc_flags);
+
+			/*
+			 * If the allocation fails, allow OOM handling and
+			 * order-0 (atomic) allocs access to HIGHATOMIC
+			 * reserves as failing now is worse than failing a
+			 * high-order atomic allocation in the future.
+			 */
+			if (!page && (alloc_flags & (ALLOC_OOM|ALLOC_NON_BLOCK)))
+				page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
+
+			if (!page) {
+				spin_unlock_irqrestore(&zone->lock, flags);
+				return NULL;
+			}
+		}
+		spin_unlock_irqrestore(&zone->lock, flags);
+	} while (check_new_pages(page, order));
+
+	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
+	zone_statistics(preferred_zone, zone, 1);
+
+	return page;
+}
+
+
+#+end_example
+
+以上，就是Linux内核内存管理快速分配一个页面的流程。
 # * 附节
 # ** get_vma_policy生成ilx
