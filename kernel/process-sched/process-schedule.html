@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-01-30 Thu 22:44 -->
+<!-- 2025-03-09 Sun 21:56 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程调度</title>
@@ -34,6 +34,16 @@
 <body>
 <div id="content">
 <h1 class="title">进程调度</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#org08fd20a">1. __schedule</a></li>
+<li><a href="#org89f2b8b">2. pick_next_task</a></li>
+<li><a href="#org1016f31">3. context_switch</a></li>
+</ul>
+</div>
+</div>
 <p>
 __schedule是进程调度的核心函数，它先调用pick_next_task函数算出需要运行哪个进程，然后调用context_switch函数完成切换。
 </p>
@@ -59,7 +69,7 @@ __schedule是进程调度的核心函数，它先调用pick_next_task函数算�
 <p>
 __schedule函数的参数sched_mode指明了以何种模式进入的调度器，它的取值可以有：
 </p>
-<pre class="example" id="orga1879a9">
+<pre class="example" id="orge3f38fb">
 /*
  * Constants for the sched_mode argument of __schedule().
  *
@@ -94,10 +104,157 @@ SM_RTLOCK_WAIT表示任务正在等待RT（实时）锁。实时内核（RT内�
 <p>
 比如preempt_schedule_common函数调用_schedule时就指明了参数SM_PREEMPT，表明本次进入调度器是因为抢占。
 </p>
+
+<div id="outline-container-org08fd20a" class="outline-2">
+<h2 id="org08fd20a"><span class="section-number-2">1.</span> __schedule</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+以下是__schedule的实现：
+</p>
+<pre class="example" id="orgb221907">
+static void __sched notrace __schedule(int sched_mode)
+{
+	struct task_struct *prev, *next;
+	/*
+	 * On PREEMPT_RT kernel, SM_RTLOCK_WAIT is noted
+	 * as a preemption by schedule_debug() and RCU.
+	 */
+	bool preempt = sched_mode &gt; SM_NONE;
+	unsigned long *switch_count;
+	unsigned long prev_state;
+	struct rq_flags rf;
+	struct rq *rq;
+	int cpu;
+
+	cpu = smp_processor_id();
+	rq = cpu_rq(cpu);
+	prev = rq-&gt;curr;
+
+	schedule_debug(prev, preempt);
+
+	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
+		hrtick_clear(rq);
+
+	local_irq_disable();
+	rcu_note_context_switch(preempt);
+
+	/*
+	 * Make sure that signal_pending_state()-&gt;signal_pending() below
+	 * can't be reordered with __set_current_state(TASK_INTERRUPTIBLE)
+	 * done by the caller to avoid the race with signal_wake_up():
+	 *
+	 * __set_current_state(@state)		signal_wake_up()
+	 * schedule()				  set_tsk_thread_flag(p, TIF_SIGPENDING)
+	 *					  wake_up_state(p, state)
+	 *   LOCK rq-&gt;lock			    LOCK p-&gt;pi_state
+	 *   smp_mb__after_spinlock()		    smp_mb__after_spinlock()
+	 *     if (signal_pending_state())	    if (p-&gt;state &amp; @state)
+	 *
+	 * Also, the membarrier system call requires a full memory barrier
+	 * after coming from user-space, before storing to rq-&gt;curr; this
+	 * barrier matches a full barrier in the proximity of the membarrier
+	 * system call exit.
+	 */
+	rq_lock(rq, &amp;rf);
+	smp_mb__after_spinlock();
+
+	/* Promote REQ to ACT */
+	rq-&gt;clock_update_flags &lt;&lt;= 1;
+	update_rq_clock(rq);
+	rq-&gt;clock_update_flags = RQCF_UPDATED;
+
+	switch_count = &amp;prev-&gt;nivcsw;
+
+	/* Task state changes only considers SM_PREEMPT as preemption */
+	preempt = sched_mode == SM_PREEMPT;
+
+	/*
+	 * We must load prev-&gt;state once (task_struct::state is volatile), such
+	 * that we form a control dependency vs deactivate_task() below.
+	 */
+	prev_state = READ_ONCE(prev-&gt;__state);
+	if (sched_mode == SM_IDLE) {
+		/* SCX must consult the BPF scheduler to tell if rq is empty */
+		if (!rq-&gt;nr_running &amp;&amp; !scx_enabled()) {
+			next = prev;
+			goto picked;
+		}
+	} else if (!preempt &amp;&amp; prev_state) {
+		try_to_block_task(rq, prev, prev_state);
+		switch_count = &amp;prev-&gt;nvcsw;
+	}
+
+	next = pick_next_task(rq, prev, &amp;rf);
+	rq_set_donor(rq, next);
+picked:
+	clear_tsk_need_resched(prev);
+	clear_preempt_need_resched();
+#ifdef CONFIG_SCHED_DEBUG
+	rq-&gt;last_seen_need_resched_ns = 0;
+#endif
+
+	if (likely(prev != next)) {
+		rq-&gt;nr_switches++;
+		/*
+		 * RCU users of rcu_dereference(rq-&gt;curr) may not see
+		 * changes to task_struct made by pick_next_task().
+		 */
+		RCU_INIT_POINTER(rq-&gt;curr, next);
+		/*
+		 * The membarrier system call requires each architecture
+		 * to have a full memory barrier after updating
+		 * rq-&gt;curr, before returning to user-space.
+		 *
+		 * Here are the schemes providing that barrier on the
+		 * various architectures:
+		 * - mm ? switch_mm() : mmdrop() for x86, s390, sparc, PowerPC,
+		 *   RISC-V.  switch_mm() relies on membarrier_arch_switch_mm()
+		 *   on PowerPC and on RISC-V.
+		 * - finish_lock_switch() for weakly-ordered
+		 *   architectures where spin_unlock is a full barrier,
+		 * - switch_to() for arm64 (weakly-ordered, spin_unlock
+		 *   is a RELEASE barrier),
+		 *
+		 * The barrier matches a full barrier in the proximity of
+		 * the membarrier system call entry.
+		 *
+		 * On RISC-V, this barrier pairing is also needed for the
+		 * SYNC_CORE command when switching between processes, cf.
+		 * the inline comments in membarrier_arch_switch_mm().
+		 */
+		++*switch_count;
+
+		migrate_disable_switch(rq, prev);
+		psi_account_irqtime(rq, prev, next);
+		psi_sched_switch(prev, next, !task_on_rq_queued(prev) ||
+					     prev-&gt;se.sched_delayed);
+
+		trace_sched_switch(preempt, prev, next, prev_state);
+
+		/* Also unlocks the rq: */
+		rq = context_switch(rq, prev, next, &amp;rf);
+	} else {
+		rq_unpin_lock(rq, &amp;rf);
+		__balance_callbacks(rq);
+		raw_spin_rq_unlock_irq(rq);
+	}
+}
+</pre>
+<p>
+该函数本身比较简单，
+</p>
+</div>
+</div>
+<div id="outline-container-org89f2b8b" class="outline-2">
+<h2 id="org89f2b8b"><span class="section-number-2">2.</span> pick_next_task</h2>
+</div>
+<div id="outline-container-org1016f31" class="outline-2">
+<h2 id="org1016f31"><span class="section-number-2">3.</span> context_switch</h2>
+</div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-01-30 Thu 22:44</p>
+<p class="date">Created: 2025-03-09 Sun 21:56</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
