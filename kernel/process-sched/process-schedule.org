@@ -175,6 +175,27 @@ picked:
 	}
 }
 #+end_example
-该函数本身比较简单，
+该函数本身比较简单，每个cpu都有一关联的runqueues，首先是通过smp_processor_id获取当前运行cpu的编号：
+#+begin_example
+# define smp_processor_id() __smp_processor_id()
+#+end_example
+不同架构有不同的__smp_processor_id实现，对于x86架构来说，每个cpu都维护有一个pcpu_hot结构体，里面有cpu_number成员记录了当前运行的cpu号，cpu_number在初始化的时候通过start_kernel->setup_per_cpu_areas去设置：
+#+begin_example
+for_each_possible_cpu(cpu) {
+        ...
+        per_cpu(pcpu_hot.cpu_number, cpu) = cpu;
+        ...
+}
+#+end_example
+而对于其它架构比如arm64，则是在当前运行线程中的一个成员进行记录：
+#+begin_example
+#define raw_smp_processor_id() (current_thread_info()->cpu)
+#+end_example
+有了cpu号，就可以通过cpu_rq获得对应当前运行cpu的rq运行队列了：
+#+begin_example
+DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
+#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
+#+end_example
+通过DECLARE就为每个cpu都开辟了rq的空间，这样per_cpu就可以依据cpu号取到对应的rq运行队列。
 * pick_next_task
 * context_switch
