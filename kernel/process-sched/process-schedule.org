@@ -285,7 +285,7 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 对于顺序下来的over write，若写到了栈底就会在调度出去时被检测发现而panic，调度出是一个恰当的时机，这样避免了下次调度到该进程时遇到一个被破坏了的栈。
 
 task_scs_end_corrupted是类似的原理，不再详细介绍。
-
+#+HTML: <div class="centered-line">sched_debug</div>
 再往下看schedule_debug的实现：
 #+begin_example
 	if (unlikely(in_atomic_preempt_off())) {
@@ -330,8 +330,7 @@ static __always_inline int preempt_count(void)
 #+begin_example
 	SCHED_WARN_ON(ct_state() == CT_STATE_USER);
 #+end_example
-ct_state函数在启用CONFIG_CONTEXT_TRACKING_USER配置时会返回有意义的值，它主要用来追踪cpu的
-当前上下文，可能的状态有：
+ct_state函数在启用CONFIG_CONTEXT_TRACKING_USER配置时会返回有意义的值，它主要用来追踪cpu的当前上下文，可能的状态有：
 #+begin_example
 enum ctx_state {
 	CT_STATE_DISABLED	= -1,	/* returned by ct_state() if unknown */
@@ -345,6 +344,55 @@ enum ctx_state {
 这些状态主动在相应上下文切换的代码流程里被切换，RCU可以利用这些状态确认当前CPU是否处于用户态，以便判断是否可以将该CPU视为“非活跃”，从而进行RCU回收，另外在某些架构（如NO_HZ_FULL模式）中，内核会在用户态禁用定时器中断，以减少上下文切换的开销。但是，这样会导致cputime统计变得不准确，因为CPU进入用户态后不会有定时器中断来更新时间统计。CONTEXT_TRACKING_USER通过显式追踪进入/退出用户态的时间，使CPU时间统计能够在NO_HZ_FULL模式下仍然保持准确。
 
 至于本warn判断本身，调度器（schedule）运行时一定是在内核态，如果ct_state() == CT_STATE_USER，说明context tracking机制出了问题，所以这里加了SCHED_WARN_ON作为一个调试检查。
+
+继续往下看是增加一个profile计数：
+#+begin_example
+profile_hit(SCHED_PROFILING, __builtin_return_address(0));
+#+end_example
+#+begin_example
+/*
+ * Single profiler hit:
+ */
+static inline void profile_hit(int type, void *ip)
+{
+	/*
+	 * Speedup for the common (no profiling enabled) case:
+	 */
+	if (unlikely(prof_on == type))
+		profile_hits(type, ip, 1);
+}
+#+end_example
+可以进行profiling的包括三个模块：
+#+begin_example
+#define CPU_PROFILING	1
+#define SCHED_PROFILING	2
+#define KVM_PROFILING	4
+#+end_example
+prof_on在启动时依据profile=的参数设置调用profile_setup来填为上面三个类型中的一个。__builtin_return_address是编译器内置的函数，可以返回当前函数的返回地址。
+profile_hits实现如下：
+#+begin_example
+static void do_profile_hits(int type, void *__pc, unsigned int nr_hits)
+{
+	unsigned long pc;
+	pc = ((unsigned long)__pc - (unsigned long)_stext) >> prof_shift;
+	if (pc < prof_len)
+		atomic_add(nr_hits, &prof_buffer[pc]);
+}
+#+end_example
+prof_buffer是在初始化函数profile_init里开的空间，可以看到do_profile_hits就是记录了内核text段某个pc执行的次数，是一种性能统计的功能，它实现在CONFIG_PROFILING配置下，并可以通过/proc访问文件的方式。
+
+最后是schedstat_inc自增rq的sched_count，当然这需要开启CONFIG_SCHEDSTATS配置，这样/proc/schedstat就可以反应一些调度统计信息了：
+#+begin_example
+schedstat_inc(this_rq()->sched_count);
+#+end_example
+#+begin_example
+#define   schedstat_inc(var)		do { if (schedstat_enabled()) { var++; } } while (0)
+#+end_example
+注意这里是宏展开，不是函数调用，所以最后对sched_count的自增一定会生效，展开就是文本替换，在预编译阶段完成：
+#+begin_example
+#define   schedstat_inc(var)		do { if (schedstat_enabled()) { this_rq()->sched_count++; } } while (0)
+#+end_example
+#+HTML: <div class="centered-line">sched_debug</div>
 
 接着后面是关闭本地cpu的中断响应，然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
 
