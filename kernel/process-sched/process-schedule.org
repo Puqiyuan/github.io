@@ -395,13 +395,13 @@ schedstat_inc(this_rq()->sched_count);
 #+end_example
 #+HTML: <div class="centered-line">sched_debug</div>
 
-接着后面是关闭本地cpu的中断响应，然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
-
 回到__schedule，继续往下看：
 #+begin_example
 if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
     hrtick_clear(rq);
 #+end_example
+
+接着后面是关闭本地cpu的中断响应，然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
 
 接下来简单分析下update_rq_clock函数：
 #+begin_example
