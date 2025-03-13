@@ -285,7 +285,7 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 对于顺序下来的over write，若写到了栈底就会在调度出去时被检测发现而panic，调度出是一个恰当的时机，这样避免了下次调度到该进程时遇到一个被破坏了的栈。
 
 task_scs_end_corrupted是类似的原理，不再详细介绍。
-#+HTML: <div class="centered-line">sched_debug</div>
+
 再往下看schedule_debug的实现：
 #+begin_example
 	if (unlikely(in_atomic_preempt_off())) {
@@ -392,7 +392,7 @@ schedstat_inc(this_rq()->sched_count);
 #+begin_example
 #define   schedstat_inc(var)		do { if (schedstat_enabled()) { this_rq()->sched_count++; } } while (0)
 #+end_example
-#+HTML: <div class="centered-line">sched_debug</div>
+
 
 接着后面是关闭本地cpu的中断响应，然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
 
