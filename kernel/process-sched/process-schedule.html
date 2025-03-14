@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-03-13 Thu 23:12 -->
+<!-- 2025-03-14 Fri 22:12 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程调度</title>
@@ -38,9 +38,9 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org593c36d">1. __schedule</a></li>
-<li><a href="#orgda950c6">2. pick_next_task</a></li>
-<li><a href="#orgb6abfcd">3. context_switch</a></li>
+<li><a href="#orgb3082d6">1. __schedule</a></li>
+<li><a href="#orgbb40f88">2. pick_next_task</a></li>
+<li><a href="#orga8dc83c">3. context_switch</a></li>
 </ul>
 </div>
 </div>
@@ -69,7 +69,7 @@ __schedule是进程调度的核心函数，它先调用pick_next_task函数算�
 <p>
 __schedule函数的参数sched_mode指明了以何种模式进入的调度器，它的取值可以有：
 </p>
-<pre class="example" id="org4d1d5e8">
+<pre class="example" id="org34bf13b">
 /*
  * Constants for the sched_mode argument of __schedule().
  *
@@ -105,13 +105,13 @@ SM_RTLOCK_WAIT表示任务正在等待RT（实时）锁。实时内核（RT内�
 比如preempt_schedule_common函数调用_schedule时就指明了参数SM_PREEMPT，表明本次进入调度器是因为抢占。
 </p>
 
-<div id="outline-container-org593c36d" class="outline-2">
-<h2 id="org593c36d"><span class="section-number-2">1.</span> __schedule</h2>
+<div id="outline-container-orgb3082d6" class="outline-2">
+<h2 id="orgb3082d6"><span class="section-number-2">1.</span> __schedule</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 以下是__schedule的实现：
 </p>
-<pre class="example" id="org3cfe669">
+<pre class="example" id="org7cfb6d2">
 static void __sched notrace __schedule(int sched_mode)
 {
 	struct task_struct *prev, *next;
@@ -243,13 +243,13 @@ picked:
 <p>
 该函数本身比较简单，每个cpu都有一关联的runqueues，首先是通过smp_processor_id获取当前运行cpu的编号：
 </p>
-<pre class="example" id="orga774d90">
+<pre class="example" id="orgd9bd1e7">
 # define smp_processor_id() __smp_processor_id()
 </pre>
 <p>
 不同架构有不同的__smp_processor_id实现，对于x86架构来说，每个cpu都维护有一个pcpu_hot结构体，里面有cpu_number成员记录了当前运行的cpu号，cpu_number在初始化的时候通过start_kernel-&gt;setup_per_cpu_areas去设置：
 </p>
-<pre class="example" id="orga47df07">
+<pre class="example" id="orge2d2817">
 for_each_possible_cpu(cpu) {
         ...
         per_cpu(pcpu_hot.cpu_number, cpu) = cpu;
@@ -259,13 +259,13 @@ for_each_possible_cpu(cpu) {
 <p>
 而对于其它架构比如arm64，则是在当前运行线程中的一个成员进行记录：
 </p>
-<pre class="example" id="org6b6073e">
+<pre class="example" id="org50870ec">
 #define raw_smp_processor_id() (current_thread_info()-&gt;cpu)
 </pre>
 <p>
 有了cpu号，就可以通过cpu_rq获得对应当前运行cpu的rq运行队列了：
 </p>
-<pre class="example" id="org11b9b9a">
+<pre class="example" id="orgc9add56">
 DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 #define cpu_rq(cpu)		(&amp;per_cpu(runqueues, (cpu)))
 </pre>
@@ -277,7 +277,7 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 <p>
 继续分析schedule_debug：
 </p>
-<pre class="example" id="org90c2dca">
+<pre class="example" id="orgfdf3aef">
 /*
  * Various schedule()-time debugging checks and statistics:
  */
@@ -315,7 +315,7 @@ static inline void schedule_debug(struct task_struct *prev, bool preempt)
 <p>
 该函数主要是做一些在调度时的debug检查，第一个检查就是看看即将要被切换出去的prev其内核栈顶是否被污染了（笔者环境开了CONFIG_SCHED_STACK_END_CHECK）：
 </p>
-<pre class="example" id="org63e3039">
+<pre class="example" id="orge50bd30">
 #ifdef CONFIG_SCHED_STACK_END_CHECK
 	if (task_stack_end_corrupted(prev))
 		panic("corrupted stack end detected inside scheduler\n");
@@ -324,14 +324,14 @@ static inline void schedule_debug(struct task_struct *prev, bool preempt)
 		panic("corrupted shadow stack detected inside scheduler\n");
 #endif
 </pre>
-<pre class="example" id="orgba0e653">
+<pre class="example" id="orgfe2eb1d">
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
 </pre>
 <p>
 对于开启了CONFIG_THREAD_INFO_IN_TASK配置的end_of_stack实现如下：
 </p>
-<pre class="example" id="org727e434">
+<pre class="example" id="org6f826a2">
 static __always_inline unsigned long *end_of_stack(const struct task_struct *task)
 {
 #ifdef CONFIG_STACK_GROWSUP
@@ -344,7 +344,7 @@ static __always_inline unsigned long *end_of_stack(const struct task_struct *tas
 <p>
 可以看到这里返回了task的内核栈底，x86架构上内核栈自顶（大地址处）向下（小地址处）生长，而task-&gt;stack通过如下代码分配获取出来就是页面的小地址处，也就是end_of_stack中返回的内核栈结束的地方：
 </p>
-<pre class="example" id="orgcb3ff88">
+<pre class="example" id="orgde914a7">
 static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
 	unsigned long *stack;
@@ -361,7 +361,7 @@ alloc_thread_stack_node被dup_task_struct函数在创建进程的时候调用。
 <p>
 task_stack_end_corrupted主要就是检查栈底处的值是不是STACK_END_MAGIC，该值同样通过dup_task_struct-&gt;set_task_stack_end_magic去设置：
 </p>
-<pre class="example" id="org3435bec">
+<pre class="example" id="org917b45d">
 void set_task_stack_end_magic(struct task_struct *tsk)
 {
 	unsigned long *stackend;
@@ -381,7 +381,7 @@ task_scs_end_corrupted是类似的原理，不再详细介绍。
 <p>
 再往下看schedule_debug的实现：
 </p>
-<pre class="example" id="orgaaf1543">
+<pre class="example" id="org0757153">
 if (unlikely(in_atomic_preempt_off())) {
 	__schedule_bug(prev);
 	preempt_count_set(PREEMPT_DISABLED);
@@ -391,20 +391,20 @@ if (unlikely(in_atomic_preempt_off())) {
 <p>
 这个条件大概率是不会满足的，这里主要想分析这个条件是在判断什么：
 </p>
-<pre class="example" id="orgb49f30b">
+<pre class="example" id="org9014d7d">
 /*
  * Check whether we were atomic before we did preempt_disable():
  * (used by the scheduler)
  */
 #define in_atomic_preempt_off() (preempt_count() != PREEMPT_DISABLE_OFFSET)
 </pre>
-<pre class="example" id="orga5f78ae">
+<pre class="example" id="orgce6179c">
 static __always_inline int preempt_count(void)
 {
 	return raw_cpu_read_4(pcpu_hot.preempt_count) &amp; ~PREEMPT_NEED_RESCHED;
 }
 </pre>
-<pre class="example" id="orgf47ea1a">
+<pre class="example" id="orgd5e46c8">
 /*
  * The preempt_count offset after preempt_disable();
  */
@@ -414,10 +414,10 @@ static __always_inline int preempt_count(void)
 # define PREEMPT_DISABLE_OFFSET	0
 #endif
 </pre>
-<pre class="example" id="org7c8b502">
+<pre class="example" id="org66c94a1">
 #define PREEMPT_OFFSET	(1UL &lt;&lt; PREEMPT_SHIFT)
 </pre>
-<pre class="example" id="org5f078bc">
+<pre class="example" id="orga6ef550">
 #define PREEMPT_SHIFT	0
 </pre>
 <p>
@@ -427,13 +427,13 @@ static __always_inline int preempt_count(void)
 <p>
 继续往下看一个warn判断：
 </p>
-<pre class="example" id="org3de6a2d">
+<pre class="example" id="org9fc34f4">
 SCHED_WARN_ON(ct_state() == CT_STATE_USER);
 </pre>
 <p>
 ct_state函数在启用CONFIG_CONTEXT_TRACKING_USER配置时会返回有意义的值，它主要用来追踪cpu的当前上下文，可能的状态有：
 </p>
-<pre class="example" id="org83def99">
+<pre class="example" id="orgda723fe">
 enum ctx_state {
 	CT_STATE_DISABLED	= -1,	/* returned by ct_state() if unknown */
 	CT_STATE_KERNEL		= 0,
@@ -454,10 +454,10 @@ enum ctx_state {
 <p>
 继续往下看是增加一个profile计数：
 </p>
-<pre class="example" id="org5913b2b">
+<pre class="example" id="orgcf87660">
 profile_hit(SCHED_PROFILING, __builtin_return_address(0));
 </pre>
-<pre class="example" id="org3e42b37">
+<pre class="example" id="org2b88f9c">
 /*
  * Single profiler hit:
  */
@@ -473,7 +473,7 @@ static inline void profile_hit(int type, void *ip)
 <p>
 可以进行profiling的包括三个模块：
 </p>
-<pre class="example" id="org72c44ff">
+<pre class="example" id="org413ef5a">
 #define CPU_PROFILING	1
 #define SCHED_PROFILING	2
 #define KVM_PROFILING	4
@@ -482,7 +482,7 @@ static inline void profile_hit(int type, void *ip)
 prof_on在启动时依据profile=的参数设置调用profile_setup来填为上面三个类型中的一个。__builtin_return_address是编译器内置的函数，可以返回当前函数的返回地址。
 profile_hits实现如下：
 </p>
-<pre class="example" id="org9eae617">
+<pre class="example" id="orgf0378e9">
 static void do_profile_hits(int type, void *__pc, unsigned int nr_hits)
 {
 	unsigned long pc;
@@ -498,16 +498,16 @@ prof_buffer是在初始化函数profile_init里开的空间，可以看到do_pro
 <p>
 最后是schedstat_inc自增rq的sched_count，当然这需要开启CONFIG_SCHEDSTATS配置，这样/proc/schedstat就可以反应一些调度统计信息了：
 </p>
-<pre class="example" id="org2cf718e">
+<pre class="example" id="org2ea57d0">
 schedstat_inc(this_rq()-&gt;sched_count);
 </pre>
-<pre class="example" id="org8655db5">
+<pre class="example" id="org37cb92d">
 #define   schedstat_inc(var)		do { if (schedstat_enabled()) { var++; } } while (0)
 </pre>
 <p>
 注意这里是宏展开，不是函数调用，所以最后对sched_count的自增一定会生效，展开就是文本替换，在预编译阶段完成：
 </p>
-<pre class="example" id="orga2a8e77">
+<pre class="example" id="orga68739e">
 #define   schedstat_inc(var)		do { if (schedstat_enabled()) { this_rq()-&gt;sched_count++; } } while (0)
 </pre>
 <div class="centered-line">sched_debug</div>
@@ -515,19 +515,50 @@ schedstat_inc(this_rq()-&gt;sched_count);
 <p>
 回到__schedule，继续往下看：
 </p>
-<pre class="example" id="org89f6176">
+<pre class="example" id="orga8bbd92">
 if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
     hrtick_clear(rq);
 </pre>
 
 <p>
-接着后面是关闭本地cpu的中断响应，然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
+HRTICK是高精度调度定时器功能，默认情况下这个功能是关闭的，但是sched_feat宏本身是有定义的，尤其是笔者的环境开了CONFIG_SCHED_DEBUG以及CONFIG_JUMP_LABEL两个配置，sched_feat使用静态分支判断的方法：
+</p>
+<pre class="example" id="orgec0121e">
+#define sched_feat(x) (static_branch_##x(&amp;sched_feat_keys[__SCHED_FEAT_##x]))
+</pre>
+<p>
+通过sched_feat这里主要是想介绍上面提到的两个配置的功能，至于HRTICK这个调度器feature本身，默认是不开启的：
+</p>
+<pre class="example" id="org72ba7ef">
+SCHED_FEAT(HRTICK, false)
+</pre>
+
+<p>
+CONFIG_SCHED_DEBUG开启了调度器的调试信息，这样就会在/sys/kernel/debug/sched/下展示很多关于调度器的信息，开启这个代价很小，所以笔者环境默认开启了，比如/sys/kernel/debug/sched/features可以查看当前scheduler开启哪些feature：
+</p>
+<pre class="example" id="orgaee971a">
+PLACE_LAG PLACE_DEADLINE_INITIAL PLACE_REL_DEADLINE RUN_TO_PARITY PREEMPT_SHORT NO_NEXT_BUDDY PICK_BUDDY CACHE_HOT_BUDDY DELAY_DEQUEUE DELAY_ZERO WAKEUP_PREEMPTION NO_HRTICK NO_HRTICK_DL NO_DOUBLE_TICK NONTASK_CAPACITY TTWU_QUEUE SIS_UTIL NO_WARN_DOUBLE_CLOCK RT_PUSH_IPI NO_RT_RUNTIME_SHARE NO_LB_MIN ATTACH_AGE_LOAD WA_IDLE WA_WEIGHT WA_BIAS UTIL_EST NO_LATENCY_WARN
+</pre>
+<p>
+前面有NO的就是没有开启的，比如NO_HRTICK，当然在运行时可以动态的修改这个文件以开启某个feature。另外要介绍的一个配置就是CONFIG_JUMP_LABEL，它优化了almost-always-true和almost-always-false这样的分支预测，传统上，这样的分支预测还是有cmp指令进行比较并决定是否跳转的，这样在硬件上就有分支预测，但是一旦分支预测错误面临的性能损失比较大，jump label优化的做法是一开始都将这样的分支预测编译为nop指令，然后在运行时，通过static_key_enable/disable这样的接口一路向下到text_poke去动态的调整nop为jmp到对应函数（或调整为nop，表示条件不满足）。
+</p>
+
+<p>
+至于上面的条件自然是不满足就不深入分析了。
+</p>
+
+<p>
+接着后面是关闭本地cpu的中断响应，local_irq_disable在x86架构上使用的是cli指令，它只会禁止对可屏蔽的外部中断的响应，而异常和NMI（不可屏蔽中断）还是会响应的。
+</p>
+
+<p>
+然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
 </p>
 
 <p>
 接下来简单分析下update_rq_clock函数：
 </p>
-<pre class="example" id="org203f06a">
+<pre class="example" id="org87d0aa3">
 void update_rq_clock(struct rq *rq)
 {
 	s64 delta;
@@ -557,16 +588,16 @@ void update_rq_clock(struct rq *rq)
 </div>
 </div>
 
-<div id="outline-container-orgda950c6" class="outline-2">
-<h2 id="orgda950c6"><span class="section-number-2">2.</span> pick_next_task</h2>
+<div id="outline-container-orgbb40f88" class="outline-2">
+<h2 id="orgbb40f88"><span class="section-number-2">2.</span> pick_next_task</h2>
 </div>
-<div id="outline-container-orgb6abfcd" class="outline-2">
-<h2 id="orgb6abfcd"><span class="section-number-2">3.</span> context_switch</h2>
+<div id="outline-container-orga8dc83c" class="outline-2">
+<h2 id="orga8dc83c"><span class="section-number-2">3.</span> context_switch</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-03-13 Thu 23:12</p>
+<p class="date">Created: 2025-03-14 Fri 22:12</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
