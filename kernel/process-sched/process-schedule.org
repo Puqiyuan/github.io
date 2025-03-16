@@ -422,7 +422,45 @@ PLACE_LAG PLACE_DEADLINE_INITIAL PLACE_REL_DEADLINE RUN_TO_PARITY PREEMPT_SHORT 
 
 然后通过rq_lock获取操作runqueues的自旋锁，也就是操作rq需要有锁保护，防止并发操作带来的数据一致性问题。
 
-接下来简单分析下update_rq_clock函数：
+继续看对smp_mb__after_spinlock的调用，它是针对arm64这样的弱一致内存模型的同步操作，因为在调用__schedule前通常通过__set_current_state设置了进程状态比如为TASK_INTERRUPTIBLE，而另外的独立路径可能设置进程有信号需要处理，比如通过set_tsk_thread_flag(p, TIF_SIGPENDING)，在之前一样的调用__schedule的路径下，通常也会调用signal_pending_state去检查进程是否有需要待处理的pending信号：
+#+begin_example
+static inline int signal_pending_state(unsigned int state, struct task_struct *p)
+{
+	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
+		return 0;
+	if (!signal_pending(p))
+		return 0;
+
+	return (state & TASK_INTERRUPTIBLE) || __fatal_signal_pending(p);
+}
+#+end_example
+#+begin_example
+static inline int task_sigpending(struct task_struct *p)
+{
+	return unlikely(test_tsk_thread_flag(p,TIF_SIGPENDING));
+}
+
+static inline int signal_pending(struct task_struct *p)
+{
+	/*
+	 * TIF_NOTIFY_SIGNAL isn't really a signal, but it requires the same
+	 * behavior in terms of ensuring that we break out of wait loops
+	 * so that notify signal callbacks can be processed.
+	 */
+	if (unlikely(test_tsk_thread_flag(p, TIF_NOTIFY_SIGNAL)))
+		return 1;
+	return task_sigpending(p);
+}
+#+end_example
+可以看到在能够检查另外独立路径设置的TIF_SIGPENDING前（通过signal_pending->task_sigpending），signal_pending_state需要先检查进程状态是否为TASK_INTERRUPTIBLE，如果进程不处于可中断的状态，根本不会进一步检查是否有pending的信号，这样独立路径设置的需要处理的TIF_SIGPENDING标志，就因为TASK_INTERRUPTIBLE没有及时写入而错过了处理。
+
+先检查进程为TASK_INTERRUPTIBLE是因为只有可中断状态，才有意义可以接受待处理的信号，而TASK_UNINTERRUPTIBLE是不响应信号的。
+
+独立路径写入TIF_SIGPENDING只是可能引起这个问题表现的条件/场景，不是根本原因，根本原因在于TASK_INTERRUPTIBLE的写入与TIF_SIGPENDING读取之间的并发问题，导致signal_pending_state可能在错误的时间点返回错误的结果。
+
+#+HTML: <div class="centered-line">update_rq_clock</div>
+
+接下来分析下update_rq_clock函数：
 #+begin_example
 void update_rq_clock(struct rq *rq)
 {
@@ -450,6 +488,20 @@ void update_rq_clock(struct rq *rq)
 	update_rq_clock_task(rq, delta);
 }
 #+end_example
+
+该函数首先通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delte时间，这里简单介绍下cpu_of的实现：
+#+begin_example
+static inline int cpu_of(struct rq *rq)
+{
+#ifdef CONFIG_SMP
+	return rq->cpu;
+#else
+	return 0;
+#endif
+}
+#+end_example
+而cpu的初始化，
+#+HTML: <div class="centered-line">update_rq_clock</div>
 
 * pick_next_task
 * context_switch
