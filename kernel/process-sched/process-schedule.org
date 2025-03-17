@@ -500,7 +500,59 @@ static inline int cpu_of(struct rq *rq)
 #endif
 }
 #+end_example
-而cpu的初始化，
+调度初始化函数sched_init里完成了rq->cpu的设置：
+#+begin_example
+for_each_possible_cpu(i) {
+	rq->cpu = i;
+}
+#+end_example
+rq->clock是真实的物理时间增量，而upda_rq_clock_task->update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
+#+begin_example
+/*
+ * The clock_pelt scales the time to reflect the effective amount of
+ * computation done during the running delta time but then sync back to
+ * clock_task when rq is idle.
+ *
+ *
+ * absolute time   | 1| 2| 3| 4| 5| 6| 7| 8| 9|10|11|12|13|14|15|16
+ * @ max capacity  ------******---------------******---------------
+ * @ half capacity ------************---------************---------
+ * clock pelt      | 1| 2|    3|    4| 7| 8| 9|   10|   11|14|15|16
+ *
+ */
+static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
+{
+	if (unlikely(is_idle_task(rq->curr))) {
+		_update_idle_rq_clock_pelt(rq);
+		return;
+	}
+
+	/*
+	 * When a rq runs at a lower compute capacity, it will need
+	 * more time to do the same amount of work than at max
+	 * capacity. In order to be invariant, we scale the delta to
+	 * reflect how much work has been really done.
+	 * Running longer results in stealing idle time that will
+	 * disturb the load signal compared to max capacity. This
+	 * stolen idle time will be automatically reflected when the
+	 * rq will be idle and the clock will be synced with
+	 * rq_clock_task.
+	 */
+
+	/*
+	 * Scale the elapsed time to reflect the real amount of
+	 * computation
+	 */
+	delta = cap_scale(delta, arch_scale_cpu_capacity(cpu_of(rq)));
+	delta = cap_scale(delta, arch_scale_freq_capacity(cpu_of(rq)));
+
+	rq->clock_pelt += delta;
+}
+#+end_example
+#+begin_example
+#define cap_scale(v, s)		((v)*(s) >> SCHED_CAPACITY_SHIFT)
+#+end_example
+update_rq_clock_pelt按频率/算力缩放的值被clock_pelt里。
 #+HTML: <div class="centered-line">update_rq_clock</div>
 
 * pick_next_task
