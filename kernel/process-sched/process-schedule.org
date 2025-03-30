@@ -460,6 +460,37 @@ static inline int signal_pending(struct task_struct *p)
 
 #+HTML: <div class="centered-line">update_rq_clock</div>
 
+调用update_rq_clock前对clock_update_flags左移一位，clock_update_flags有三种取值可能：
+#+begin_example
+/*
+ * rq::clock_update_flags bits
+ *
+ * %RQCF_REQ_SKIP - will request skipping of clock update on the next
+ *  call to __schedule(). This is an optimisation to avoid
+ *  neighbouring rq clock updates.
+ *
+ * %RQCF_ACT_SKIP - is set from inside of __schedule() when skipping is
+ *  in effect and calls to update_rq_clock() are being ignored.
+ *
+ * %RQCF_UPDATED - is a debug flag that indicates whether a call has been
+ *  made to update_rq_clock() since the last time rq::lock was pinned.
+ *
+ * If inside of __schedule(), clock_update_flags will have been
+ * shifted left (a left shift is a cheap operation for the fast path
+ * to promote %RQCF_REQ_SKIP to %RQCF_ACT_SKIP), so you must use,
+ *
+ *	if (rq-clock_update_flags >= RQCF_UPDATED)
+ *
+ * to check if %RQCF_UPDATED is set. It'll never be shifted more than
+ * one position though, because the next rq_unpin_lock() will shift it
+ * back.
+ */
+#define RQCF_REQ_SKIP		0x01
+#define RQCF_ACT_SKIP		0x02
+#define RQCF_UPDATED		0x04
+#+end_example
+其中取值为RQCF_REQ_SKIP时，再左移一位就是RQCF_ACT_SKIP，这个值在update_rq_clock里会引起它的直接返回，也就是说内核其它地方可以通过将clock_update_flags设置为RQCF_REQ_SKIP以指示__schedule函数里调用update_rq_clock实际不进行调度时钟值的更新，这样可以省去一部分开销，当然在设置为RQCF_REQ_SKIP的路径上就必然调用过uodate_rq_clock对时钟进行了更新。
+
 接下来分析下update_rq_clock函数：
 #+begin_example
 void update_rq_clock(struct rq *rq)
@@ -489,7 +520,7 @@ void update_rq_clock(struct rq *rq)
 }
 #+end_example
 
-该函数首先通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delte时间，这里简单介绍下cpu_of的实现：
+该函数首先通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delta时间，这里简单介绍下cpu_of的实现：
 #+begin_example
 static inline int cpu_of(struct rq *rq)
 {
@@ -506,7 +537,7 @@ for_each_possible_cpu(i) {
 	rq->cpu = i;
 }
 #+end_example
-rq->clock是真实的物理时间增量，而upda_rq_clock_task->update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
+rq->clock是真实的物理时间增量，而update_rq_clock_task->update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
 #+begin_example
 /*
  * The clock_pelt scales the time to reflect the effective amount of
