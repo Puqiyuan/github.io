@@ -519,8 +519,9 @@ void update_rq_clock(struct rq *rq)
 	update_rq_clock_task(rq, delta);
 }
 #+end_example
+这里可以看到如果clock_update_flags为RQCF_ACT_SKIP，那么就直接返回了，而不更新rq里的对应时钟，然后本次更新了时钟，就将clock_update_flags设置为RQCF_UPDATED。
 
-该函数首先通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delta时间，这里简单介绍下cpu_of的实现：
+然后该函数首先通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delta时间，这里简单介绍下cpu_of的实现：
 #+begin_example
 static inline int cpu_of(struct rq *rq)
 {
