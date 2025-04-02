@@ -521,7 +521,9 @@ void update_rq_clock(struct rq *rq)
 #+end_example
 这里可以看到如果clock_update_flags为RQCF_ACT_SKIP，那么就直接返回了，而不更新rq里的对应时钟，然后本次更新了时钟，就将clock_update_flags设置为RQCF_UPDATED。
 
-然后该函数首先通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delta时间，这里简单介绍下cpu_of的实现：
+update_rq_clock函数通过sched_clock_cpu获得当前的时间戳（在x86架构上一般就是rdtsc指令），和上次记录的clock相减后得到本次增加的delta时间，关于sched_clock_cpu的实现涉及内核clock模块，参见笔者其它文章介绍。
+
+在这里简单介绍下cpu_of的实现：
 #+begin_example
 static inline int cpu_of(struct rq *rq)
 {
@@ -538,7 +540,79 @@ for_each_possible_cpu(i) {
 	rq->cpu = i;
 }
 #+end_example
-rq->clock是真实的物理时间增量，而update_rq_clock_task->update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
+随后的scx_rq_clock_update是在配置了CONFIG_SCHED_CLASS_EXT时有有效定义，该配置主要是一个基于BPF（Berkeley Packet Filter）的可扩展调度框架，旨在让开发者能够快速编写、部署和实验新的调度策略，而不需要修改Linux内核的核心代码。可以像开发普通BPF程序一样调整调度逻辑，无需重新编译内核，应用程序可以定义专属的CPU调度策略，提高性能，做到无中断地切换调度策略，而不需要重启系统或重编译内核。具体的实现细节可以参考笔者其它文章。
+
+rq->clock是真实的物理时间增量，所以直接往上增加delta，但update_rq_clock_task里更新的rq里的成员需要对delta进行调整：
+
+#+begin_example
+static void update_rq_clock_task(struct rq *rq, s64 delta)
+{
+/*
+ * In theory, the compile should just see 0 here, and optimize out the call
+ * to sched_rt_avg_update. But I don't trust it...
+ */
+	s64 __maybe_unused steal = 0, irq_delta = 0;
+
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+	if (irqtime_enabled()) {
+		irq_delta = irq_time_read(cpu_of(rq)) - rq->prev_irq_time;
+
+		/*
+		 * Since irq_time is only updated on {soft,}irq_exit, we might run into
+		 * this case when a previous update_rq_clock() happened inside a
+		 * {soft,}IRQ region.
+		 *
+		 * When this happens, we stop ->clock_task and only update the
+		 * prev_irq_time stamp to account for the part that fit, so that a next
+		 * update will consume the rest. This ensures ->clock_task is
+		 * monotonic.
+		 *
+		 * It does however cause some slight miss-attribution of {soft,}IRQ
+		 * time, a more accurate solution would be to update the irq_time using
+		 * the current rq->clock timestamp, except that would require using
+		 * atomic ops.
+		 */
+		if (irq_delta > delta)
+			irq_delta = delta;
+
+		rq->prev_irq_time += irq_delta;
+		delta -= irq_delta;
+		delayacct_irq(rq->curr, irq_delta);
+	}
+#endif
+#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+	if (static_key_false((&paravirt_steal_rq_enabled))) {
+		u64 prev_steal;
+
+		steal = prev_steal = paravirt_steal_clock(cpu_of(rq));
+		steal -= rq->prev_steal_time_rq;
+
+		if (unlikely(steal > delta))
+			steal = delta;
+
+		rq->prev_steal_time_rq = prev_steal;
+		delta -= steal;
+	}
+#endif
+
+	rq->clock_task += delta;
+
+#ifdef CONFIG_HAVE_SCHED_AVG_IRQ
+	if ((irq_delta + steal) && sched_feat(NONTASK_CAPACITY))
+		update_irq_load_avg(rq, irq_delta + steal);
+#endif
+	update_rq_clock_pelt(rq, delta);
+}
+#+end_example
+CONFIG_IRQ_TIME_ACCOUNTING配置控制的代码主要是要从任务的运行时间里扣除其用于中断的时间，delayacct_irq的实现还可以将这个花费在中断上的时间（也就是由irq引起的delay）给统计到task_struct::delays::irq_delay，当然前提是开启了CONFIG_TASK_DELAY_ACCT，当然开启这个配置能统计到的delay不只是irq，还有比如blkio，swap等。
+
+一个问题是如果这个中断就是任务引起的，是不是也应当属于任务自己的时间。
+
+CONFIG_PARAVIRT_TIME_ACCOUNTING主要针对虚拟化环境下，如果一个VCPU被Hypervisor抢占，那么需要从运行的delta时间里扣除这部分，因为实际上这部分时间任务并没有运行，使得进程的CPU使用率更加准确。
+
+
+
+最后update_rq_clock_task->update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
 #+begin_example
 /*
  * The clock_pelt scales the time to reflect the effective amount of
