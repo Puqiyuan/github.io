@@ -610,7 +610,7 @@ CONFIG_IRQ_TIME_ACCOUNTING配置控制的代码主要是要从任务的运行时
 
 CONFIG_PARAVIRT_TIME_ACCOUNTING主要针对虚拟化环境下，如果一个VCPU被Hypervisor抢占，那么需要从运行的delta时间里扣除这部分，因为实际上这部分时间任务并没有运行，使得进程的CPU使用率更加准确。
 
-
+CONFIG_HAVE_SCHED_AVG_IRQ在笔者环境一般没有配置。
 
 最后update_rq_clock_task->update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
 #+begin_example
@@ -658,7 +658,7 @@ static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
 #+begin_example
 #define cap_scale(v, s)		((v)*(s) >> SCHED_CAPACITY_SHIFT)
 #+end_example
-update_rq_clock_pelt按频率/算力缩放的值被clock_pelt里。
+update_rq_clock_pelt按频率以及算力缩放的值放在rq::clock_pelt量里。
 #+HTML: <div class="centered-line">update_rq_clock</div>
 
 * pick_next_task
