@@ -660,6 +660,24 @@ static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
 #+end_example
 update_rq_clock_pelt按频率以及算力缩放的值放在rq::clock_pelt量里。
 #+HTML: <div class="centered-line">update_rq_clock</div>
+arch_scale_cpu_capacity用于获取cpu的计算能力：
+#+begin_example
+unsigned long arch_scale_cpu_capacity(int cpu)
+{
+	if (static_branch_unlikely(&arch_hybrid_cap_scale_key))
+		return READ_ONCE(per_cpu_ptr(arch_cpu_scale, cpu)->capacity);
 
+	return SCHED_CAPACITY_SCALE;
+}
+#+end_example
+hybrid一般就是针对arm架构开启了big.LITTLE，而针对Intel x86就是P-core/E-core，针对笔者的配置，就是返回默认的SCHED_CAPACITY_SCALE，也就是没有区分不同cpu的算力：
+#+begin_example
+# define SCHED_FIXEDPOINT_SHIFT		10
+# define SCHED_CAPACITY_SHIFT		SCHED_FIXEDPOINT_SHIFT
+# define SCHED_CAPACITY_SCALE		(1L << SCHED_CAPACITY_SHIFT)
+#+end_example
+这里可以看到，固定CPU算力就是1024，第一次通过cap_scale对算力进行scale，不过cpu_scale又右移动了，等于delta过的多少时间就是多少负载，因为算力一样。
+
+第二个arch_scale_freq_capacity是根据频率来缩放delta时间，这个宏
 * pick_next_task
 * context_switch
