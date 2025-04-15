@@ -678,6 +678,12 @@ hybrid一般就是针对arm架构开启了big.LITTLE，而针对Intel x86就是P
 #+end_example
 这里可以看到，固定CPU算力就是1024，第一次通过cap_scale对算力进行scale，不过cpu_scale又右移动了，等于delta过的多少时间就是多少负载，因为算力一样。
 
-第二个arch_scale_freq_capacity是根据频率来缩放delta时间，这个宏
+第二个arch_scale_freq_capacity是根据频率来缩放delta时间，这个宏对于x86架构来说就是读取percpu变量arch_freq_scale，其设置会经由scale_freq_tick函数调用this_cpu_write，本质上是MSR_IA32_APERF和MSR_IA32_MPERF这两个msr寄存器分别各自做出差值delta，将delta差值做比值得商，写入arch_scale_freq_capacity是为当前频率需要缩放的比例，MSR_IA32_APERF（Actual PerformanceFrequency）是实际实际工作的时钟周期数，而MSR_IA32_MPERF（Maximum Performance Frequency）是理论最大工作周期数。比值商大于1代表当前处于turbo模式，睿频运行，小于1代表没有满频率运行。
+
+注意scale_freq_tick里通过check_shl_overflow先将acnt（MSR_IA32_APERF）乘以2**20进行放大，然后通过check_mul_overflow将mcnt（MSR_IA32_MPERF）乘以2**10也进行放大（假如没有开启hybrid异构算力架构），最终其实是把delta(acnt)和delta(mcnt)的比值本来是个小数，乘以了1024，这样就是1024是比值1，小于1024的代表小数，大于1024的话代表比值大于1，cpu频率处于turbo状态。这是内核优化小数运行的常见手段，将小数乘以一个1024这样整数，避免内核做浮点运算，当然最小精度只有1/1024，可以调整为2048等等大的数值，可以将更小的小数表示到整数范围，也可以做截断处理，当发现小数小于1/1024，直接赋值为0。
+
+最后的rq::clock_pelt是两者做了scale的和。
+
+回到__schedule继续分析
 * pick_next_task
 * context_switch
