@@ -684,6 +684,75 @@ hybrid一般就是针对arm架构开启了big.LITTLE，而针对Intel x86就是P
 
 最后的rq::clock_pelt是两者做了scale的和。
 
-回到__schedule继续分析
+回到__schedule继续分析，先取出了nivcsw，这个计数表示非自愿上下文切换（non-voluntary
+context switch），“非自愿”的意思是任务被抢占或被强制切换了。参数sched_mode表示了调度模式，最后preempt保存了是否是抢占模式调度，SM_PREEMPT代表抢占模式。prev->__state是任务的状态，比如TASK_RUNNING、TASK_INTERRUPTIBLE等。
+
+如果是因为空闲调度模式进入调度器，那么表示这时可能没有其它任务要执行了，并且rq运行队列里也没有可运行的任务了，并且没有启用BPF调度器时，那么实际没有切换任务，因为next = prev，然后就直接goto picked了，不用经过pick_next_task去挑选下一个需要运行的任务了，而如果不是抢占切换，这代表当前任务主动让出cpu想要block阻塞自己，那么调用try_to_block_task将当前任务标记为阻塞状态，并从运行队列里移除，这种情况下要切换计数的指针为nvcsw，表示自愿上下文切换，因为后面要自增这个计数，到底自增哪个计数，需要根据不同情况选择。
+
 * pick_next_task
+pick_next_task的实现依据是否开启CONFIG_SCHED_CORE配置有不同的实现，这个配置是支持SMT的，比如Intel的Hyper-Threading，一般没有开启这个配置，这样它实现如下：
+#+begin_example
+static struct task_struct *
+pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
+{
+	return __pick_next_task(rq, prev, rf);
+}
+
+/*
+ * Pick up the highest-prio task:
+ */
+static inline struct task_struct *
+__pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
+{
+	const struct sched_class *class;
+	struct task_struct *p;
+
+	rq->dl_server = NULL;
+
+	if (scx_enabled())
+		goto restart;
+
+	/*
+	 * Optimization: we know that if all tasks are in the fair class we can
+	 * call that function directly, but only if the @prev task wasn't of a
+	 * higher scheduling class, because otherwise those lose the
+	 * opportunity to pull in more work from other CPUs.
+	 */
+	if (likely(!sched_class_above(prev->sched_class, &fair_sched_class) &&
+		   rq->nr_running == rq->cfs.h_nr_queued)) {
+
+		p = pick_next_task_fair(rq, prev, rf);
+		if (unlikely(p == RETRY_TASK))
+			goto restart;
+
+		/* Assume the next prioritized class is idle_sched_class */
+		if (!p) {
+			p = pick_task_idle(rq);
+			put_prev_set_next_task(rq, prev, p);
+		}
+
+		return p;
+	}
+
+restart:
+	prev_balance(rq, prev, rf);
+
+	for_each_active_class(class) {
+		if (class->pick_next_task) {
+			p = class->pick_next_task(rq, prev);
+			if (p)
+				return p;
+		} else {
+			p = class->pick_task(rq);
+			if (p) {
+				put_prev_set_next_task(rq, prev, p);
+				return p;
+			}
+		}
+	}
+
+	BUG(); /* The idle class should always have a runnable task. */
+}
+#+end_example
+
 * context_switch
