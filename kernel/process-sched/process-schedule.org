@@ -754,5 +754,9 @@ restart:
 	BUG(); /* The idle class should always have a runnable task. */
 }
 #+end_example
+该函数主要分两部分，restart前的部分是针对CFS调度的优化，就是通用rq里正在运行的所有进程数量等于CFS队列里排队的进程数量并且即将被换出去的进程prev所属的调度类优先级不高于fair_sched_class类时，这样说明当前cpu的rq里只有CFS的进程，那么直接调用pick_next_task_fair选合适的进程来运行即可，这算是一种优化，不用每次都遍历所有调度类。
+
+如果不能满足上述条件，那么就会走restart标签的代码去遍历所有调度类找到一个合适的进程去运行，下面针对这两部分分别详细分析。
+
 
 * context_switch
