@@ -758,5 +758,11 @@ restart:
 
 如果不能满足上述条件，那么就会走restart标签的代码去遍历所有调度类找到一个合适的进程去运行，下面针对这两部分分别详细分析。
 
+先看下sche_class_above的实现：
+#+begin_example
+#define sched_class_above(_a, _b)	((_a) < (_b))
+#+end_example
+sched_class_above就是判断即将要调度出去的prev所属的调度类prev->sched_class的优先级是否高于fair_sched_class的优先级，若是就返回true，否则返回false。所以调度类的优先级高低，实际就是看调度类变量的地址小的优先级高，为什么由调度类变量的地址的大小就能确定一个调度类的优先级呢？这实际跟调度类的初始化代码以及链接器角度有关。
 
+以fair_sched_class的定义为例，
 * context_switch
