@@ -764,5 +764,112 @@ restart:
 #+end_example
 sched_class_above就是判断即将要调度出去的prev所属的调度类prev->sched_class的优先级是否高于fair_sched_class的优先级，若是就返回true，否则返回false。所以调度类的优先级高低，实际就是看调度类变量的地址小的优先级高，为什么由调度类变量的地址的大小就能确定一个调度类的优先级呢？这实际跟调度类的初始化代码以及链接器角度有关。
 
-以fair_sched_class的定义为例，
+以fair_sched_class的定义为例：
+#+begin_example
+/*
+ * All the scheduling class methods:
+ */
+DEFINE_SCHED_CLASS(fair) = {
+
+	.enqueue_task		= enqueue_task_fair,
+	.dequeue_task		= dequeue_task_fair,
+	.yield_task		= yield_task_fair,
+	.yield_to_task		= yield_to_task_fair,
+
+      ...
+};
+#+end_example
+#+begin_example
+/*
+ * Helper to define a sched_class instance; each one is placed in a separate
+ * section which is ordered by the linker script:
+ *
+ *   include/asm-generic/vmlinux.lds.h
+ *
+ * *CAREFUL* they are laid out in *REVERSE* order!!!
+ *
+ * Also enforce alignment on the instance, not the type, to guarantee layout.
+ */
+#define DEFINE_SCHED_CLASS(name) \
+const struct sched_class name##_sched_class \
+	__aligned(__alignof__(struct sched_class)) \
+	__section("__" #name "_sched_class")
+#+end_example
+以上定义会使得fair_sched_class这个量被放到__fair_sched_class这个section里，其它调度类也是类似的定义方式：
+#+begin_example
+DEFINE_SCHED_CLASS(rt)
+DEFINE_SCHED_CLASS(idle)
+DEFINE_SCHED_CLASS(stop)
+DEFINE_SCHED_CLASS(dl)
+DEFINE_SCHED_CLASS(ext)
+#+end_example
+这些调度类会被链接脚本按序放置：
+#+begin_example
+/*
+ * The order of the sched class addresses are important, as they are
+ * used to determine the order of the priority of each sched class in
+ * relation to each other.
+ */
+#define SCHED_DATA				\
+	STRUCT_ALIGN();				\
+	__sched_class_highest = .;		\
+	*(__stop_sched_class)			\
+	*(__dl_sched_class)			\
+	*(__rt_sched_class)			\
+	*(__fair_sched_class)			\
+	*(__ext_sched_class)			\
+	*(__idle_sched_class)			\
+	__sched_class_lowest = .;
+#+end_example
+比如，*(__dl_sched_class)表示把所有放入__dl_sched_class段的对象，链接到当前地址，链接地址按每行依次增大，这样具有较小地址的调度类拥有更高的优先级，这样sched_class_above采用直接比较地址大小的办法来确定不同调度类的优先级就有了根据。
+
+现在简单分析下另一个条件就是：
+#+begin_example
+rq->nr_running == rq->cfs.h_nr_queued
+#+end_example
+条件本身是简单明晰的，就是现在通用rq运行队列里的所有正在运行的进程数量等于cfs队列里排队的进程数量，各个调度类在入队/出队都是可以操作rq::nr_running计数的，比如stop调度类出队进程时：
+#+begin_example
+dequeue_task_stop->sub_nr_running
+#+end_example
+stop调度类入队时：
+#+begin_example
+enqueue_task_stop->add_nr_running
+#+end_example
+对于fair CFS调度类来说也是一样，比如出队时：
+#+begin_example
+dequeue_entities->sub_nr_running
+#+end_example
+入队时：
+#+begin_example
+enqueue_task_fair->add_nr_running
+#+end_example
+同时，如果CFS操作了rq::nr_running，那么也会同步操作cfs_rq::h_nr_queued，比如在dequeue_entities里先会对cfs_rq::h_nr_queued进行递减，才会调用sub_nr_running去递减通用rq::nr_running计数，所以如果上述的条件满足，就意味着没有其它调度类的进程被enqueue到通用rq队列里，这样就可以直接调用CFS类的pick_next_task_fair函数了。如果从CFS队列里没能选出进程，那么就可以调用pick_task_idle选一个空闲进程来运行了，当然前提是fair调度类的下一个优先级的调度类就是idle类。
+
+restart标签下的代码，先做了下负载均衡，prev_balance会从prev所属的调度类往下的优先级去遍历调度类，然后调用这些调度类的balance函数（如果有的话），当然restart下最重要的逻辑还是从最高优先级的调度类往最低优先级的调度类遍历，去寻找一个可以运行的进程：
+#+begin_example
+#define for_each_active_class(class)						\
+	for_active_class_range(class, __sched_class_highest, __sched_class_lowest)
+#define for_active_class_range(class, _from, _to)				\
+	for (class = (_from); class != (_to); class = next_active_class(class))
+/*
+ * Iterate only active classes. SCX can take over all fair tasks or be
+ * completely disabled. If the former, skip fair. If the latter, skip SCX.
+ */
+static inline const struct sched_class *next_active_class(const struct sched_class *class)
+{
+	class++;
+#ifdef CONFIG_SCHED_CLASS_EXT
+	if (scx_switched_all() && class == &fair_sched_class)
+		class++;
+	if (!scx_enabled() && class == &ext_sched_class)
+		class++;
+#endif
+	return class;
+}
+#+end_example
+有了前面对于使用调度类地址反应调度优先级的原理说明，现在看这个调度类遍历宏的实现就简单多了，就不必过多介绍了。这里只是再提下sched_class::pick_next_task和sched_class::pick_task在这里的不同调用表现，前者一般就只有CFS调度类实现了，使用pick_next_task就无需调度核心框架（kernel/sched/core.c）再去调用put_prev_set_next_task函数了。
+
+最后idle调度类的进程一定可以有一个进程运行，所以最后有个BUG。
+
+下面开始分析pick_next_task_fair函数
 * context_switch
