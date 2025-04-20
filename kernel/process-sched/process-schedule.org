@@ -871,5 +871,94 @@ static inline const struct sched_class *next_active_class(const struct sched_cla
 
 最后idle调度类的进程一定可以有一个进程运行，所以最后有个BUG。
 
-下面开始分析pick_next_task_fair函数
+下面开始分析pick_next_task_fair函数：
+#+begin_example
+struct task_struct *
+pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
+{
+	struct sched_entity *se;
+	struct task_struct *p;
+	int new_tasks;
+
+again:
+	p = pick_task_fair(rq);
+	if (!p)
+		goto idle;
+	se = &p->se;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	if (prev->sched_class != &fair_sched_class)
+		goto simple;
+
+	__put_prev_set_next_dl_server(rq, prev, p);
+
+	/*
+	 * Because of the set_next_buddy() in dequeue_task_fair() it is rather
+	 * likely that a next task is from the same cgroup as the current.
+	 *
+	 * Therefore attempt to avoid putting and setting the entire cgroup
+	 * hierarchy, only change the part that actually changes.
+	 *
+	 * Since we haven't yet done put_prev_entity and if the selected task
+	 * is a different task than we started out with, try and touch the
+	 * least amount of cfs_rqs.
+	 */
+	if (prev != p) {
+		struct sched_entity *pse = &prev->se;
+		struct cfs_rq *cfs_rq;
+
+		while (!(cfs_rq = is_same_group(se, pse))) {
+			int se_depth = se->depth;
+			int pse_depth = pse->depth;
+
+			if (se_depth <= pse_depth) {
+				put_prev_entity(cfs_rq_of(pse), pse);
+				pse = parent_entity(pse);
+			}
+			if (se_depth >= pse_depth) {
+				set_next_entity(cfs_rq_of(se), se);
+				se = parent_entity(se);
+			}
+		}
+
+		put_prev_entity(cfs_rq, pse);
+		set_next_entity(cfs_rq, se);
+
+		__set_next_task_fair(rq, p, true);
+	}
+
+	return p;
+
+simple:
+#endif
+	put_prev_set_next_task(rq, prev, p);
+	return p;
+
+idle:
+	if (!rf)
+		return NULL;
+
+	new_tasks = sched_balance_newidle(rq, rf);
+
+	/*
+	 * Because sched_balance_newidle() releases (and re-acquires) rq->lock, it is
+	 * possible for any higher priority task to appear. In that case we
+	 * must re-start the pick_next_entity() loop.
+	 */
+	if (new_tasks < 0)
+		return RETRY_TASK;
+
+	if (new_tasks > 0)
+		goto again;
+
+	/*
+	 * rq is about to be idle, check if we need to update the
+	 * lost_idle_time of clock_pelt
+	 */
+	update_idle_rq_clock_pelt(rq);
+
+	return NULL;
+}
+#+end_example
+
 * context_switch
