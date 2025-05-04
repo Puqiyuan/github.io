@@ -960,5 +960,26 @@ idle:
 	return NULL;
 }
 #+end_example
+该函数主体逻辑有三方面，一是通过pick_task_fair函数去选下一个运行的进程，二是处理组调度的逻辑，三是如果没有可运行的进程，还需要调用sched_balance_newidle去拉取其它rq（cpu）上的任务。
+
+pick_task_fair留后面分析。如果这个函数选不出进程了，也就是p为空，就会跳到idle标签，其下的逻辑就是通过sched_balance_newidle去拉取其它cpu上任务，如果能拉取成功（返回值大于0），就会跳到again通过pick_task_fair再次挑选任务运行。
+
+在开启了组调度并且要被切换的prev进程所属的调度类是CFS时，就会有一些逻辑处理组调度，如果条件不满足就是跳到simple标签，也就是只需要简单的对prev进行put操作就行。
+
+处理组调度的逻辑相对复杂一些，首先组调度有一个depth层级的概念，所有调度实体组成一棵调度树，叶子节点是可以运行的进程实体，而中间的层代表了其下任务的总行为。对于挑选出来即将运行p和即将切换出去的prev，如果它们不同，就会对它们循环向上降低深度，对于prev路径上的任务要进行put操作，而对于p路径上的任务要进行set操作，每次迭代期间，哪个较深，就通过parent_entity找到对应sched_entity的父调度实体，其实质也就是sched_entity::depth会减小。is_same_group会判断迭代的路径上两个sched_entity是否属于相同的组了：
+
+#+begin_example
+/* Do the two (enqueued) entities belong to the same group ? */
+static inline struct cfs_rq *
+is_same_group(struct sched_entity *se, struct sched_entity *pse)
+{
+	if (se->cfs_rq == pse->cfs_rq)
+		return se->cfs_rq;
+
+	return NULL;
+}
+#+end_example
+如果迭代到两个sched_entity属于同一个cfs rq时，这时put/set操作就可以停下来了，这算是一种优化，不用操作整个调度树。
+
 
 * context_switch
