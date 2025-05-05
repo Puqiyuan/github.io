@@ -981,5 +981,88 @@ is_same_group(struct sched_entity *se, struct sched_entity *pse)
 #+end_example
 如果迭代到两个sched_entity属于同一个cfs rq时，这时put/set操作就可以停下来了，这算是一种优化，不用操作整个调度树。
 
+前面提到了set/put操作，具体的函数实现分别就是set_next_entity和put_prev_entity，下面分析下这两个函数。首先是set_next_entity：
+#+begin_example
+static void
+set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	clear_buddies(cfs_rq, se);
+
+	/* 'current' is not kept within the tree. */
+	if (se->on_rq) {
+		/*
+		 * Any task has to be enqueued before it get to execute on
+		 * a CPU. So account for the time it spent waiting on the
+		 * runqueue.
+		 */
+		update_stats_wait_end_fair(cfs_rq, se);
+		__dequeue_entity(cfs_rq, se);
+		update_load_avg(cfs_rq, se, UPDATE_TG);
+
+		set_protect_slice(se);
+	}
+
+	update_stats_curr_start(cfs_rq, se);
+	WARN_ON_ONCE(cfs_rq->curr);
+	cfs_rq->curr = se;
+
+	/*
+	 * Track our maximum slice length, if the CPU's load is at
+	 * least twice that of our own weight (i.e. don't track it
+	 * when there are only lesser-weight tasks around):
+	 */
+	if (schedstat_enabled() &&
+	    rq_of(cfs_rq)->cfs.load.weight >= 2*se->load.weight) {
+		struct sched_statistics *stats;
+
+		stats = __schedstats_from_se(se);
+		__schedstat_set(stats->slice_max,
+				max((u64)stats->slice_max,
+				    se->sum_exec_runtime - se->prev_sum_exec_runtime));
+	}
+
+	se->prev_sum_exec_runtime = se->sum_exec_runtime;
+}
+#+end_example
+内核调度器在pick出一个进程运行前，都需要先对它进行set操作，所谓set操作，主要包括，如果进程还在等待队列上（on_rq被设置，在红黑树上就绪等待），那么需要将pick出的进程进行出队，因为一个马上就要运行的进程是不会同时又在红黑就绪树上等待的，这里可能会有点歧义，“出队”反而是代表进程要获得cpu运行了，正确的理解是，每个进程在运行前都需要enqueue到rq（红黑就绪树），在要获得cpu运行时需要dequeue，这里的enqueue/dequeue是针对红黑就绪树而说的，而不是上cpu运行来说enqueue/dequeue，一个典型的流程是：
+#+begin_example
+唤醒 -> enqueue_entity -> 等待红黑树调度 -> 被选中 -> dequeue_entity -> 上CPU
+#+end_example
+总结起来就是，在CFS中，“出队（dequeue）”不是表示进程失去了运行权，而恰恰相反，是调度器确认它将获得运行权的标志性动作。enqueue/dequeue操作本质上是对红黑树的数据结构维护，而非进程运行与否的直接体现。
+
+set操作还有就是更新即将运行进程的一些统计状态，最后一个比较重要的动作是设置cfs_rq::curr为当前选择出来即将运行的sched_entity，curr代表当前在cfs_rq上运行的实体，如果没有运行的进程就设置为NULL。
+
+下面详细分析下set_next_entity的细节。clear_buddies用于清除sched_entity所在cfs_rq的buddy信息。
+
+接下来如果sched_entity::on_rq非零，代表调度实体还在红黑就绪树上，那么这时需要通过update_stats_wait_end_fair函数更新它花在rq上的等待时间，随后__dequeue_entity出队rq，update_load_avg更新一下负载，set_protect_slice设置保护时间片，依次分析。
+
+#+begin_example
+static inline void
+update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	struct sched_statistics *stats;
+	struct task_struct *p = NULL;
+
+	if (!schedstat_enabled())
+		return;
+
+	stats = __schedstats_from_se(se);
+
+	/*
+	 * When the sched_schedstat changes from 0 to 1, some sched se
+	 * maybe already in the runqueue, the se->statistics.wait_start
+	 * will be 0.So it will let the delta wrong. We need to avoid this
+	 * scenario.
+	 */
+	if (unlikely(!schedstat_val(stats->wait_start)))
+		return;
+
+	if (entity_is_task(se))
+		p = task_of(se);
+
+	__update_stats_wait_end(rq_of(cfs_rq), p, stats);
+}
+#+end_example
+
 
 * context_switch
