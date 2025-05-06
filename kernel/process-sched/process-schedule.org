@@ -1064,5 +1064,98 @@ update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 }
 #+end_example
 
+schedstat_enabled在没有开启CONFIG_SCHEDSTATS时都是0，否则就是sched_schedstats分支变量：
+#+begin_example
+#define   schedstat_enabled()		static_branch_unlikely(&sched_schedstats)
+#+end_example
+笔者的环境开启了CONFIG_SCHEDSTATS配置，但是sched_schedstats默认是0的：
+#+begin_example
+DEFINE_STATIC_KEY_FALSE(sched_schedstats);
+#+end_example
+所以通常情况下，update_stats_wait_end_fair在schedstat_enabled判断就该返回了，也就是cat /proc/schedstat默认是看不到wait_max，wait_count以及wait_sum这些成员的。
 
+分析sched_schedstats这个分支变量，可以通过set_schedstats这个函数开关它：
+#+begin_example
+static void set_schedstats(bool enabled)
+{
+	if (enabled)
+		static_branch_enable(&sched_schedstats);
+	else
+		static_branch_disable(&sched_schedstats);
+}
+#+end_example
+调用set_schedstats（也就是设置sched_schedstats）有两种手段一是通过启动命令行添加schedstats=enable，再有就是修改/proc/sys/kernel/sched_schedstats为1。
+
+假设现在开启了sched_schedstats，那么往下就会通过__schedstats_from_se去获得sched_statistics调度统计结构体：
+#+begin_example
+static inline struct sched_statistics *
+__schedstats_from_se(struct sched_entity *se)
+{
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	if (!entity_is_task(se))
+		return &container_of(se, struct sched_entity_stats, se)->stats;
+#endif
+	return &task_of(se)->stats;
+}
+#+end_example
+该函数的实现分两种情况，一是配置了组调度并且当前实体并不是一个实际的任务，那么sched_statistics结构体实际是内嵌在了sched_entity_stats结构体，所以可以用container_of这种结构体偏移的办法获得调度统计结构体。
+
+这里判断一个实体是否是实际任务的办法很简单（当然是针对开启组调度CONFIG_FAIR_GROUP_SCHED而说的，没有开启这个配置时，任何调度实体sched_entity都是可上CPU运行的）：
+#+begin_example
+#define entity_is_task(se)	(!se->my_q)
+#+end_example
+my_q其实就是在开启组调度时（非空），该调度实体下拥有的cfs调度队列。
+
+没有开启组调度时，__schedstats_from_se，sched_statistics就是内嵌在task_struct里的。
+
+拿到了sched_statistics后，就有一个防御性检查判断，那就是wait_start要非0，wait_start是可能为0的，比如按如上的使用sysctl变量的方法开启该功能时，wait_start之前没有开启时是0，这样后面再算调度实体的等待运行时间就会变得很大（或者离谱）。
+
+再往后的代码拿了下对应调度实体的task_struct结构体。
+
+最后是真正的更新统计动作：
+#+begin_example
+void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
+			     struct sched_statistics *stats)
+{
+	u64 delta = rq_clock(rq) - schedstat_val(stats->wait_start);
+
+	if (p) {
+		if (task_on_rq_migrating(p)) {
+			/*
+			 * Preserve migrating task's wait time so wait_start
+			 * time stamp can be adjusted to accumulate wait time
+			 * prior to migration.
+			 */
+			__schedstat_set(stats->wait_start, delta);
+
+			return;
+		}
+
+		trace_sched_stat_wait(p, delta);
+	}
+
+	__schedstat_set(stats->wait_max,
+			max(schedstat_val(stats->wait_max), delta));
+	__schedstat_inc(stats->wait_count);
+	__schedstat_add(stats->wait_sum, delta);
+	__schedstat_set(stats->wait_start, 0);
+}
+#+end_example
+这个函数的逻辑是显而易见的了，用rq_clock获得的clock减去之前记录的开始等待的时间wait_start（入队时会设置），就是当前调度实体等待了多久才获得cpu，同时设置新的可能变化的wait_max，也即最大等待时间，同时wait_count自增，wait_sum累加，由于__update_stats_wait_end结束后调度实体马上会上CPU运行，所以要设置wait_start为0。
+
+这里需要说明说明的是，task_struct::on_rq其实有三种状态，为0代表正在cpu上运行，为1代表在rq上排队，而为2代表在迁移到另一个rq的过程：
+#+begin_example
+/* task_struct::on_rq states: */
+#define TASK_ON_RQ_QUEUED	1
+#define TASK_ON_RQ_MIGRATING	2
+#+end_example
+task_on_rq_queued定义如下：
+#+begin_example
+static inline int task_on_rq_migrating(struct task_struct *p)
+{
+	return READ_ONCE(p->on_rq) == TASK_ON_RQ_MIGRATING;
+}
+#+end_example
+处理在迁移状态进程的等待时间是一个边界条件，在某个cpuA的rqA上等待了一段时间delta_A，还没有上cpuA运行时，就被迁移到了另一个cpuB时，在新的rqB上又等待了一段时间delta_B，那么总的等待时
+间应该是delta_A + delta_B，在__update_stats_wait_end里只是将这个delta时间给到了wait_start，也就是这时wait_start的语义其实发生了变化，不再是一个
 * context_switch
