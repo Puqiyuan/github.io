@@ -1156,6 +1156,71 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 	return READ_ONCE(p->on_rq) == TASK_ON_RQ_MIGRATING;
 }
 #+end_example
-处理在迁移状态进程的等待时间是一个边界条件，在某个cpuA的rqA上等待了一段时间delta_A，还没有上cpuA运行时，就被迁移到了另一个cpuB时，在新的rqB上又等待了一段时间delta_B，那么总的等待时
-间应该是delta_A + delta_B，在__update_stats_wait_end里只是将这个delta时间给到了wait_start，也就是这时wait_start的语义其实发生了变化，不再是一个
+处理在迁移状态进程的等待时间是一个边界条件，在某个cpuA的rqA上等待了一段时间delta_A，还没有上cpuA运行时，就被迁移到了另一个cpuB时，在新的rqB上又等待了一段时间delta_B，那么总的等待时间应该是delta_A + delta_B，在__update_stats_wait_end里只是将这个delta时间给到了wait_start，也就是这时wait_start的语义其实发生了变化，不再是一个时间戳，而是一段时间长度，然后就返回了。而在__update_stats_wait_start的实现里，设置起始的开始等待时间时，会将wait_start减去这个已经等待的时间prev_wait_start（就是delta_A + delta_B）：
+#+begin_example
+void __update_stats_wait_start(struct rq *rq, struct task_struct *p,
+			       struct sched_statistics *stats)
+{
+	u64 wait_start, prev_wait_start;
+
+	wait_start = rq_clock(rq);
+	prev_wait_start = schedstat_val(stats->wait_start);
+
+	if (p && likely(wait_start > prev_wait_start))
+		wait_start -= prev_wait_start;
+
+	__schedstat_set(stats->wait_start, wait_start);
+}
+#+end_example
+这样相当于把开始等待的时间往前拨了些，以达到累计等待时间的效果。对__update_stats_wait_start的调用可以是：
+#+begin_example
+update_stats_enqueue_fair->update_stats_wait_start_fair->__update_stats_wait_start
+#+end_example
+也可以是：
+#+begin_example
+put_prev_entity->update_stats_wait_start_fair->__update_stats_wait_start
+#+end_example
+前者是调度实体入队的时候，后者是从CPU上撤下重新put到rq时，这些时机都需要记录开始等待的时间戳。
+
+set调度实体的下一个动作是将调度实体dequeue出rq红黑树队列：
+#+begin_example
+static void __dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	rb_erase_augmented_cached(&se->run_node, &cfs_rq->tasks_timeline,
+				  &min_vruntime_cb);
+	avg_vruntime_sub(cfs_rq, se);
+}
+#+end_example
+#+begin_example
+static __always_inline void
+rb_erase_augmented_cached(struct rb_node *node, struct rb_root_cached *root,
+			  const struct rb_augment_callbacks *augment)
+{
+	if (root->rb_leftmost == node)
+		root->rb_leftmost = rb_next(node);
+	rb_erase_augmented(node, &root->rb_root, augment);
+}
+#+end_example
+cfs_rq里的tasks_timeline成员就是大名鼎鼎的任务挂载的红黑树，其定义如下：
+#+begin_example
+struct rb_root_cached {
+	struct rb_root rb_root;
+	struct rb_node *rb_leftmost;
+};
+#+end_example
+rb_leftmost是缓存的整个树的所有进程里，下一个即将运行的进程，而rb_root是所有进程形成树的根节点，sched_entity::run_node用来代表调度实体往树上挂载，如果当前出队的进程就刚好是rb_leftmost的话，那么rb_leftmost需要更新，因为当前进程出队了。rb_erase_augmented里是真正的删除节点的操作，里面还会维护二叉红黑树的性质，具体的本文主题就不介绍了。由于当前调度实体出队了，一些负载要从当前的cfs_rq里扣除，这就是avg_vruntime_sub做的事情：
+#+begin_example
+static void
+avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight = scale_load_down(se->load.weight);
+	s64 key = entity_key(cfs_rq, se);
+
+	cfs_rq->avg_vruntime -= key * weight;
+	cfs_rq->avg_load -= weight;
+}
+#+end_example
+进程的weight一般通过set_load_weight去设置。
+
+下一个动作是
 * context_switch
