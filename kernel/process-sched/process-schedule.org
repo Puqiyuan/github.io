@@ -1222,5 +1222,50 @@ avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 #+end_example
 进程的weight一般通过set_load_weight去设置。
 
-下一个动作是
+下一个动作是通过update_load_avg进行负载更新，进程的负载计算本篇主题不打算详细介绍，另开PELT算法主题单独介绍，总的来说该函数会将负载按周期进行衰减，这里的周期是1024us，也就是约为1ms，当前周期对负载的共享就是L，过去1ms内是L * y1，过去第2ms内是L * y^2，依次类推，其中y ^32 = 0.5。
+
+update_stats_curr_start更新了现在调度实体开始运行的时间戳：
+#+begin_example
+/*
+ * We are picking a new current task - update its stats:
+ */
+static inline void
+update_stats_curr_start(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	/*
+	 * We are starting a new run period:
+	 */
+	se->exec_start = rq_clock_task(rq_of(cfs_rq));
+}
+#+end_example
+cfs_rq当前运行的实体curr也要改成当前的se。
+
+最后的一段代码是记录下当前se的最大运行slice时间片，用当前的sum_exec_runtime减去上次的这个累计执行时间，并和之前的取大者。不过这个更新是有条件的，那就是当前cfs_rq的负载要较大（大于sed两倍）。这样set动作就介绍完了。
+
+下面是介绍put动作：
+#+begin_example
+static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
+{
+	/*
+	 * If still on the runqueue then deactivate_task()
+	 * was not called and update_curr() has to be done:
+	 */
+	if (prev->on_rq)
+		update_curr(cfs_rq);
+
+	/* throttle cfs_rqs exceeding runtime */
+	check_cfs_rq_runtime(cfs_rq);
+
+	if (prev->on_rq) {
+		update_stats_wait_start_fair(cfs_rq, prev);
+		/* Put 'current' back into the tree. */
+		__enqueue_entity(cfs_rq, prev);
+		/* in !on_rq case, update occurred at dequeue */
+		update_load_avg(cfs_rq, prev, 0);
+	}
+	WARN_ON_ONCE(cfs_rq->curr != prev);
+	cfs_rq->curr = NULL;
+}
+#+end_example
+
 * context_switch
