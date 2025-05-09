@@ -1267,5 +1267,5 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 	cfs_rq->curr = NULL;
 }
 #+end_example
-
+如果prev在rq上，就需要更新下当前sched_entity的一些运行时信息，最重要的信息当属sched_entity::vruntime。
 * context_switch
