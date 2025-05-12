@@ -1476,4 +1476,109 @@ const u32 sched_prio_to_wmult[40] = {
 #+end_example
 往vruntime里累加的值就越小，而往进程红黑树里插入进程时比较的key值就是这里的vruntime（较新的调度算法是sched_entity::deadline，但原理类似），越小的vruntime越容易出现在进程调度红黑树的左半部分而选择被调度运行。
 
+update_curr接下来调用update_deadline更新sched_entity::deadline的值：
+#+begin_example
+/*
+ * XXX: strictly: vd_i += N*r_i/w_i such that: vd_i > ve_i
+ * this is probably good enough.
+ */
+static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	if ((s64)(se->vruntime - se->deadline) < 0)
+		return false;
+
+	/*
+	 * For EEVDF the virtual time slope is determined by w_i (iow.
+	 * nice) while the request time r_i is determined by
+	 * sysctl_sched_base_slice.
+	 */
+	if (!se->custom_slice)
+		se->slice = sysctl_sched_base_slice;
+
+	/*
+	 * EEVDF: vd_i = ve_i + r_i / w_i
+	 */
+	se->deadline = se->vruntime + calc_delta_fair(se->slice, se);
+
+	/*
+	 * The task has consumed its request, reschedule.
+	 */
+	return true;
+}
+#+end_example
+这里可以看到，新的EEVDF算法会sched_entity::deadline，它是vruntime以及slice也通过calc_delta_fair进行缩放后的和，vruntime前面介绍过，权重越大（nice越低），vruntime增长越慢，但是留给到下一次运行的时间也少，更高权重的任务，在申请同样的运行时间（slice）时，会得到一个“更短的deadline”，即期望更快完成调度。
+
+update_curr后面调用update_min_vruntime：
+#+begin_example
+static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
+{
+	u64 min_vruntime = cfs_rq->min_vruntime;
+	/*
+	 * open coded max_vruntime() to allow updating avg_vruntime
+	 */
+	s64 delta = (s64)(vruntime - min_vruntime);
+	if (delta > 0) {
+		avg_vruntime_update(cfs_rq, delta);
+		min_vruntime = vruntime;
+	}
+	return min_vruntime;
+}
+
+static void update_min_vruntime(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *se = __pick_root_entity(cfs_rq);
+	struct sched_entity *curr = cfs_rq->curr;
+	u64 vruntime = cfs_rq->min_vruntime;
+
+	if (curr) {
+		if (curr->on_rq)
+			vruntime = curr->vruntime;
+		else
+			curr = NULL;
+	}
+
+	if (se) {
+		if (!curr)
+			vruntime = se->min_vruntime;
+		else
+			vruntime = min_vruntime(vruntime, se->min_vruntime);
+	}
+
+	/* ensure we never gain time by being placed backwards. */
+	cfs_rq->min_vruntime = __update_min_vruntime(cfs_rq, vruntime);
+}
+#+end_example
+这里要提下，更新cfs_rq::min_vruntime可不是delta < 0才更新，而是delta > 0，也就是新传进来的vruntime较大时，反而更新成这个vruntime，看起来不符合min_vruntime的字面意义，最小值不是应该越来越小吗？但实际上：这个vruntime是已经挑选好、即将要执行的任务的vruntime（cfs_rq::curr），也就是说，整个运行队列中，已经没有比它更小的vruntime了（小的都已经调度走了）。因此，这时可以安全地推进min_vruntime，它仍然代表“当前所有活跃任务中（在cfs_rq中的）最小的vruntime”。
+
+如果cfs_rq::curr是一个任务的话，调用update_curr_task->account_group_exec_runtime去更新累加到所在线程组用的时间
+#+begin_example
+static inline void update_curr_task(struct task_struct *p, s64 delta_exec)
+{
+	trace_sched_stat_runtime(p, delta_exec);
+	account_group_exec_runtime(p, delta_exec);
+	cgroup_account_cputime(p, delta_exec);
+}
+#+end_example
+#+begin_example
+/**
+ * account_group_exec_runtime - Maintain exec runtime for a thread group.
+ *
+ * @tsk:	Pointer to task structure.
+ * @ns:		Time value by which to increment the sum_exec_runtime field
+ *		of the thread_group_cputime structure.
+ *
+ * If thread group time is being maintained, get the structure for the
+ * running CPU and update the sum_exec_runtime field there.
+ */
+static inline void account_group_exec_runtime(struct task_struct *tsk,
+					      unsigned long long ns)
+{
+	struct thread_group_cputimer *cputimer = get_running_cputimer(tsk);
+
+	if (!cputimer)
+		return;
+
+	atomic64_add(ns, &cputimer->cputime_atomic.sum_exec_runtime);
+}
+#+end_example
 * context_switch
