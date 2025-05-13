@@ -1581,4 +1581,101 @@ static inline void account_group_exec_runtime(struct task_struct *tsk,
 	atomic64_add(ns, &cputimer->cputime_atomic.sum_exec_runtime);
 }
 #+end_example
+而随后的account_cfs_rq_runtime会从cfs_rq::runtime_remaining里减去运行的delta_exec，这个功能呢跟CONFIG_CFS_BANDWIDTH有关。
+
+如果update_deadline返回的resched为true，也就是需要重新调度当前进程，那么就会resched_curr_lazy设置需要重新调度的标志TIF_NEED_RESCHED：
+#+begin_example
+void resched_curr_lazy(struct rq *rq)
+{
+	__resched_curr(rq, get_lazy_tif_bit());
+}
+#+end_example
+#+begin_example
+static __always_inline int get_lazy_tif_bit(void)
+{
+	if (dynamic_preempt_lazy())
+		return TIF_NEED_RESCHED_LAZY;
+
+	return TIF_NEED_RESCHED;
+}
+#+end_example
+#+begin_example
+/*
+ * resched_curr - mark rq's current task 'to be rescheduled now'.
+ *
+ * On UP this means the setting of the need_resched flag, on SMP it
+ * might also involve a cross-CPU call to trigger the scheduler on
+ * the target CPU.
+ */
+static void __resched_curr(struct rq *rq, int tif)
+{
+	struct task_struct *curr = rq->curr;
+	struct thread_info *cti = task_thread_info(curr);
+	int cpu;
+
+	lockdep_assert_rq_held(rq);
+
+	/*
+	 * Always immediately preempt the idle task; no point in delaying doing
+	 * actual work.
+	 */
+	if (is_idle_task(curr) && tif == TIF_NEED_RESCHED_LAZY)
+		tif = TIF_NEED_RESCHED;
+
+	if (cti->flags & ((1 << tif) | _TIF_NEED_RESCHED))
+		return;
+
+	cpu = cpu_of(rq);
+
+	if (cpu == smp_processor_id()) {
+		set_ti_thread_flag(cti, tif);
+		if (tif == TIF_NEED_RESCHED)
+			set_preempt_need_resched();
+		return;
+	}
+
+	if (set_nr_and_not_polling(cti, tif)) {
+		if (tif == TIF_NEED_RESCHED)
+			smp_send_reschedule(cpu);
+	} else {
+		trace_sched_wake_idle_without_ipi(cpu);
+	}
+}
+#+end_example
+一旦设置，中断返回、抢占点、定时器中断等都会检测这个标志，内核会尽快调用schedule进行上下文切换，如果是跨cpu，会通过IPI使其他CPU尽快进入调度流程。
+
+这样update_curr介绍完了，回到put_prev_entity，如果sched_entity::on_rq非0，注意为非0时（on_rq = 1），任务可能在等待（红黑树中），也可能在运行（当前CPU上）。这段时间都算作任务仍在runqueue中，只有cfs_rq::curr指向的任务当前才正在CPU上运行，所以回顾update_curr是要先取cfs_rq::curr，然后更新其统计运行信息。
+
+这样sched_entity::on_rq为非0时，就需要调用__enqueue_entity重新入下红黑树：
+#+begin_example
+/*
+ * Enqueue an entity into the rb-tree:
+ */
+static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	avg_vruntime_add(cfs_rq, se);
+	se->min_vruntime = se->vruntime;
+	se->min_slice = se->slice;
+	rb_add_augmented_cached(&se->run_node, &cfs_rq->tasks_timeline,
+				__entity_less, &min_vruntime_cb);
+}
+#+end_example
+#+begin_example
+static inline bool __entity_less(struct rb_node *a, const struct rb_node *b)
+{
+	return entity_before(__node_2_se(a), __node_2_se(b));
+}
+#+end_example
+#+begin_example
+static inline bool entity_before(const struct sched_entity *a,
+				 const struct sched_entity *b)
+{
+	/*
+	 * Tiebreak on vruntime seems unnecessary since it can
+	 * hardly happen.
+	 */
+	return (s64)(a->deadline - b->deadline) < 0;
+}
+#+end_example
+到这里就可以很清楚的看到，插入rq红黑树的比较依据就是deadline（较老的调度算法只看vruntime）小的在树的左半部分优先调用到，这就是进程调度相对核心的逻辑，具体的树结构tasks_timeline前面已经涉及到了。
 * context_switch
