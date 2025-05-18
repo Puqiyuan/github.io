@@ -1816,4 +1816,100 @@ out:
 	return pulled_task;
 }
 #+end_example
+pelt load计算以及上面的负载均衡都可以另开主题，本片主题主要是进程调度，就不详细分析了。
+
+以上其实对pick_next_task的介绍整体上就差不多了，下面回到__schedule函数，开始介绍picked部分，picked部分主要的逻辑是切换mm，在prev和选出来要运行的next不是一个进程时，就涉及到切换mm，这主要是通过context_switch来完成的，这留给下一节去分析。
 * context_switch
+context_switch是完成进程切换至关重要的函数，在context_switch->switch_to里面，CPU执行流其实已经去到了另外一个线程，在那个执行流里其实也是从context_switch里的switch_to开始，未来回到当前执行流第一入口点还是这里的context_swith->switch_to，也就是说__schedule返回了，__schedule自身是去往另一个CPU执行流（另一个线程的逻辑）。
+
+以下是context_switch的代码：
+#+begin_example
+/*
+ * context_switch - switch to the new MM and the new thread's register state.
+ */
+static __always_inline struct rq *
+context_switch(struct rq *rq, struct task_struct *prev,
+	       struct task_struct *next, struct rq_flags *rf)
+{
+	prepare_task_switch(rq, prev, next);
+
+	/*
+	 * For paravirt, this is coupled with an exit in switch_to to
+	 * combine the page table reload and the switch backend into
+	 * one hypercall.
+	 */
+	arch_start_context_switch(prev);
+
+	/*
+	 * kernel -> kernel   lazy + transfer active
+	 *   user -> kernel   lazy + mmgrab_lazy_tlb() active
+	 *
+	 * kernel ->   user   switch + mmdrop_lazy_tlb() active
+	 *   user ->   user   switch
+	 *
+	 * switch_mm_cid() needs to be updated if the barriers provided
+	 * by context_switch() are modified.
+	 */
+	if (!next->mm) {                                // to kernel
+		enter_lazy_tlb(prev->active_mm, next);
+
+		next->active_mm = prev->active_mm;
+		if (prev->mm)                           // from user
+			mmgrab_lazy_tlb(prev->active_mm);
+		else
+			prev->active_mm = NULL;
+	} else {                                        // to user
+		membarrier_switch_mm(rq, prev->active_mm, next->mm);
+		/*
+		 * sys_membarrier() requires an smp_mb() between setting
+		 * rq->curr / membarrier_switch_mm() and returning to userspace.
+		 *
+		 * The below provides this either through switch_mm(), or in
+		 * case 'prev->active_mm == next->mm' through
+		 * finish_task_switch()'s mmdrop().
+		 */
+		switch_mm_irqs_off(prev->active_mm, next->mm, next);
+		lru_gen_use_mm(next->mm);
+
+		if (!prev->mm) {                        // from kernel
+			/* will mmdrop_lazy_tlb() in finish_task_switch(). */
+			rq->prev_mm = prev->active_mm;
+			prev->active_mm = NULL;
+		}
+	}
+
+	/* switch_mm_cid() requires the memory barriers above. */
+	switch_mm_cid(rq, prev, next);
+
+	prepare_lock_switch(rq, next, rf);
+
+	/* Here we just switch the register state and the stack. */
+	switch_to(prev, next, prev);
+	barrier();
+
+	return finish_task_switch(prev);
+}
+#+end_example
+从这个函数可以看到，主要分几种情况可以延迟做tlb的刷新操作，切换到内核线程时不必做切换mm的操作，因为内核线程没有自己的mm，一般不会访问用户空间，只需通过enter_lazy_tlb设置上一个标志，表示延迟做tlb刷新操作：
+#+begin_example
+/*
+ * Please ignore the name of this function.  It should be called
+ * switch_to_kernel_thread().
+ *
+ * enter_lazy_tlb() is a hint from the scheduler that we are entering a
+ * kernel thread or other context without an mm.  Acceptable implementations
+ * include doing nothing whatsoever, switching to init_mm, or various clever
+ * lazy tricks to try to minimize TLB flushes.
+ *
+ * The scheduler reserves the right to call enter_lazy_tlb() several times
+ * in a row.  It will notify us that we're going back to a real mm by
+ * calling switch_mm_irqs_off().
+ */
+void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
+{
+	if (this_cpu_read(cpu_tlbstate.loaded_mm) == &init_mm)
+		return;
+
+	this_cpu_write(cpu_tlbstate_shared.is_lazy, true);
+}
+#+end_example
