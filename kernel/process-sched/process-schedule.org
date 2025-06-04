@@ -1942,4 +1942,103 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
 	prepare_arch_switch(next);
 }
 #+end_example
+kcov_prepare_switch主要是代码覆盖率统计方面的逻辑，该配置一般没配。接着看sched_info_switch：
+#+begin_example
+/*
+ * Called when tasks are switched involuntarily due, typically, to expiring
+ * their time slice.  (This may also be called when switching to or from
+ * the idle task.)  We are only called when prev != next.
+ */
+static inline void
+sched_info_switch(struct rq *rq, struct task_struct *prev, struct task_struct *next)
+{
+	/*
+	 * prev now departs the CPU.  It's not interesting to record
+	 * stats about how efficient we were at scheduling the idle
+	 * process, however.
+	 */
+	if (prev != rq->idle)
+		sched_info_depart(rq, prev);
 
+	if (next != rq->idle)
+		sched_info_arrive(rq, next);
+}
+#+end_example
+SCHED_INFO可以导出很多调度方面的信息，所以一般是开启的。这里主要分两种情况统计调度信息，只要即将被换出的prev或者即将被换入的next都不是idle的话，都会调用对应的函数进行统计操作，先看sched_info_depart函数：
+#+begin_example
+/*
+ * Called when a process ceases being the active-running process involuntarily
+ * due, typically, to expiring its time slice (this may also be called when
+ * switching to the idle task).  Now we can calculate how long we ran.
+ * Also, if the process is still in the TASK_RUNNING state, call
+ * sched_info_enqueue() to mark that it has now again started waiting on
+ * the runqueue.
+ */
+static inline void sched_info_depart(struct rq *rq, struct task_struct *t)
+{
+	unsigned long long delta = rq_clock(rq) - t->sched_info.last_arrival;
+
+	rq_sched_info_depart(rq, delta);
+
+	if (task_is_running(t))
+		sched_info_enqueue(rq, t);
+}
+#+end_example
+last_arrival是上次prev作为换入进程通过sched_info_arrive设置的，待会还会看到这个函数的分析。在sched_info_depart里，拿到现在的clock减去上次的last_arrival，就是本轮运行的delta，以这个参数调用rq_sched_info_depart：
+#+begin_example
+/*
+ * Expects runqueue lock to be held for atomicity of update
+ */
+static inline void
+rq_sched_info_depart(struct rq *rq, unsigned long long delta)
+{
+	if (rq)
+		rq->rq_cpu_time += delta;
+}
+#+end_example
+可以看到该函数就是往该rq的rq_cpu_time上累加了delta时间，这个成员可以认为是该rq总共运行了多少cpu时间。task_is_running判断任务状态还是TASK_RUNNING的话，就会调用sched_info_enqueue重新记录排队时间戳：
+#+begin_example
+#define task_is_running(task)		(READ_ONCE((task)->__state) == TASK_RUNNING)
+#+end_example
+#+begin_example
+/*
+ * This function is only called from enqueue_task(), but also only updates
+ * the timestamp if it is already not set.  It's assumed that
+ * sched_info_dequeue() will clear that stamp when appropriate.
+ */
+static inline void sched_info_enqueue(struct rq *rq, struct task_struct *t)
+{
+	if (!t->sched_info.last_queued)
+		t->sched_info.last_queued = rq_clock(rq);
+}
+#+end_example
+就是进程只是下物理CPU了，但并没有离开rq运行队列，所以last_queued记录的是离开物理CPU在rq的时刻。
+
+继续看sched_info_arrive：
+#+begin_example
+/*
+ * Called when a task finally hits the CPU.  We can now calculate how
+ * long it was waiting to run.  We also note when it began so that we
+ * can keep stats on how long its time-slice is.
+ */
+static void sched_info_arrive(struct rq *rq, struct task_struct *t)
+{
+	unsigned long long now, delta = 0;
+
+	if (!t->sched_info.last_queued)
+		return;
+
+	now = rq_clock(rq);
+	delta = now - t->sched_info.last_queued;
+	t->sched_info.last_queued = 0;
+	t->sched_info.run_delay += delta;
+	t->sched_info.last_arrival = now;
+	t->sched_info.pcount++;
+	if (delta > t->sched_info.max_run_delay)
+		t->sched_info.max_run_delay = delta;
+	if (delta && (!t->sched_info.min_run_delay || delta < t->sched_info.min_run_delay))
+		t->sched_info.min_run_delay = delta;
+
+	rq_sched_info_arrive(rq, delta);
+}
+#+end_example
