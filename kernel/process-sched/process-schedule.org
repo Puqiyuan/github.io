@@ -2014,7 +2014,7 @@ static inline void sched_info_enqueue(struct rq *rq, struct task_struct *t)
 #+end_example
 就是进程只是下物理CPU了，但并没有离开rq运行队列，所以last_queued记录的是离开物理CPU在rq的时刻。
 
-继续看sched_info_arrive：
+继续看sched_info_arrive，该函数处理将要调度上CPU的进程的统计信息：
 #+begin_example
 /*
  * Called when a task finally hits the CPU.  We can now calculate how
@@ -2040,5 +2040,18 @@ static void sched_info_arrive(struct rq *rq, struct task_struct *t)
 		t->sched_info.min_run_delay = delta;
 
 	rq_sched_info_arrive(rq, delta);
+}
+#+end_example
+该函数主要用现在的时间戳now减去之前排队的时间戳last_queued，这样就得到了等待时间delta，同时清除last_queued为0，也就是现在任务并不在rq红黑树上进行等待，而是得到了CPU即将运行。run_delay里记录了总的等待延迟，而max_run_delay里记录了最大的等待延迟，这个延迟需要每次比较重新记录，min_run_delay同理。
+
+rq_sched_info_arrive主要是统计rq调度队列层面的信息（之前都是讲的进程task_struct层面的信息）：
+#+begin_example
+static inline void
+rq_sched_info_arrive(struct rq *rq, unsigned long long delta)
+{
+	if (rq) {
+		rq->rq_sched_info.run_delay += delta;
+		rq->rq_sched_info.pcount++;
+	}
 }
 #+end_example
