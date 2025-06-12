@@ -2055,3 +2055,25 @@ rq_sched_info_arrive(struct rq *rq, unsigned long long delta)
 	}
 }
 #+end_example
+随后的perf_event_task_sched_out是CONFIG_PERF_EVENTS的功能，perf事件包括软硬件事件，软件事件通过内建机制或通用tracepoints（跟踪点）来支持。大多数现代CPU支持通过性能计数器寄存器来收集性能事件。这些寄存器可以统计某些类型的硬件事件的数量，例如：执行的指令数、遭遇的缓存未命中（cache miss）、分支预测失败（分支错误预测）等，并且不会对内核或应用程序造成性能下降。这些寄存器还可以在事件次数达到某个阈值时触发中断，因此可以用于对运行在该CPU上的代码进行性能分析（profiling）。Linux 的性能事件子系统（Performance Event Subsystem）对这些软件和硬件事件能力进行了抽象，通过系统调用向用户空间提供服务，供tools/perf/目录下的perf工具使用。它提供了基于任务（task）和基于CPU的计数器，并在此基础上提供事件统计功能。
+
+fire_sched_out_preempt_noifiers是调用注册在task_struct::preempt_notifiers上的通知链回调函数，比如现在prev要被调度出去了，就需要逐一调用注册在这上面的通知链的回调函数。
+
+下一个比较关键的工作就是设置next任务的on_cpu为1，这通过prepare_task：
+#+begin_example
+static inline void prepare_task(struct task_struct *next)
+{
+#ifdef CONFIG_SMP
+	/*
+	 * Claim the task as running, we do this before switching to it
+	 * such that any running task will have this set.
+	 *
+	 * See the smp_load_acquire(&p->on_cpu) case in ttwu() and
+	 * its ordering comment.
+	 */
+	WRITE_ONCE(next->on_cpu, 1);
+#endif
+}
+#+end_example
+
+回到context_switch函数，
