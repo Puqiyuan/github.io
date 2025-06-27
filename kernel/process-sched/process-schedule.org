@@ -2300,4 +2300,10 @@ reload_tlb:
 #+end_example
 如果之前处于lazy tlb模式下，这时就要清除is_lazy标志了，因为switch_mm_irqs_off函数本身就是要切换mm空间，不再是之前的lazy模式了。在Linux的lazy TLB机制中，当一个进程（task）从CPU上被切换出去后，如果下一个任务共享相同的mm_struct（比如另一个线程），我们不立即清除TLB或切换页表，CPU处于一种“懒惰”的状态，即虽然任务被切走，但它的页表依然保留在TLB 中，直到真正有需要（比如切换到另一个不同的mm）时才清除或更新，这种机制优化了上下文切换的性能，避免不必要的TLB flush和CR3写入。这个状态通过cpu_tlbstate_shared.is_lazy来记录。它是一个每CPU状态变量。
 
-随后的逻辑分两个大的部分，一是如果prev和next是同一个进程，那么就是
+随后的逻辑分两个大的部分，一是如果prev和next是同一个进程，那么就很有可能不做真正的切换动作，提前return。但如果prev和next不一样，也就是else分支，那么肯定是要切换mm，所谓切换mm主要有两个方面的事情，一是按新的next进程的页表基地址作为构成cr3的一个部分写到cr3，二是刷新tlb（根据条件看是否要做这个动作）。下面继续分析，首先是prev == next满足的情况，这个分支下先有一个warn判断：
+#+begin_example
+		/* Not actually switching mm's */
+		VM_WARN_ON(is_dyn_asid(prev_asid) &&
+			   this_cpu_read(cpu_tlbstate.ctxs[prev_asid].ctx_id) !=
+	
+#+end_example
