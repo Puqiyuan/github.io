@@ -2298,12 +2298,66 @@ reload_tlb:
 	}
 }
 #+end_example
-如果之前处于lazy tlb模式下，这时就要清除is_lazy标志了，因为switch_mm_irqs_off函数本身就是要切换mm空间，不再是之前的lazy模式了。在Linux的lazy TLB机制中，当一个进程（task）从CPU上被切换出去后，如果下一个任务共享相同的mm_struct（比如另一个线程），我们不立即清除TLB或切换页表，CPU处于一种“懒惰”的状态，即虽然任务被切走，但它的页表依然保留在TLB 中，直到真正有需要（比如切换到另一个不同的mm）时才清除或更新，这种机制优化了上下文切换的性能，避免不必要的TLB flush和CR3写入。这个状态通过cpu_tlbstate_shared.is_lazy来记录。它是一个每CPU状态变量。
+如果之前处于lazy tlb模式下，这时就要清除is_lazy标志了，因为switch_mm_irqs_off函数本身就是要切换mm空间，不再是之前的lazy模式了。在Linux的lazy TLB机制中，当一个进程（task）从CPU上被切换出去后，如果下一个任务共享相同的mm_struct（比如另一个线程），我们不立即清除TLB或切换页表，而只切换寄存器上下文，CPU处于一种“懒惰”的状态，即虽然任务被切走，但它的页表依然保留在TLB 中，直到真正有需要（比如切换到另一个不同的mm）时才清除或更新，这种机制优化了上下文切换的性能，避免不必要的TLB flush和CR3写入。这个状态通过cpu_tlbstate_shared.is_lazy来记录。它是一个每CPU状态变量。
 
 随后的逻辑分两个大的部分，一是如果prev和next是同一个进程，那么就很有可能不做真正的切换动作，提前return。但如果prev和next不一样，也就是else分支，那么肯定是要切换mm，所谓切换mm主要有两个方面的事情，一是按新的next进程的页表基地址作为构成cr3的一个部分写到cr3，二是刷新tlb（根据条件看是否要做这个动作）。下面继续分析，首先是prev == next满足的情况，这个分支下先有一个warn判断：
 #+begin_example
-		/* Not actually switching mm's */
 		VM_WARN_ON(is_dyn_asid(prev_asid) &&
 			   this_cpu_read(cpu_tlbstate.ctxs[prev_asid].ctx_id) !=
-	
+			   next->context.ctx_id);
 #+end_example
+context是内嵌在mm_context_t里的，也就是说mm_struct::context::ctx_id也可以唯一标识一个mm_struct，在init_new_context函数里，会初始化这个ctx_id：
+#+begin_example
+	mm->context.ctx_id = atomic64_inc_return(&last_mm_ctx_id);
+#+end_example
+last_mm_ctx_id是64位全局只增不回退的计数器，每次当有新的mm_struct申请出来时，都会自增这个计数并初始化给ctx_id，用以唯一确定一个mm_struct，而在switch_mm_irqs_off稍后的逻辑，真正切换了mm_struct时，才会更新cpu_tlbstate.loaded_mm_asid，也就是保证per-cpu上（tlb_state结构体）的loaded_mm_asid准确反应现在用的是哪个ASID（槽），所谓ASID槽，具体指的其实就是tlb_state结构体里的ctxs数组，它的大小为TLB_NR_DYN_ASIDS，x86下是6。tlb_state::ctxs[]共计6个槽，当前正在用的槽由tlb_state::loaded_mm_asid指明，而当前正在用的槽对应是哪个mm_struct，由tlb_state::ctxs[loaded_mm_asid].ctx_id指明。
+
+有了以上认知再来继续深入后面X86 tlb管理的代码就容易一些。
+
+回到前面的WARN判断，这个WARN判断是在prev == next满足的情况下，那么自然正常情况下，per-cpu上正在使用的tlb_context::ctx_id就该等于task_struct::context::ctx_id，因为在随后的逻辑，就会设置per-cpu里的ctx_id（当然是在刷新tlb时才做这个动作）：
+#+begin_example
+this_cpu_write(cpu_tlbstate.ctxs[ns.asid].ctx_id, next->context.ctx_id);
+#+end_example
+再往下看：
+#+begin_example
+		/*
+		 * Even in lazy TLB mode, the CPU should stay set in the
+		 * mm_cpumask. The TLB shootdown code can figure out from
+		 * cpu_tlbstate_shared.is_lazy whether or not to send an IPI.
+		 */
+		if (IS_ENABLED(CONFIG_DEBUG_VM) &&
+		    WARN_ON_ONCE(prev != &init_mm && !is_notrack_mm(prev) &&
+				 !cpumask_test_cpu(cpu, mm_cpumask(next))))
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+#+end_example
+正常来说CONFIG_DEBUG_VM不会开启，因为它会影响性能：
+#+begin_example
+	  Enable this to turn on extended checks in the virtual-memory system
+	  that may impact performance.	 
+#+end_example
+即使开启了，一般后面的WARN_ON_ONCE也不会满足条件得到执行，但是这些条件和下面的cpumask_set_cpu就是要兜底保证一个mm_struct在某个cpu上使用时，需要将cpu号记录在mm_struct::cpu_bitmap里，这样将来假如其它CPU上也使用了这个mm_struct，然后可以通过如下一些例子路径发送IPI通知到本CPU：
+#+begin_example
+unmap_region->tlb_finish_mmu->tlb_flush_mmu->tlb_flush_mmu_tlbonly->tlb_flush->flush_tlb_mm->flush_tlb_mm_range->flush_tlb_multi->__flush_tlb_multi->native_flush_tlb_multi
+try_to_unmap->rmap_walk->rmap_walk_anon->rmap_one(try_to_unmap_one)->flush_tlb_mm_range->flush_tlb_multi->__flush_tlb_multi->native_flush_tlb_multi
+exit_mmap->unmap_vmas->unmap_single_vma->unmap_page_range->zap_p4d_range->zap_pud_range->zap_pmd_range->zap_pte_range->tlb_flush_mmu_tlbonly->tlb_flush->flush_tlb_mm->flush_tlb_mm_range->flush_tlb_multi->__flush_tlb_multi->native_flush_tlb_multi
+#+end_example
+在native_flush_tlb_multi里就有针对cpumask里每个cpu去调用flush_tlb_func：
+#+begin_example
+on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
+#+end_example
+可以看到，unmap时就会刷新tlb，可能通知到其它cpu，本质上tlb其实就是缓存的虚拟地址到物理地址的缓存，所以页表变了的话肯定也会刷新tlb以反应新的虚拟地址到物理地址的映射。
+
+前面提到了，上面的检查cpu是否在mm_struct::cpu_bitmap里，一般都不会做，那么往mm_struct::cpu_bitmap里设置cpu号是在哪里呢？实际就在switch_mm_irqs_off稍后的逻辑，就是prev== next不满足，确实会切换为不同mm_struct，就会设置上当前cpu号到next的cpu_bitmap：
+#+begin_example
+		/* Start receiving IPIs and then read tlb_gen (and LAM below) */
+		if (next != &init_mm && !cpumask_test_cpu(cpu, mm_cpumask(next)))
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+#+end_example
+这样假如将来需要在next这个mm_struct上执行flush_tlb_func，就可以通过mm_cpumask找到是哪些CPU需要执行这个tlb刷新函数，tlb是每个CPU私有的per-CPU硬件资源，内容不会自动在核间同步，需要显式失效机制来保持一致性，也就是做：
+#+begin_example
+flush_tlb_func->flush_tlb_one_user->__flush_tlb_one_user->native_flush_tlb_one_user->invpcid_flush_one->__invpcid
+#+end_example
+最后其实就是invpcid指令。
+
+继续往下
+
