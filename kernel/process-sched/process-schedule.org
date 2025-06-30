@@ -2357,7 +2357,24 @@ on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
 #+begin_example
 flush_tlb_func->flush_tlb_one_user->__flush_tlb_one_user->native_flush_tlb_one_user->invpcid_flush_one->__invpcid
 #+end_example
-最后其实就是invpcid指令。
+最后其实就是invpcid指令，关于它的详细介绍可以参考Intel SDM3 Chapter 4.10。
 
-继续往下
+继续往下分析，mm_needs_global_asid->mm_global_asid主要在AMD平台上使用，因为mm_global_asid在CONFIG_BROADCAST_TLB_FLUSH配置下，但是这个配置：
+#+begin_example
+config BROADCAST_TLB_FLUSH
+	def_bool y
+	depends on CPU_SUP_AMD && 64BIT
+#+end_example
+可以看到在AMD平台上使用。
+
+往下的代码：
+#+begin_example
+		/*
+		 * Broadcast TLB invalidation keeps this ASID up to date
+		 * all the time.
+		 */
+		if (is_global_asid(prev_asid))
+			return;
+#+end_example
+也主要针对AMD平台，is_global_asid将大于6的asid都识别为global的，
 
