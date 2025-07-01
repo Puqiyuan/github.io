@@ -2376,5 +2376,66 @@ config BROADCAST_TLB_FLUSH
 		if (is_global_asid(prev_asid))
 			return;
 #+end_example
-也主要针对AMD平台，is_global_asid将大于6的asid都识别为global的，
+也主要针对AMD平台，is_global_asid将大于6的asid都识别为global的，主要依靠amd平台的invlpgb指令。
 
+随后的代码也是提前返回，不做实际的tlb reload：
+#+begin_example
+		/*
+		 * If the CPU is not in lazy TLB mode, we are just switching
+		 * from one thread in a process to another thread in the same
+		 * process. No TLB flush required.
+		 */
+		if (!was_lazy)
+			return;
+#+end_example
+也就是说，之前并没有在kernel thread里，并且上面的代码是在prev == next满足的情况下，就是说是在同一个进程的多个线程间切换，多个线程共享一个mm_struct空间，自然也不需要reloadtlb（mm_struct没有改变，页表也就没有改变）。
+
+再往下分析：
+#+begin_example
+		/*
+		 * Read the tlb_gen to check whether a flush is needed.
+		 * If the TLB is up to date, just use it.
+		 * The barrier synchronizes with the tlb_gen increment in
+		 * the TLB shootdown code.
+		 */
+		smp_mb();
+		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
+		if (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
+				next_tlb_gen)
+			return;
+#+end_example
+tlb_gen指示了内存页表是否改变，如果内存页表改变了，那么tlb就不是up to date的了，tlb的本质是缓存了虚拟地址到物理地址的映射，如果内存里的页表改变了，自然TLB需要重新同步，注意这里prev_asid来自loaded_mm_asid：
+#+begin_example
+u16 prev_asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
+#+end_example
+并且之前某次切换流程里，那时prev作为next，假如是真的进行了tlb flush，也就是ns.need_flush是true，在那时cpu_tlbstate里的tlb_gen会更新成next里的：
+#+begin_example
+this_cpu_write(cpu_tlbstate.ctxs[ns.asid].tlb_gen, next_tlb_gen);
+#+end_example
+自那次后到本次进程切换，如果next_tlb_gen有改变，那么上面的判断相等就不会满足，也就是说这期间进程有改变自己的页表，此时再切换到prev（或next，因为整个大的条件在prev == next满足的情况下），就需要刷新tlb，让tlb部件和内存里的页表重新进行同步。那么什么情况下，mm_struct::context::tlb_gen可能会增加呢？其实就是前面有列举出的ipi的路径上就会增加这个计数，flush_tlb_mm_range都会调用inc_mm_tlb_gen：
+#+begin_example
+static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
+{
+	/*
+	 * Bump the generation count.  This also serves as a full barrier
+	 * that synchronizes with switch_mm(): callers are required to order
+	 * their read of mm_cpumask after their writes to the paging
+	 * structures.
+	 */
+	return atomic64_inc_return(&mm->context.tlb_gen);
+}
+#+end_example
+
+那么再往下的代码就比较容易理解了：
+#+begin_example
+		/*
+		 * TLB contents went out of date while we were in lazy
+		 * mode. Fall through to the TLB switching code below.
+		 */
+		ns.asid = prev_asid;
+		ns.need_flush = true;
+#+end_example
+上面的代码还是在prev == next满足的情况下，但是这时没有提前返回，也就是要进行实质的reload tlb动作，上面的代码跑到，实际是说前面几个判断可以提前跳过reload tlb的条件都没有满足，虽然是在同一个进程的多个线程间切换，但是mm_struct改变了，所以需要设置need_flush为true，进而fall through到后面真正的tlb reload操作。总结起来就是，某个进程的页表虽然改变了，但是可能在当时不会立即刷新tlb，而只是增长一个tlb_gen计数，这样在下次真正要切换到这个进程时再检测到这个情况进行tlb刷新，也是一种惰性策略，可以提高性能，因为在更新了页表时就立即做了tlb刷新，但下次切换进程时，不一定切换到做了页表更新的进程，这样白白浪费了之前做的tlb刷新，注意这种“计数改变”的方法是一种实现惰性的手段。
+
+在分析reload_tlb分支前，先分析前面if的else分支，也就是说prev == next没有满足的代码，这时需
+要切换到另一个不同的进程。
