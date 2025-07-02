@@ -2437,5 +2437,66 @@ static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 #+end_example
 上面的代码还是在prev == next满足的情况下，但是这时没有提前返回，也就是要进行实质的reload tlb动作，上面的代码跑到，实际是说前面几个判断可以提前跳过reload tlb的条件都没有满足，虽然是在同一个进程的多个线程间切换，但是mm_struct改变了，所以需要设置need_flush为true，进而fall through到后面真正的tlb reload操作。总结起来就是，某个进程的页表虽然改变了，但是可能在当时不会立即刷新tlb，而只是增长一个tlb_gen计数，这样在下次真正要切换到这个进程时再检测到这个情况进行tlb刷新，也是一种惰性策略，可以提高性能，因为在更新了页表时就立即做了tlb刷新，但下次切换进程时，不一定切换到做了页表更新的进程，这样白白浪费了之前做的tlb刷新，注意这种“计数改变”的方法是一种实现惰性的手段。
 
-在分析reload_tlb分支前，先分析前面if的else分支，也就是说prev == next没有满足的代码，这时需
-要切换到另一个不同的进程。
+在分析reload_tlb分支前，先分析前面if的else分支，也就是说prev == next没有满足的代码，这时需要切换到另一个不同的进程的mm_struct。
+
+cond_mitigation主要是安全方面的措施，和进程切换的流程关系不大，本文跳过。
+
+else分支的主要逻辑其实是调用到choose_new_asid，去选择一个在当前cpu上可用的tlb_state::ctxs[]，至于再前一点的调用cpumask_set_cpu前面有提到，是将当前cpu号标记到mm_struct::cpu_bitmap里，以便将来有其它cpu更新页表时，可以通过ipi通知到本CPU去刷新tlb，注意init_mm表示的内核的页表，它是内核页表映射，所有CPU共享，不需要进行TLB shootdown，因为它永远不会动态更改（不会换页表，也不会取消映射）。
+
+next_tlb_gen先将要切换到的next进程的tlb_gen读上来，然后以这个参数调用choose_new_asid函数，下面分析这个函数：
+#+begin_example
+static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
+{
+	struct new_asid ns;
+	u16 asid;
+
+	if (!static_cpu_has(X86_FEATURE_PCID)) {
+		ns.asid = 0;
+		ns.need_flush = 1;
+		return ns;
+	}
+
+	/*
+	 * TLB consistency for global ASIDs is maintained with hardware assisted
+	 * remote TLB flushing. Global ASIDs are always up to date.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB)) {
+		u16 global_asid = mm_global_asid(next);
+
+		if (global_asid) {
+			ns.asid = global_asid;
+			ns.need_flush = 0;
+			return ns;
+		}
+	}
+
+	if (this_cpu_read(cpu_tlbstate.invalidate_other))
+		clear_asid_other();
+
+	for (asid = 0; asid < TLB_NR_DYN_ASIDS; asid++) {
+		if (this_cpu_read(cpu_tlbstate.ctxs[asid].ctx_id) !=
+		    next->context.ctx_id)
+			continue;
+
+		ns.asid = asid;
+		ns.need_flush = (this_cpu_read(cpu_tlbstate.ctxs[asid].tlb_gen) < next_tlb_gen);
+		return ns;
+	}
+
+	/*
+	 * We don't currently own an ASID slot on this CPU.
+	 * Allocate a slot.
+	 */
+	ns.asid = this_cpu_add_return(cpu_tlbstate.next_asid, 1) - 1;
+	if (ns.asid >= TLB_NR_DYN_ASIDS) {
+		ns.asid = 0;
+		this_cpu_write(cpu_tlbstate.next_asid, 1);
+	}
+	ns.need_flush = true;
+
+	return ns;
+}
+#+end_example
+该函数的逻辑分为几个部分，X86_FEATURE_PCID判定CPU是否支持硬件PCID功能，前面的分析已经提到了pcid，那么到底什么是pcid呢，这在Intel SDM3 Chapter4.10.1有介绍，它其实是CR3寄存器的0:11这十二个比特位的值，当用虚拟地址+物理地址填tlb条目时，也会将这个条目关联上当前的pcid值cr3.[11:0]，而当CPU访问虚拟地址查询物理地址时，也仅会使用当前pcid指明的哪些TLB条目，并且在切换进程（mm_struct）时，不相关的pcid的tlb条目可以继续留在tlb cache上，不至于刷新整个tlb，而影响其它进程缓存的tlb信息，这主要是靠invpcid指令以type 1运行时（Intel SDM3 4.10.4.1），这样可以提高性能。
+
+现代CPU一般都支持PCID功能，而随后的invlpgb功能主要在AMD平台上使用，本文不做介绍。
