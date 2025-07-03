@@ -2500,3 +2500,41 @@ static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
 该函数的逻辑分为几个部分，X86_FEATURE_PCID判定CPU是否支持硬件PCID功能，前面的分析已经提到了pcid，那么到底什么是pcid呢，这在Intel SDM3 Chapter4.10.1有介绍，它其实是CR3寄存器的0:11这十二个比特位的值，当用虚拟地址+物理地址填tlb条目时，也会将这个条目关联上当前的pcid值cr3.[11:0]，而当CPU访问虚拟地址查询物理地址时，也仅会使用当前pcid指明的哪些TLB条目，并且在切换进程（mm_struct）时，不相关的pcid的tlb条目可以继续留在tlb cache上，不至于刷新整个tlb，而影响其它进程缓存的tlb信息，这主要是靠invpcid指令以type 1运行时（Intel SDM3 4.10.4.1），这样可以提高性能。
 
 现代CPU一般都支持PCID功能，而随后的invlpgb功能主要在AMD平台上使用，本文不做介绍。
+
+下面invalidate_other的逻辑主要是通过clear_asid_other函数将ctx_id设置为0，ctxs::ctx_id一般是用于指明mm_struct，但为0的ctx_id有特别的用途：
+#+begin_example
+/*
+ * We get here when we do something requiring a TLB invalidation
+ * but could not go invalidate all of the contexts.  We do the
+ * necessary invalidation by clearing out the 'ctx_id' which
+ * forces a TLB flush when the context is loaded.
+ */
+static void clear_asid_other(void)
+{
+	u16 asid;
+
+	/*
+	 * This is only expected to be set if we have disabled
+	 * kernel _PAGE_GLOBAL pages.
+	 */
+	if (!static_cpu_has(X86_FEATURE_PTI)) {
+		WARN_ON_ONCE(1);
+		return;
+	}
+
+	for (asid = 0; asid < TLB_NR_DYN_ASIDS; asid++) {
+		/* Do not need to flush the current asid */
+		if (asid == this_cpu_read(cpu_tlbstate.loaded_mm_asid))
+			continue;
+		/*
+		 * Make sure the next time we go to switch to
+		 * this asid, we do a flush:
+		 */
+		this_cpu_write(cpu_tlbstate.ctxs[asid].ctx_id, 0);
+	}
+	this_cpu_write(cpu_tlbstate.invalidate_other, false);
+}
+#+end_example
+下面的for循环，针对每个cpu的6个tlb_context结构体，看其对应的ctx_id是否和即将切换到要运行的next:context::ctx_id是否相等，如果有相等的，证明之前这个进程在这个cpu上运行过，并且已经分配了一个tlb_context槽，那么本次再在这个cpu上运行到next进程的话，就会复用上次之前用过的asid，当然tlb_gen可能会增加，也就是可能改过next对应的页表，这时就需要刷新tlb了，need_flush为true了。当然如果这个cpu上的所有六个tlb_context::ctx_id都和将要运行的context::ctx_id不一样，代表之前没有运行过，这包括之前提到过的，如果在clear_asid_other里将所有per-cpu里的ctxs::ctx_id设为0的话，这里自然不可能复用，走到choose_new_asid最后的逻辑，自然就是need_flush设置为true，同时后面的逻辑其实是为将要运行的next这个mm_struct在这个cpu上分配一个asid，当这个asid号大于TLB_NR_DYN_ASIDS时，还需要回绕到0，注意next_asid记录的是下次要用的asid号，所以这里先加1到next_asid，表征下次可以用的asid，再减1才是本次可以用的asid号。
+
+现在终于到reload_tlb的逻辑了，
