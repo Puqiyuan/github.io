@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-07-04 Fri 23:03 -->
+<!-- 2025-07-05 Sat 22:40 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>进程调度</title>
@@ -38,9 +38,9 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org95108f0">1. __schedule</a></li>
-<li><a href="#org650359b">2. pick_next_task</a></li>
-<li><a href="#orga25b81a">3. context_switch</a></li>
+<li><a href="#org9d3c4ab">1. __schedule</a></li>
+<li><a href="#org47cd20c">2. pick_next_task</a></li>
+<li><a href="#org054ea4d">3. context_switch</a></li>
 </ul>
 </div>
 </div>
@@ -69,7 +69,7 @@ __schedule是进程调度的核心函数，它先调用pick_next_task函数算�
 <p>
 __schedule函数的参数sched_mode指明了以何种模式进入的调度器，它的取值可以有：
 </p>
-<pre class="example" id="orga17c3a0">
+<pre class="example" id="org53163d0">
 /*
  * Constants for the sched_mode argument of __schedule().
  *
@@ -105,13 +105,13 @@ SM_RTLOCK_WAIT表示任务正在等待RT（实时）锁。实时内核（RT内�
 比如preempt_schedule_common函数调用_schedule时就指明了参数SM_PREEMPT，表明本次进入调度器是因为抢占。
 </p>
 
-<div id="outline-container-org95108f0" class="outline-2">
-<h2 id="org95108f0"><span class="section-number-2">1.</span> __schedule</h2>
+<div id="outline-container-org9d3c4ab" class="outline-2">
+<h2 id="org9d3c4ab"><span class="section-number-2">1.</span> __schedule</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 以下是__schedule的实现：
 </p>
-<pre class="example" id="org7849d09">
+<pre class="example" id="org76529e9">
 static void __sched notrace __schedule(int sched_mode)
 {
 	struct task_struct *prev, *next;
@@ -243,13 +243,13 @@ picked:
 <p>
 该函数本身比较简单，每个cpu都有一关联的runqueues，首先是通过smp_processor_id获取当前运行cpu的编号：
 </p>
-<pre class="example" id="org28a9273">
+<pre class="example" id="org1846c15">
 # define smp_processor_id() __smp_processor_id()
 </pre>
 <p>
 不同架构有不同的__smp_processor_id实现，对于x86架构来说，每个cpu都维护有一个pcpu_hot结构体，里面有cpu_number成员记录了当前运行的cpu号，cpu_number在初始化的时候通过start_kernel-&gt;setup_per_cpu_areas去设置：
 </p>
-<pre class="example" id="org856de0f">
+<pre class="example" id="org1e5e028">
 for_each_possible_cpu(cpu) {
         ...
         per_cpu(pcpu_hot.cpu_number, cpu) = cpu;
@@ -259,13 +259,13 @@ for_each_possible_cpu(cpu) {
 <p>
 而对于其它架构比如arm64，则是在当前运行线程中的一个成员进行记录：
 </p>
-<pre class="example" id="org758c3e4">
+<pre class="example" id="org83dd94a">
 #define raw_smp_processor_id() (current_thread_info()-&gt;cpu)
 </pre>
 <p>
 有了cpu号，就可以通过cpu_rq获得对应当前运行cpu的rq运行队列了：
 </p>
-<pre class="example" id="org674052c">
+<pre class="example" id="orgb3bb473">
 DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 #define cpu_rq(cpu)		(&amp;per_cpu(runqueues, (cpu)))
 </pre>
@@ -277,7 +277,7 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 <p>
 继续分析schedule_debug：
 </p>
-<pre class="example" id="org42959ef">
+<pre class="example" id="org0eade67">
 /*
  * Various schedule()-time debugging checks and statistics:
  */
@@ -315,7 +315,7 @@ static inline void schedule_debug(struct task_struct *prev, bool preempt)
 <p>
 该函数主要是做一些在调度时的debug检查，第一个检查就是看看即将要被切换出去的prev其内核栈顶是否被污染了（笔者环境开了CONFIG_SCHED_STACK_END_CHECK）：
 </p>
-<pre class="example" id="orgc2f0da5">
+<pre class="example" id="orge35b9eb">
 #ifdef CONFIG_SCHED_STACK_END_CHECK
 	if (task_stack_end_corrupted(prev))
 		panic("corrupted stack end detected inside scheduler\n");
@@ -324,14 +324,14 @@ static inline void schedule_debug(struct task_struct *prev, bool preempt)
 		panic("corrupted shadow stack detected inside scheduler\n");
 #endif
 </pre>
-<pre class="example" id="org6c8ef11">
+<pre class="example" id="orgb330686">
 #define task_stack_end_corrupted(task) \
 		(*(end_of_stack(task)) != STACK_END_MAGIC)
 </pre>
 <p>
 对于开启了CONFIG_THREAD_INFO_IN_TASK配置的end_of_stack实现如下：
 </p>
-<pre class="example" id="orga6cc1a7">
+<pre class="example" id="orgf970dd7">
 static __always_inline unsigned long *end_of_stack(const struct task_struct *task)
 {
 #ifdef CONFIG_STACK_GROWSUP
@@ -344,7 +344,7 @@ static __always_inline unsigned long *end_of_stack(const struct task_struct *tas
 <p>
 可以看到这里返回了task的内核栈底，x86架构上内核栈自顶（大地址处）向下（小地址处）生长，而task-&gt;stack通过如下代码分配获取出来就是页面的小地址处，也就是end_of_stack中返回的内核栈结束的地方：
 </p>
-<pre class="example" id="org313ffd2">
+<pre class="example" id="org13a5335">
 static int alloc_thread_stack_node(struct task_struct *tsk, int node)
 {
 	unsigned long *stack;
@@ -361,7 +361,7 @@ alloc_thread_stack_node被dup_task_struct函数在创建进程的时候调用。
 <p>
 task_stack_end_corrupted主要就是检查栈底处的值是不是STACK_END_MAGIC，该值同样通过dup_task_struct-&gt;set_task_stack_end_magic去设置：
 </p>
-<pre class="example" id="orgaecf985">
+<pre class="example" id="org236f56b">
 void set_task_stack_end_magic(struct task_struct *tsk)
 {
 	unsigned long *stackend;
@@ -381,7 +381,7 @@ task_scs_end_corrupted是类似的原理，不再详细介绍。
 <p>
 再往下看schedule_debug的实现：
 </p>
-<pre class="example" id="org6766797">
+<pre class="example" id="org80d4b4d">
 if (unlikely(in_atomic_preempt_off())) {
 	__schedule_bug(prev);
 	preempt_count_set(PREEMPT_DISABLED);
@@ -391,20 +391,20 @@ if (unlikely(in_atomic_preempt_off())) {
 <p>
 这个条件大概率是不会满足的，这里主要想分析这个条件是在判断什么：
 </p>
-<pre class="example" id="org7f177f5">
+<pre class="example" id="org064686f">
 /*
  * Check whether we were atomic before we did preempt_disable():
  * (used by the scheduler)
  */
 #define in_atomic_preempt_off() (preempt_count() != PREEMPT_DISABLE_OFFSET)
 </pre>
-<pre class="example" id="orgcbb5975">
+<pre class="example" id="org066281f">
 static __always_inline int preempt_count(void)
 {
 	return raw_cpu_read_4(pcpu_hot.preempt_count) &amp; ~PREEMPT_NEED_RESCHED;
 }
 </pre>
-<pre class="example" id="org34283e7">
+<pre class="example" id="org111b16c">
 /*
  * The preempt_count offset after preempt_disable();
  */
@@ -414,10 +414,10 @@ static __always_inline int preempt_count(void)
 # define PREEMPT_DISABLE_OFFSET	0
 #endif
 </pre>
-<pre class="example" id="orgda2a82a">
+<pre class="example" id="orge9d7b54">
 #define PREEMPT_OFFSET	(1UL &lt;&lt; PREEMPT_SHIFT)
 </pre>
-<pre class="example" id="orgb638057">
+<pre class="example" id="orgc12ed70">
 #define PREEMPT_SHIFT	0
 </pre>
 <p>
@@ -427,13 +427,13 @@ static __always_inline int preempt_count(void)
 <p>
 继续往下看一个warn判断：
 </p>
-<pre class="example" id="orga7d93d5">
+<pre class="example" id="orgc15f72c">
 SCHED_WARN_ON(ct_state() == CT_STATE_USER);
 </pre>
 <p>
 ct_state函数在启用CONFIG_CONTEXT_TRACKING_USER配置时会返回有意义的值，它主要用来追踪cpu的当前上下文，可能的状态有：
 </p>
-<pre class="example" id="org2f423c3">
+<pre class="example" id="orgad486a5">
 enum ctx_state {
 	CT_STATE_DISABLED	= -1,	/* returned by ct_state() if unknown */
 	CT_STATE_KERNEL		= 0,
@@ -454,10 +454,10 @@ enum ctx_state {
 <p>
 继续往下看是增加一个profile计数：
 </p>
-<pre class="example" id="org2c97c25">
+<pre class="example" id="orge7e61de">
 profile_hit(SCHED_PROFILING, __builtin_return_address(0));
 </pre>
-<pre class="example" id="orga8c4d8d">
+<pre class="example" id="orgac4526a">
 /*
  * Single profiler hit:
  */
@@ -473,7 +473,7 @@ static inline void profile_hit(int type, void *ip)
 <p>
 可以进行profiling的包括三个模块：
 </p>
-<pre class="example" id="org22b89bb">
+<pre class="example" id="org3025142">
 #define CPU_PROFILING	1
 #define SCHED_PROFILING	2
 #define KVM_PROFILING	4
@@ -482,7 +482,7 @@ static inline void profile_hit(int type, void *ip)
 prof_on在启动时依据profile=的参数设置调用profile_setup来填为上面三个类型中的一个。__builtin_return_address是编译器内置的函数，可以返回当前函数的返回地址。
 profile_hits实现如下：
 </p>
-<pre class="example" id="orgb7c0969">
+<pre class="example" id="orgba8231f">
 static void do_profile_hits(int type, void *__pc, unsigned int nr_hits)
 {
 	unsigned long pc;
@@ -498,16 +498,16 @@ prof_buffer是在初始化函数profile_init里开的空间，可以看到do_pro
 <p>
 最后是schedstat_inc自增rq的sched_count，当然这需要开启CONFIG_SCHEDSTATS配置，这样/proc/schedstat就可以反应一些调度统计信息了：
 </p>
-<pre class="example" id="org1f9661e">
+<pre class="example" id="org1305a58">
 schedstat_inc(this_rq()-&gt;sched_count);
 </pre>
-<pre class="example" id="org93ae21b">
+<pre class="example" id="orgd4e9ceb">
 #define   schedstat_inc(var)		do { if (schedstat_enabled()) { var++; } } while (0)
 </pre>
 <p>
 注意这里是宏展开，不是函数调用，所以最后对sched_count的自增一定会生效，展开就是文本替换，在预编译阶段完成：
 </p>
-<pre class="example" id="org92369d7">
+<pre class="example" id="orgea51720">
 #define   schedstat_inc(var)		do { if (schedstat_enabled()) { this_rq()-&gt;sched_count++; } } while (0)
 </pre>
 <div class="centered-line">sched_debug</div>
@@ -515,7 +515,7 @@ schedstat_inc(this_rq()-&gt;sched_count);
 <p>
 回到__schedule，继续往下看：
 </p>
-<pre class="example" id="org7c8da7e">
+<pre class="example" id="orgcdfa721">
 if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
     hrtick_clear(rq);
 </pre>
@@ -523,20 +523,20 @@ if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
 <p>
 HRTICK是高精度调度定时器功能，默认情况下这个功能是关闭的，但是sched_feat宏本身是有定义的，尤其是笔者的环境开了CONFIG_SCHED_DEBUG以及CONFIG_JUMP_LABEL两个配置，sched_feat使用静态分支判断的方法：
 </p>
-<pre class="example" id="org2ee2d60">
+<pre class="example" id="org7f3d306">
 #define sched_feat(x) (static_branch_##x(&amp;sched_feat_keys[__SCHED_FEAT_##x]))
 </pre>
 <p>
 通过sched_feat这里主要是想介绍上面提到的两个配置的功能，至于HRTICK这个调度器feature本身，默认是不开启的：
 </p>
-<pre class="example" id="org488f35e">
+<pre class="example" id="org8dd0a8e">
 SCHED_FEAT(HRTICK, false)
 </pre>
 
 <p>
 CONFIG_SCHED_DEBUG开启了调度器的调试信息，这样就会在/sys/kernel/debug/sched/下展示很多关于调度器的信息，开启这个代价很小，所以笔者环境默认开启了，比如/sys/kernel/debug/sched/features可以查看当前scheduler开启哪些feature：
 </p>
-<pre class="example" id="org24c9463">
+<pre class="example" id="orgb70a746">
 PLACE_LAG PLACE_DEADLINE_INITIAL PLACE_REL_DEADLINE RUN_TO_PARITY PREEMPT_SHORT NO_NEXT_BUDDY PICK_BUDDY CACHE_HOT_BUDDY DELAY_DEQUEUE DELAY_ZERO WAKEUP_PREEMPTION NO_HRTICK NO_HRTICK_DL NO_DOUBLE_TICK NONTASK_CAPACITY TTWU_QUEUE SIS_UTIL NO_WARN_DOUBLE_CLOCK RT_PUSH_IPI NO_RT_RUNTIME_SHARE NO_LB_MIN ATTACH_AGE_LOAD WA_IDLE WA_WEIGHT WA_BIAS UTIL_EST NO_LATENCY_WARN
 </pre>
 <p>
@@ -558,7 +558,7 @@ PLACE_LAG PLACE_DEADLINE_INITIAL PLACE_REL_DEADLINE RUN_TO_PARITY PREEMPT_SHORT 
 <p>
 继续看对smp_mb__after_spinlock的调用，它是针对arm64这样的弱一致内存模型的同步操作，因为在调用__schedule前通常通过__set_current_state设置了进程状态比如为TASK_INTERRUPTIBLE，而另外的独立路径可能设置进程有信号需要处理，比如通过set_tsk_thread_flag(p, TIF_SIGPENDING)，在之前一样的调用__schedule的路径下，通常也会调用signal_pending_state去检查进程是否有需要待处理的pending信号：
 </p>
-<pre class="example" id="orgc0ed0eb">
+<pre class="example" id="org2abe54a">
 static inline int signal_pending_state(unsigned int state, struct task_struct *p)
 {
 	if (!(state &amp; (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
@@ -569,7 +569,7 @@ static inline int signal_pending_state(unsigned int state, struct task_struct *p
 	return (state &amp; TASK_INTERRUPTIBLE) || __fatal_signal_pending(p);
 }
 </pre>
-<pre class="example" id="orgc800184">
+<pre class="example" id="org78084a7">
 static inline int task_sigpending(struct task_struct *p)
 {
 	return unlikely(test_tsk_thread_flag(p,TIF_SIGPENDING));
@@ -604,7 +604,7 @@ static inline int signal_pending(struct task_struct *p)
 <p>
 调用update_rq_clock前对clock_update_flags左移一位，clock_update_flags有三种取值可能：
 </p>
-<pre class="example" id="orgb1f56b8">
+<pre class="example" id="orgc36a9d5">
 /*
  * rq::clock_update_flags bits
  *
@@ -639,7 +639,7 @@ static inline int signal_pending(struct task_struct *p)
 <p>
 接下来分析下update_rq_clock函数：
 </p>
-<pre class="example" id="orga9e1695">
+<pre class="example" id="orgb7fe9d1">
 void update_rq_clock(struct rq *rq)
 {
 	s64 delta;
@@ -677,7 +677,7 @@ update_rq_clock函数通过sched_clock_cpu获得当前的时间戳（在x86架�
 <p>
 在这里简单介绍下cpu_of的实现：
 </p>
-<pre class="example" id="org175225f">
+<pre class="example" id="orgdec0d6d">
 static inline int cpu_of(struct rq *rq)
 {
 #ifdef CONFIG_SMP
@@ -690,7 +690,7 @@ static inline int cpu_of(struct rq *rq)
 <p>
 调度初始化函数sched_init里完成了rq-&gt;cpu的设置：
 </p>
-<pre class="example" id="org2fd972c">
+<pre class="example" id="org9de30bd">
 for_each_possible_cpu(i) {
 	rq-&gt;cpu = i;
 }
@@ -703,7 +703,7 @@ for_each_possible_cpu(i) {
 rq-&gt;clock是真实的物理时间增量，所以直接往上增加delta，但update_rq_clock_task里更新的rq里的成员需要对delta进行调整：
 </p>
 
-<pre class="example" id="org113ba69">
+<pre class="example" id="orga15de94">
 static void update_rq_clock_task(struct rq *rq, s64 delta)
 {
 /*
@@ -782,7 +782,7 @@ CONFIG_HAVE_SCHED_AVG_IRQ在笔者环境一般没有配置。
 <p>
 最后update_rq_clock_task-&gt;update_rq_clock_pelt里会按cpu的算力以及频率对delta物理时间进行缩放，也就是经过相同的delta时间，算力强频率高的cpu实际负载更大：
 </p>
-<pre class="example" id="org207be41">
+<pre class="example" id="org6011267">
 /*
  * The clock_pelt scales the time to reflect the effective amount of
  * computation done during the running delta time but then sync back to
@@ -824,7 +824,7 @@ static inline void update_rq_clock_pelt(struct rq *rq, s64 delta)
 	rq-&gt;clock_pelt += delta;
 }
 </pre>
-<pre class="example" id="org018953e">
+<pre class="example" id="orge2f8f6a">
 #define cap_scale(v, s)		((v)*(s) &gt;&gt; SCHED_CAPACITY_SHIFT)
 </pre>
 <p>
@@ -834,7 +834,7 @@ update_rq_clock_pelt按频率以及算力缩放的值放在rq::clock_pelt量里�
 <p>
 arch_scale_cpu_capacity用于获取cpu的计算能力：
 </p>
-<pre class="example" id="org66ce549">
+<pre class="example" id="orgc548202">
 unsigned long arch_scale_cpu_capacity(int cpu)
 {
 	if (static_branch_unlikely(&amp;arch_hybrid_cap_scale_key))
@@ -846,7 +846,7 @@ unsigned long arch_scale_cpu_capacity(int cpu)
 <p>
 hybrid一般就是针对arm架构开启了big.LITTLE，而针对Intel x86就是P-core/E-core，针对笔者的配置，就是返回默认的SCHED_CAPACITY_SCALE，也就是没有区分不同cpu的算力：
 </p>
-<pre class="example" id="org2ce957b">
+<pre class="example" id="orgb57ec4a">
 # define SCHED_FIXEDPOINT_SHIFT		10
 # define SCHED_CAPACITY_SHIFT		SCHED_FIXEDPOINT_SHIFT
 # define SCHED_CAPACITY_SCALE		(1L &lt;&lt; SCHED_CAPACITY_SHIFT)
@@ -878,13 +878,13 @@ context switch），“非自愿”的意思是任务被抢占或被强制切换
 </div>
 </div>
 
-<div id="outline-container-org650359b" class="outline-2">
-<h2 id="org650359b"><span class="section-number-2">2.</span> pick_next_task</h2>
+<div id="outline-container-org47cd20c" class="outline-2">
+<h2 id="org47cd20c"><span class="section-number-2">2.</span> pick_next_task</h2>
 <div class="outline-text-2" id="text-2">
 <p>
 pick_next_task的实现依据是否开启CONFIG_SCHED_CORE配置有不同的实现，这个配置是支持SMT的，比如Intel的Hyper-Threading，一般没有开启这个配置，这样它实现如下：
 </p>
-<pre class="example" id="org2309e9f">
+<pre class="example" id="org303ba8c">
 static struct task_struct *
 pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
@@ -958,7 +958,7 @@ restart:
 <p>
 先看下sche_class_above的实现：
 </p>
-<pre class="example" id="org0652483">
+<pre class="example" id="orgc182e65">
 #define sched_class_above(_a, _b)	((_a) &lt; (_b))
 </pre>
 <p>
@@ -968,7 +968,7 @@ sched_class_above就是判断即将要调度出去的prev所属的调度类prev-
 <p>
 以fair_sched_class的定义为例：
 </p>
-<pre class="example" id="org822ab25">
+<pre class="example" id="orgfcb02a4">
 /*
  * All the scheduling class methods:
  */
@@ -982,7 +982,7 @@ DEFINE_SCHED_CLASS(fair) = {
       ...
 };
 </pre>
-<pre class="example" id="org80fec0b">
+<pre class="example" id="org7aafe9d">
 /*
  * Helper to define a sched_class instance; each one is placed in a separate
  * section which is ordered by the linker script:
@@ -1001,7 +1001,7 @@ const struct sched_class name##_sched_class \
 <p>
 以上定义会使得fair_sched_class这个量被放到__fair_sched_class这个section里，其它调度类也是类似的定义方式：
 </p>
-<pre class="example" id="org138a766">
+<pre class="example" id="orgb641bf5">
 DEFINE_SCHED_CLASS(rt)
 DEFINE_SCHED_CLASS(idle)
 DEFINE_SCHED_CLASS(stop)
@@ -1011,7 +1011,7 @@ DEFINE_SCHED_CLASS(ext)
 <p>
 这些调度类会被链接脚本按序放置：
 </p>
-<pre class="example" id="orgdcadfa3">
+<pre class="example" id="org6f69002">
 /*
  * The order of the sched class addresses are important, as they are
  * used to determine the order of the priority of each sched class in
@@ -1035,31 +1035,31 @@ DEFINE_SCHED_CLASS(ext)
 <p>
 现在简单分析下另一个条件就是：
 </p>
-<pre class="example" id="orgb66dc7f">
+<pre class="example" id="orgabd4fbf">
 rq-&gt;nr_running == rq-&gt;cfs.h_nr_queued
 </pre>
 <p>
 条件本身是简单明晰的，就是现在通用rq运行队列里的所有正在运行的进程数量等于cfs队列里排队的进程数量，各个调度类在入队/出队都是可以操作rq::nr_running计数的，比如stop调度类出队进程时：
 </p>
-<pre class="example" id="orgd7a3dfe">
+<pre class="example" id="orge345969">
 dequeue_task_stop-&gt;sub_nr_running
 </pre>
 <p>
 stop调度类入队时：
 </p>
-<pre class="example" id="org082d5a2">
+<pre class="example" id="orge784e7e">
 enqueue_task_stop-&gt;add_nr_running
 </pre>
 <p>
 对于fair CFS调度类来说也是一样，比如出队时：
 </p>
-<pre class="example" id="org194ce4d">
+<pre class="example" id="orgbf39639">
 dequeue_entities-&gt;sub_nr_running
 </pre>
 <p>
 入队时：
 </p>
-<pre class="example" id="org04a8146">
+<pre class="example" id="org4a7b8cc">
 enqueue_task_fair-&gt;add_nr_running
 </pre>
 <p>
@@ -1069,7 +1069,7 @@ enqueue_task_fair-&gt;add_nr_running
 <p>
 restart标签下的代码，先做了下负载均衡，prev_balance会从prev所属的调度类往下的优先级去遍历调度类，然后调用这些调度类的balance函数（如果有的话），当然restart下最重要的逻辑还是从最高优先级的调度类往最低优先级的调度类遍历，去寻找一个可以运行的进程：
 </p>
-<pre class="example" id="orgf7401f8">
+<pre class="example" id="org11f048a">
 #define for_each_active_class(class)						\
 	for_active_class_range(class, __sched_class_highest, __sched_class_lowest)
 #define for_active_class_range(class, _from, _to)				\
@@ -1101,7 +1101,7 @@ static inline const struct sched_class *next_active_class(const struct sched_cla
 <p>
 下面开始分析pick_next_task_fair函数：
 </p>
-<pre class="example" id="orgee398bd">
+<pre class="example" id="org6a79585">
 struct task_struct *
 pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
@@ -1205,7 +1205,7 @@ pick_task_fair留后面分析。如果这个函数选不出进程了，也就是
 处理组调度的逻辑相对复杂一些，首先组调度有一个depth层级的概念，所有调度实体组成一棵调度树，叶子节点是可以运行的进程实体，而中间的层代表了其下任务的总行为。对于挑选出来即将运行p和即将切换出去的prev，如果它们不同，就会对它们循环向上降低深度，对于prev路径上的任务要进行put操作，而对于p路径上的任务要进行set操作，每次迭代期间，哪个较深，就通过parent_entity找到对应sched_entity的父调度实体，其实质也就是sched_entity::depth会减小。is_same_group会判断迭代的路径上两个sched_entity是否属于相同的组了：
 </p>
 
-<pre class="example" id="orgfbe4f80">
+<pre class="example" id="org73066eb">
 /* Do the two (enqueued) entities belong to the same group ? */
 static inline struct cfs_rq *
 is_same_group(struct sched_entity *se, struct sched_entity *pse)
@@ -1223,7 +1223,7 @@ is_same_group(struct sched_entity *se, struct sched_entity *pse)
 <p>
 前面提到了set/put操作，具体的函数实现分别就是set_next_entity和put_prev_entity，下面分析下这两个函数。首先是set_next_entity：
 </p>
-<pre class="example" id="org2852712">
+<pre class="example" id="orga350aa9">
 static void
 set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
@@ -1268,7 +1268,7 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 <p>
 内核调度器在pick出一个进程运行前，都需要先对它进行set操作，所谓set操作，主要包括，如果进程还在等待队列上（on_rq被设置，在红黑树上就绪等待），那么需要将pick出的进程进行出队，因为一个马上就要运行的进程是不会同时又在红黑就绪树上等待的，这里可能会有点歧义，“出队”反而是代表进程要获得cpu运行了，正确的理解是，每个进程在运行前都需要enqueue到rq（红黑就绪树），在要获得cpu运行时需要dequeue，这里的enqueue/dequeue是针对红黑就绪树而说的，而不是上cpu运行来说enqueue/dequeue，一个典型的流程是：
 </p>
-<pre class="example" id="org8b66835">
+<pre class="example" id="org8278770">
 唤醒 -&gt; enqueue_entity -&gt; 等待红黑树调度 -&gt; 被选中 -&gt; dequeue_entity -&gt; 上CPU
 </pre>
 <p>
@@ -1287,7 +1287,7 @@ set操作还有就是更新即将运行进程的一些统计状态，最后一�
 接下来如果sched_entity::on_rq非零，代表调度实体还在红黑就绪树上，那么这时需要通过update_stats_wait_end_fair函数更新它花在rq上的等待时间，随后__dequeue_entity出队rq，update_load_avg更新一下负载，set_protect_slice设置保护时间片，依次分析。
 </p>
 
-<pre class="example" id="org5f22b40">
+<pre class="example" id="orga1f09e9">
 static inline void
 update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
@@ -1318,13 +1318,13 @@ update_stats_wait_end_fair(struct cfs_rq *cfs_rq, struct sched_entity *se)
 <p>
 schedstat_enabled在没有开启CONFIG_SCHEDSTATS时都是0，否则就是sched_schedstats分支变量：
 </p>
-<pre class="example" id="org19a853f">
+<pre class="example" id="org4bfb51a">
 #define   schedstat_enabled()		static_branch_unlikely(&amp;sched_schedstats)
 </pre>
 <p>
 笔者的环境开启了CONFIG_SCHEDSTATS配置，但是sched_schedstats默认是0的：
 </p>
-<pre class="example" id="orgbd4759a">
+<pre class="example" id="orgb67700c">
 DEFINE_STATIC_KEY_FALSE(sched_schedstats);
 </pre>
 <p>
@@ -1334,7 +1334,7 @@ DEFINE_STATIC_KEY_FALSE(sched_schedstats);
 <p>
 分析sched_schedstats这个分支变量，可以通过set_schedstats这个函数开关它：
 </p>
-<pre class="example" id="org0f7a7f5">
+<pre class="example" id="orgc6078da">
 static void set_schedstats(bool enabled)
 {
 	if (enabled)
@@ -1350,7 +1350,7 @@ static void set_schedstats(bool enabled)
 <p>
 假设现在开启了sched_schedstats，那么往下就会通过__schedstats_from_se去获得sched_statistics调度统计结构体：
 </p>
-<pre class="example" id="org62fec72">
+<pre class="example" id="orgde6a6ec">
 static inline struct sched_statistics *
 __schedstats_from_se(struct sched_entity *se)
 {
@@ -1368,7 +1368,7 @@ __schedstats_from_se(struct sched_entity *se)
 <p>
 这里判断一个实体是否是实际任务的办法很简单（当然是针对开启组调度CONFIG_FAIR_GROUP_SCHED而说的，没有开启这个配置时，任何调度实体sched_entity都是可上CPU运行的）：
 </p>
-<pre class="example" id="org3fd4e2f">
+<pre class="example" id="orgf98d5f3">
 #define entity_is_task(se)	(!se-&gt;my_q)
 </pre>
 <p>
@@ -1390,7 +1390,7 @@ my_q其实就是在开启组调度时（非空），该调度实体下拥有的c
 <p>
 最后是真正的更新统计动作：
 </p>
-<pre class="example" id="org1e87987">
+<pre class="example" id="org817770f">
 void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
 			     struct sched_statistics *stats)
 {
@@ -1425,7 +1425,7 @@ void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
 <p>
 这里需要说明说明的是，task_struct::on_rq其实有三种状态，为0代表正在cpu上运行，为1代表在rq上排队，而为2代表在迁移到另一个rq的过程：
 </p>
-<pre class="example" id="orgec75e9d">
+<pre class="example" id="orgc753be0">
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
@@ -1433,7 +1433,7 @@ void __update_stats_wait_end(struct rq *rq, struct task_struct *p,
 <p>
 task_on_rq_queued定义如下：
 </p>
-<pre class="example" id="org9ca8afd">
+<pre class="example" id="org3ee5669">
 static inline int task_on_rq_migrating(struct task_struct *p)
 {
 	return READ_ONCE(p-&gt;on_rq) == TASK_ON_RQ_MIGRATING;
@@ -1442,7 +1442,7 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 <p>
 处理在迁移状态进程的等待时间是一个边界条件，在某个cpuA的rqA上等待了一段时间delta_A，还没有上cpuA运行时，就被迁移到了另一个cpuB时，在新的rqB上又等待了一段时间delta_B，那么总的等待时间应该是delta_A + delta_B，在__update_stats_wait_end里只是将这个delta时间给到了wait_start，也就是这时wait_start的语义其实发生了变化，不再是一个时间戳，而是一段时间长度，然后就返回了。而在__update_stats_wait_start的实现里，设置起始的开始等待时间时，会将wait_start减去这个已经等待的时间prev_wait_start（就是delta_A + delta_B）：
 </p>
-<pre class="example" id="org34e68e4">
+<pre class="example" id="orgfb238f3">
 void __update_stats_wait_start(struct rq *rq, struct task_struct *p,
 			       struct sched_statistics *stats)
 {
@@ -1460,13 +1460,13 @@ void __update_stats_wait_start(struct rq *rq, struct task_struct *p,
 <p>
 这样相当于把开始等待的时间往前拨了些，以达到累计等待时间的效果。对__update_stats_wait_start的调用可以是：
 </p>
-<pre class="example" id="org6f5ffd1">
+<pre class="example" id="org894ded0">
 update_stats_enqueue_fair-&gt;update_stats_wait_start_fair-&gt;__update_stats_wait_start
 </pre>
 <p>
 也可以是：
 </p>
-<pre class="example" id="orga4408cd">
+<pre class="example" id="orga4eba57">
 put_prev_entity-&gt;update_stats_wait_start_fair-&gt;__update_stats_wait_start
 </pre>
 <p>
@@ -1476,7 +1476,7 @@ put_prev_entity-&gt;update_stats_wait_start_fair-&gt;__update_stats_wait_start
 <p>
 set调度实体的下一个动作是将调度实体dequeue出rq红黑树队列：
 </p>
-<pre class="example" id="org2060275">
+<pre class="example" id="org4d4d525">
 static void __dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	rb_erase_augmented_cached(&amp;se-&gt;run_node, &amp;cfs_rq-&gt;tasks_timeline,
@@ -1484,7 +1484,7 @@ static void __dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	avg_vruntime_sub(cfs_rq, se);
 }
 </pre>
-<pre class="example" id="org1db30ca">
+<pre class="example" id="org6ab160f">
 static __always_inline void
 rb_erase_augmented_cached(struct rb_node *node, struct rb_root_cached *root,
 			  const struct rb_augment_callbacks *augment)
@@ -1497,7 +1497,7 @@ rb_erase_augmented_cached(struct rb_node *node, struct rb_root_cached *root,
 <p>
 cfs_rq里的tasks_timeline成员就是大名鼎鼎的任务挂载的红黑树，其定义如下：
 </p>
-<pre class="example" id="orgbb898fb">
+<pre class="example" id="org9085a25">
 struct rb_root_cached {
 	struct rb_root rb_root;
 	struct rb_node *rb_leftmost;
@@ -1506,7 +1506,7 @@ struct rb_root_cached {
 <p>
 rb_leftmost是缓存的整个树的所有进程里，下一个即将运行的进程，而rb_root是所有进程形成树的根节点，sched_entity::run_node用来代表调度实体往树上挂载，如果当前出队的进程就刚好是rb_leftmost的话，那么rb_leftmost需要更新，因为当前进程出队了。rb_erase_augmented里是真正的删除节点的操作，里面还会维护二叉红黑树的性质，具体的本文主题就不介绍了。由于当前调度实体出队了，一些负载要从当前的cfs_rq里扣除，这就是avg_vruntime_sub做的事情：
 </p>
-<pre class="example" id="org3fcdd25">
+<pre class="example" id="org06a70ee">
 static void
 avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
@@ -1528,7 +1528,7 @@ avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 <p>
 update_stats_curr_start更新了现在调度实体开始运行的时间戳：
 </p>
-<pre class="example" id="org123fdbc">
+<pre class="example" id="org19c36c0">
 /*
  * We are picking a new current task - update its stats:
  */
@@ -1552,7 +1552,7 @@ cfs_rq当前运行的实体curr也要改成当前的se。
 <p>
 下面是介绍put动作：
 </p>
-<pre class="example" id="orge4dc55e">
+<pre class="example" id="org7f329fa">
 static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 {
 	/*
@@ -1579,7 +1579,7 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 <p>
 如果prev在rq上，就需要更新下当前sched_entity的一些运行时信息，最重要的信息当属sched_entity::vruntime（较新的内核使用新的调度算法，sched_entity::deadline替代了vruntime的功能），因为它（较新的内核是sched_entity::deadline）会用来确定插入进程红黑树的位置，而插入的位置又决定调度哪个进程上CPU运行：
 </p>
-<pre class="example" id="org605f748">
+<pre class="example" id="org93fedfa">
 /*
  * Update the current task's runtime statistics.
  */
@@ -1634,7 +1634,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 <p>
 先通过update_curr_se算出delta_exec：
 </p>
-<pre class="example" id="org7b26b7f">
+<pre class="example" id="org6aa6543">
 static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 {
 	u64 now = rq_clock_task(rq);
@@ -1665,7 +1665,7 @@ delta_exec开始就是进程运行了多少时间，同时这个函数还更新�
 <p>
 接下来的calc_delta_fair里的逻辑是体现哪个进程优先调度的关键逻辑：
 </p>
-<pre class="example" id="orgc54552e">
+<pre class="example" id="orgbe7db0a">
 /*
  * delta /= w
  */
@@ -1677,7 +1677,7 @@ static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
 	return delta;
 }
 </pre>
-<pre class="example" id="org4dcf329">
+<pre class="example" id="org72febde">
 /*
  * delta_exec * weight / lw.weight
  *   OR
@@ -1720,7 +1720,7 @@ static u64 __calc_delta(u64 delta_exec, unsigned long weight, struct load_weight
 <p>
 从这些逻辑可以看到，是把delta_exec进行了缩放，缩放的比例就是NICE_0_LOAD/weight_of_se，而sched_entity::weight经由函数set_load_weight设置：
 </p>
-<pre class="example" id="org2338ddf">
+<pre class="example" id="org4cd7055">
 void set_load_weight(struct task_struct *p, bool update_load)
 {
 	int prio = p-&gt;static_prio - MAX_RT_PRIO;
@@ -1747,7 +1747,7 @@ void set_load_weight(struct task_struct *p, bool update_load)
 <p>
 这里比较关键的就是有个sched_prio_to_weight数组：
 </p>
-<pre class="example" id="org7a72f8d">
+<pre class="example" id="org9d0a7aa">
 /*
  * Nice levels are multiplicative, with a gentle 10% change for every
  * nice level changed. I.e. when a CPU-bound task goes from nice 0 to
@@ -1774,7 +1774,7 @@ const int sched_prio_to_weight[40] = {
 <p>
 该数组是按nice值作为优先级填充的，相邻的nice值差距大约25%的CPU使用率，nice为0定义为1024。与之对应的是2^32 / weight的另一个数组sched_prio_to_wmult，这个值是为后面除以weight提前算的，因为对weight做除，效率较低，可以直接乘以这个数组里的值再右移2^32位，抵消了提前乘的2^32次方：
 </p>
-<pre class="example" id="org0d29459">
+<pre class="example" id="org6b5ca1b">
 /*
  * Inverse (2^32/x) values of the sched_prio_to_weight[] array, pre-calculated.
  *
@@ -1796,7 +1796,7 @@ const u32 sched_prio_to_wmult[40] = {
 <p>
 具体的__calc_delta里的计算方式会有一些优化，就不详细分析了。这样__calc_delta最后返回值的效果就是，对于权重越大的（nice值越低），NICE_0_LOAD / weight这个比率就越小接近0，这样会把delta_exec缩放的越小，那么update_curr里的语句：
 </p>
-<pre class="example" id="org481714a">
+<pre class="example" id="org3a977fe">
 curr-&gt;vruntime += calc_delta_fair(delta_exec, curr);
 </pre>
 <p>
@@ -1806,7 +1806,7 @@ curr-&gt;vruntime += calc_delta_fair(delta_exec, curr);
 <p>
 update_curr接下来调用update_deadline更新sched_entity::deadline的值：
 </p>
-<pre class="example" id="orgebcfc1d">
+<pre class="example" id="orgbad11c2">
 /*
  * XXX: strictly: vd_i += N*r_i/w_i such that: vd_i &gt; ve_i
  * this is probably good enough.
@@ -1842,7 +1842,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 <p>
 update_curr后面调用update_min_vruntime：
 </p>
-<pre class="example" id="orgf9ae5f2">
+<pre class="example" id="org6d3df74">
 static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
 {
 	u64 min_vruntime = cfs_rq-&gt;min_vruntime;
@@ -1888,7 +1888,7 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 <p>
 如果cfs_rq::curr是一个任务的话，调用update_curr_task-&gt;account_group_exec_runtime去更新累加到所在线程组用的时间
 </p>
-<pre class="example" id="org18ac7c4">
+<pre class="example" id="org02c6563">
 static inline void update_curr_task(struct task_struct *p, s64 delta_exec)
 {
 	trace_sched_stat_runtime(p, delta_exec);
@@ -1896,7 +1896,7 @@ static inline void update_curr_task(struct task_struct *p, s64 delta_exec)
 	cgroup_account_cputime(p, delta_exec);
 }
 </pre>
-<pre class="example" id="org56cdfef">
+<pre class="example" id="orgaef7067">
 /**
  * account_group_exec_runtime - Maintain exec runtime for a thread group.
  *
@@ -1925,13 +1925,13 @@ static inline void account_group_exec_runtime(struct task_struct *tsk,
 <p>
 如果update_deadline返回的resched为true，也就是需要重新调度当前进程，那么就会resched_curr_lazy设置需要重新调度的标志TIF_NEED_RESCHED：
 </p>
-<pre class="example" id="org09aecb5">
+<pre class="example" id="orgba87a36">
 void resched_curr_lazy(struct rq *rq)
 {
 	__resched_curr(rq, get_lazy_tif_bit());
 }
 </pre>
-<pre class="example" id="orgbefd692">
+<pre class="example" id="org834b837">
 static __always_inline int get_lazy_tif_bit(void)
 {
 	if (dynamic_preempt_lazy())
@@ -1940,7 +1940,7 @@ static __always_inline int get_lazy_tif_bit(void)
 	return TIF_NEED_RESCHED;
 }
 </pre>
-<pre class="example" id="org30cd590">
+<pre class="example" id="org67ac323">
 /*
  * resched_curr - mark rq's current task 'to be rescheduled now'.
  *
@@ -1994,7 +1994,7 @@ static void __resched_curr(struct rq *rq, int tif)
 <p>
 这样sched_entity::on_rq为非0时，就需要调用__enqueue_entity重新入下红黑树：
 </p>
-<pre class="example" id="orgc065d94">
+<pre class="example" id="org32b7b7b">
 /*
  * Enqueue an entity into the rb-tree:
  */
@@ -2007,13 +2007,13 @@ static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 				__entity_less, &amp;min_vruntime_cb);
 }
 </pre>
-<pre class="example" id="orgd93932b">
+<pre class="example" id="org6ba1316">
 static inline bool __entity_less(struct rb_node *a, const struct rb_node *b)
 {
 	return entity_before(__node_2_se(a), __node_2_se(b));
 }
 </pre>
-<pre class="example" id="org521097e">
+<pre class="example" id="org6edf7d3">
 static inline bool entity_before(const struct sched_entity *a,
 				 const struct sched_entity *b)
 {
@@ -2039,7 +2039,7 @@ static inline bool entity_before(const struct sched_entity *a,
 <p>
 往下想看下通过sched_balance_newidle去从别的rq上拉取任务的逻辑：
 </p>
-<pre class="example" id="orgdb2e73a">
+<pre class="example" id="orgdd152f7">
 /*
  * sched_balance_newidle is called by schedule() if this_cpu is about to become
  * idle. Attempts to pull tasks from other CPUs.
@@ -2180,8 +2180,8 @@ pelt load计算以及上面的负载均衡都可以另开主题，本片主题�
 </p>
 </div>
 </div>
-<div id="outline-container-orga25b81a" class="outline-2">
-<h2 id="orga25b81a"><span class="section-number-2">3.</span> context_switch</h2>
+<div id="outline-container-org054ea4d" class="outline-2">
+<h2 id="org054ea4d"><span class="section-number-2">3.</span> context_switch</h2>
 <div class="outline-text-2" id="text-3">
 <p>
 context_switch是完成进程切换至关重要的函数，在context_switch-&gt;switch_to里面，CPU执行流其实已经去到了另外一个线程，在那个执行流里其实也是从context_switch里的switch_to开始，未来回到当前执行流第一入口点还是这里的context_swith-&gt;switch_to，也就是说__schedule返回了，__schedule自身是去往另一个CPU执行流（另一个线程的逻辑）。
@@ -2190,7 +2190,7 @@ context_switch是完成进程切换至关重要的函数，在context_switch-&gt
 <p>
 以下是context_switch的代码：
 </p>
-<pre class="example" id="orgb3e453a">
+<pre class="example" id="org1fc924f">
 /*
  * context_switch - switch to the new MM and the new thread's register state.
  */
@@ -2260,7 +2260,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 <p>
 从这个函数可以看到，主要分几种情况可以延迟做tlb的刷新操作，切换到内核线程时不必做切换mm的操作，因为内核线程没有自己的mm，一般不会访问用户空间，只需通过enter_lazy_tlb设置上一个标志，表示延迟做tlb刷新操作：
 </p>
-<pre class="example" id="org8d011fa">
+<pre class="example" id="orgfdc83ee">
 /*
  * Please ignore the name of this function.  It should be called
  * switch_to_kernel_thread().
@@ -2285,7 +2285,7 @@ void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 <p>
 先看prepare_task_switch的实现：
 </p>
-<pre class="example" id="org4e44238">
+<pre class="example" id="org31e1539">
 /**
  * prepare_task_switch - prepare to switch tasks
  * @rq: the runqueue preparing to switch
@@ -2316,7 +2316,7 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
 <p>
 kcov_prepare_switch主要是代码覆盖率统计方面的逻辑，该配置一般没配。接着看sched_info_switch：
 </p>
-<pre class="example" id="org86e2632">
+<pre class="example" id="org519c919">
 /*
  * Called when tasks are switched involuntarily due, typically, to expiring
  * their time slice.  (This may also be called when switching to or from
@@ -2340,7 +2340,7 @@ sched_info_switch(struct rq *rq, struct task_struct *prev, struct task_struct *n
 <p>
 SCHED_INFO可以导出很多调度方面的信息，所以一般是开启的。这里主要分两种情况统计调度信息，只要即将被换出的prev或者即将被换入的next都不是idle的话，都会调用对应的函数进行统计操作，先看sched_info_depart函数：
 </p>
-<pre class="example" id="org7363a57">
+<pre class="example" id="org8e50109">
 /*
  * Called when a process ceases being the active-running process involuntarily
  * due, typically, to expiring its time slice (this may also be called when
@@ -2362,7 +2362,7 @@ static inline void sched_info_depart(struct rq *rq, struct task_struct *t)
 <p>
 last_arrival是上次prev作为换入进程通过sched_info_arrive设置的，待会还会看到这个函数的分析。在sched_info_depart里，拿到现在的clock减去上次的last_arrival，就是本轮运行的delta，以这个参数调用rq_sched_info_depart：
 </p>
-<pre class="example" id="org4db0c75">
+<pre class="example" id="org0e8a170">
 /*
  * Expects runqueue lock to be held for atomicity of update
  */
@@ -2376,10 +2376,10 @@ rq_sched_info_depart(struct rq *rq, unsigned long long delta)
 <p>
 可以看到该函数就是往该rq的rq_cpu_time上累加了delta时间，这个成员可以认为是该rq总共运行了多少cpu时间。task_is_running判断任务状态还是TASK_RUNNING的话，就会调用sched_info_enqueue重新记录排队时间戳：
 </p>
-<pre class="example" id="orgba78c48">
+<pre class="example" id="orgdd31fff">
 #define task_is_running(task)		(READ_ONCE((task)-&gt;__state) == TASK_RUNNING)
 </pre>
-<pre class="example" id="orgf84178c">
+<pre class="example" id="org1742c51">
 /*
  * This function is only called from enqueue_task(), but also only updates
  * the timestamp if it is already not set.  It's assumed that
@@ -2398,7 +2398,7 @@ static inline void sched_info_enqueue(struct rq *rq, struct task_struct *t)
 <p>
 继续看sched_info_arrive，该函数处理将要调度上CPU的进程的统计信息：
 </p>
-<pre class="example" id="orge3e6e8c">
+<pre class="example" id="org421b144">
 /*
  * Called when a task finally hits the CPU.  We can now calculate how
  * long it was waiting to run.  We also note when it began so that we
@@ -2432,7 +2432,7 @@ static void sched_info_arrive(struct rq *rq, struct task_struct *t)
 <p>
 rq_sched_info_arrive主要是统计rq调度队列层面的信息（之前都是讲的进程task_struct层面的信息）：
 </p>
-<pre class="example" id="orgbb1b6da">
+<pre class="example" id="org79ad259">
 static inline void
 rq_sched_info_arrive(struct rq *rq, unsigned long long delta)
 {
@@ -2453,7 +2453,7 @@ fire_sched_out_preempt_noifiers是调用注册在task_struct::preempt_notifiers�
 <p>
 下一个比较关键的工作就是设置next任务的on_cpu为1，这通过prepare_task：
 </p>
-<pre class="example" id="org7a62e44">
+<pre class="example" id="orgd9ed42d">
 static inline void prepare_task(struct task_struct *next)
 {
 #ifdef CONFIG_SMP
@@ -2471,7 +2471,7 @@ static inline void prepare_task(struct task_struct *next)
 <p>
 回到context_switch函数：
 </p>
-<pre class="example" id="orge1f2536">
+<pre class="example" id="org97fbe2c">
 /*
  * kernel -&gt; kernel   lazy + transfer active
  *   user -&gt; kernel   lazy + mmgrab_lazy_tlb() active
@@ -2521,7 +2521,7 @@ else分支是真正会马上进行切换mm的情况，具体调用函数就是sw
 <p>
 下面分析switch_mm_irqs_off函数：
 </p>
-<pre class="example" id="org62aa08e">
+<pre class="example" id="org736040d">
 /*
  * This optimizes when not actually switching mm's.  Some architectures use the
  * 'unused' argument for this optimization, but x86 must use
@@ -2706,7 +2706,7 @@ reload_tlb:
 <p>
 随后的逻辑分两个大的部分，一是如果prev和next是同一个进程，那么就很有可能不做真正的切换动作，提前return。但如果prev和next不一样，也就是else分支，那么肯定是要切换mm，所谓切换mm主要有两个方面的事情，一是按新的next进程的页表基地址作为构成cr3的一个部分写到cr3，二是刷新tlb（根据条件看是否要做这个动作）。下面继续分析，首先是prev == next满足的情况，这个分支下先有一个warn判断：
 </p>
-<pre class="example" id="org6391de0">
+<pre class="example" id="orgb1323e5">
 VM_WARN_ON(is_dyn_asid(prev_asid) &amp;&amp;
 	   this_cpu_read(cpu_tlbstate.ctxs[prev_asid].ctx_id) !=
 	   next-&gt;context.ctx_id);
@@ -2714,7 +2714,7 @@ VM_WARN_ON(is_dyn_asid(prev_asid) &amp;&amp;
 <p>
 context是内嵌在mm_context_t里的，也就是说mm_struct::context::ctx_id也可以唯一标识一个mm_struct，在init_new_context函数里，会初始化这个ctx_id：
 </p>
-<pre class="example" id="org88ee3e4">
+<pre class="example" id="orgf2b1634">
 mm-&gt;context.ctx_id = atomic64_inc_return(&amp;last_mm_ctx_id);
 </pre>
 <p>
@@ -2728,13 +2728,13 @@ last_mm_ctx_id是64位全局只增不回退的计数器，每次当有新的mm_s
 <p>
 回到前面的WARN判断，这个WARN判断是在prev == next满足的情况下，那么自然正常情况下，per-cpu上正在使用的tlb_context::ctx_id就该等于task_struct::context::ctx_id，因为在随后的逻辑，就会设置per-cpu里的ctx_id（当然是在刷新tlb时才做这个动作）：
 </p>
-<pre class="example" id="orgfa4b925">
+<pre class="example" id="org9079998">
 this_cpu_write(cpu_tlbstate.ctxs[ns.asid].ctx_id, next-&gt;context.ctx_id);
 </pre>
 <p>
 再往下看：
 </p>
-<pre class="example" id="orgf041cca">
+<pre class="example" id="org83c6866">
 /*
  * Even in lazy TLB mode, the CPU should stay set in the
  * mm_cpumask. The TLB shootdown code can figure out from
@@ -2748,14 +2748,14 @@ if (IS_ENABLED(CONFIG_DEBUG_VM) &amp;&amp;
 <p>
 正常来说CONFIG_DEBUG_VM不会开启，因为它会影响性能：
 </p>
-<pre class="example" id="orgd70a6e6">
+<pre class="example" id="orga972c7b">
 Enable this to turn on extended checks in the virtual-memory system
 that may impact performance.	 
 </pre>
 <p>
 即使开启了，一般后面的WARN_ON_ONCE也不会满足条件得到执行，但是这些条件和下面的cpumask_set_cpu就是要兜底保证一个mm_struct在某个cpu上使用时，需要将cpu号记录在mm_struct::cpu_bitmap里，这样将来假如其它CPU上也使用了这个mm_struct，然后可以通过如下一些例子路径发送IPI通知到本CPU：
 </p>
-<pre class="example" id="orgdc6f94c">
+<pre class="example" id="org517ba49">
 unmap_region-&gt;tlb_finish_mmu-&gt;tlb_flush_mmu-&gt;tlb_flush_mmu_tlbonly-&gt;tlb_flush-&gt;flush_tlb_mm-&gt;flush_tlb_mm_range-&gt;flush_tlb_multi-&gt;__flush_tlb_multi-&gt;native_flush_tlb_multi
 try_to_unmap-&gt;rmap_walk-&gt;rmap_walk_anon-&gt;rmap_one(try_to_unmap_one)-&gt;flush_tlb_mm_range-&gt;flush_tlb_multi-&gt;__flush_tlb_multi-&gt;native_flush_tlb_multi
 exit_mmap-&gt;unmap_vmas-&gt;unmap_single_vma-&gt;unmap_page_range-&gt;zap_p4d_range-&gt;zap_pud_range-&gt;zap_pmd_range-&gt;zap_pte_range-&gt;tlb_flush_mmu_tlbonly-&gt;tlb_flush-&gt;flush_tlb_mm-&gt;flush_tlb_mm_range-&gt;flush_tlb_multi-&gt;__flush_tlb_multi-&gt;native_flush_tlb_multi
@@ -2763,7 +2763,7 @@ exit_mmap-&gt;unmap_vmas-&gt;unmap_single_vma-&gt;unmap_page_range-&gt;zap_p4d_r
 <p>
 在native_flush_tlb_multi里就有针对cpumask里每个cpu去调用flush_tlb_func：
 </p>
-<pre class="example" id="org3983405">
+<pre class="example" id="orgaad65b0">
 on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
 </pre>
 <p>
@@ -2773,7 +2773,7 @@ on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
 <p>
 前面提到了，上面的检查cpu是否在mm_struct::cpu_bitmap里，一般都不会做，那么往mm_struct::cpu_bitmap里设置cpu号是在哪里呢？实际就在switch_mm_irqs_off稍后的逻辑，就是prev== next不满足，确实会切换为不同mm_struct，就会设置上当前cpu号到next的cpu_bitmap：
 </p>
-<pre class="example" id="org257df73">
+<pre class="example" id="org6103f38">
 /* Start receiving IPIs and then read tlb_gen (and LAM below) */
 if (next != &amp;init_mm &amp;&amp; !cpumask_test_cpu(cpu, mm_cpumask(next)))
 	cpumask_set_cpu(cpu, mm_cpumask(next));
@@ -2781,7 +2781,7 @@ if (next != &amp;init_mm &amp;&amp; !cpumask_test_cpu(cpu, mm_cpumask(next)))
 <p>
 这样假如将来需要在next这个mm_struct上执行flush_tlb_func，就可以通过mm_cpumask找到是哪些CPU需要执行这个tlb刷新函数，tlb是每个CPU私有的per-CPU硬件资源，内容不会自动在核间同步，需要显式失效机制来保持一致性，也就是做：
 </p>
-<pre class="example" id="orgfb8323e">
+<pre class="example" id="org4fed738">
 flush_tlb_func-&gt;flush_tlb_one_user-&gt;__flush_tlb_one_user-&gt;native_flush_tlb_one_user-&gt;invpcid_flush_one-&gt;__invpcid
 </pre>
 <p>
@@ -2791,7 +2791,7 @@ flush_tlb_func-&gt;flush_tlb_one_user-&gt;__flush_tlb_one_user-&gt;native_flush_
 <p>
 继续往下分析，mm_needs_global_asid-&gt;mm_global_asid主要在AMD平台上使用，因为mm_global_asid在CONFIG_BROADCAST_TLB_FLUSH配置下，但是这个配置：
 </p>
-<pre class="example" id="org422f27c">
+<pre class="example" id="org0158c31">
 config BROADCAST_TLB_FLUSH
 	def_bool y
 	depends on CPU_SUP_AMD &amp;&amp; 64BIT
@@ -2803,7 +2803,7 @@ config BROADCAST_TLB_FLUSH
 <p>
 往下的代码：
 </p>
-<pre class="example" id="org40d0651">
+<pre class="example" id="org613e4f8">
 /*
  * Broadcast TLB invalidation keeps this ASID up to date
  * all the time.
@@ -2818,7 +2818,7 @@ if (is_global_asid(prev_asid))
 <p>
 随后的代码也是提前返回，不做实际的tlb reload：
 </p>
-<pre class="example" id="org53fdab4">
+<pre class="example" id="org65f3d9b">
 /*
  * If the CPU is not in lazy TLB mode, we are just switching
  * from one thread in a process to another thread in the same
@@ -2834,7 +2834,7 @@ if (!was_lazy)
 <p>
 再往下分析：
 </p>
-<pre class="example" id="org56f4636">
+<pre class="example" id="orgef839a9">
 /*
  * Read the tlb_gen to check whether a flush is needed.
  * If the TLB is up to date, just use it.
@@ -2850,19 +2850,19 @@ if (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
 <p>
 tlb_gen指示了内存页表是否改变，如果内存页表改变了，那么tlb就不是up to date的了，tlb的本质是缓存了虚拟地址到物理地址的映射，如果内存里的页表改变了，自然TLB需要重新同步，注意这里prev_asid来自loaded_mm_asid：
 </p>
-<pre class="example" id="org5281bf9">
+<pre class="example" id="org82eb2b4">
 u16 prev_asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
 </pre>
 <p>
 并且之前某次切换流程里，那时prev作为next，假如是真的进行了tlb flush，也就是ns.need_flush是true，在那时cpu_tlbstate里的tlb_gen会更新成next里的：
 </p>
-<pre class="example" id="org3b2a916">
+<pre class="example" id="org158745a">
 this_cpu_write(cpu_tlbstate.ctxs[ns.asid].tlb_gen, next_tlb_gen);
 </pre>
 <p>
 自那次后到本次进程切换，如果next_tlb_gen有改变，那么上面的判断相等就不会满足，也就是说这期间进程有改变自己的页表，此时再切换到prev（或next，因为整个大的条件在prev == next满足的情况下），就需要刷新tlb，让tlb部件和内存里的页表重新进行同步。那么什么情况下，mm_struct::context::tlb_gen可能会增加呢？其实就是前面有列举出的ipi的路径上就会增加这个计数，flush_tlb_mm_range都会调用inc_mm_tlb_gen：
 </p>
-<pre class="example" id="orgc580854">
+<pre class="example" id="org6cab285">
 static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 {
 	/*
@@ -2878,7 +2878,7 @@ static inline u64 inc_mm_tlb_gen(struct mm_struct *mm)
 <p>
 那么再往下的代码就比较容易理解了：
 </p>
-<pre class="example" id="orgdda2aeb">
+<pre class="example" id="orgc893703">
 /*
  * TLB contents went out of date while we were in lazy
  * mode. Fall through to the TLB switching code below.
@@ -2905,7 +2905,7 @@ else分支的主要逻辑其实是调用到choose_new_asid，去选择一个在�
 <p>
 next_tlb_gen先将要切换到的next进程的tlb_gen读上来，然后以这个参数调用choose_new_asid函数，下面分析这个函数：
 </p>
-<pre class="example" id="org2b48423">
+<pre class="example" id="orgeee2c04">
 static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
 {
 	struct new_asid ns;
@@ -2969,7 +2969,7 @@ static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
 <p>
 下面invalidate_other的逻辑主要是通过clear_asid_other函数将ctx_id设置为0，ctxs::ctx_id一般是用于指明mm_struct，但为0的ctx_id有特别的用途：
 </p>
-<pre class="example" id="org677048a">
+<pre class="example" id="org93071a3">
 /*
  * We get here when we do something requiring a TLB invalidation
  * but could not go invalidate all of the contexts.  We do the
@@ -3011,14 +3011,36 @@ static void clear_asid_other(void)
 </p>
 
 <p>
-在switch_mm_irqs_off的最后看下switch_ldt函数，
+继续往下看lru_gen_use_mm，mm_struct::lru_gen::bitmap用于内存回收的代码，在这里切换到某个进程运行时，就会通过lru_gen_use_mm将其只为全1（-1）：
+</p>
+<pre class="example" id="orge5d58e9">
+static inline void lru_gen_use_mm(struct mm_struct *mm)
+{
+	/*
+	 * When the bitmap is set, page reclaim knows this mm_struct has been
+	 * used since the last time it cleared the bitmap. So it might be worth
+	 * walking the page tables of this mm_struct to clear the accessed bit.
+	 */
+	WRITE_ONCE(mm-&gt;lru_gen.bitmap, -1);
+}
+</pre>
+<p>
+这里既然马上要切换到next运行了，自然需要将其bitmap设置为-1，代表这个mm_struct访问过，那么在vmscan（内存回收）的代码里，就会判断这个bitmap是否设置了，如果设置了，就会clear掉bitmap里的标志为0，并且返回这个mm_struct，代表需要内存回收代码进一步进行处理，这由linux/mm/vmscan.c里的get_next_mm函数体现。关于内存回收后面有文章分析。
+</p>
+
+<p>
+继续往下如果之前是在内核线程里运行，那么需要将prev-&gt;active_mm保存到rq-&gt;prev_mm。
+</p>
+
+<p>
+switch_mm_cid在SCHED_MM_CID配置下起效，这个配置主要是用来区分某个进程的mm_struct被多个线程贡献访问时来区分哪个线程的，本文不介绍这个主题。
 </p>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-07-04 Fri 23:03</p>
+<p class="date">Created: 2025-07-05 Sat 22:40</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
