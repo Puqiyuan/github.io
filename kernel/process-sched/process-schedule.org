@@ -2555,4 +2555,13 @@ static inline void lru_gen_use_mm(struct mm_struct *mm)
 
 继续往下如果之前是在内核线程里运行，那么需要将prev->active_mm保存到rq->prev_mm。
 
-switch_mm_cid在SCHED_MM_CID配置下起效，这个配置主要是用来区分某个进程的mm_struct被多个线程贡献访问时来区分哪个线程的，本文不介绍这个主题。
+switch_mm_cid在SCHED_MM_CID配置下起效，这个配置主要是用来区分某个进程的mm_struct被多个线程共享访问时来区分哪个线程的，本文不介绍这个主题。
+
+分析完switch_mm_irqs_off后，可以看看switch_to，switch_to里会完成任务流的切换，并且当switch_to返回时，正式完成切换，switch_to的实现是架构相关的，因为该函数涉及到上下文保存和恢复。这里主要针对x86-64架构来分析，其实现如下：
+#+begin_example
+#define switch_to(prev, next, last)					\
+do {									\
+	((last) = __switch_to_asm((prev), (next)));			\
+} while (0)
+#+end_example
+
