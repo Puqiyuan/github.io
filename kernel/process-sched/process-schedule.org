@@ -2564,4 +2564,105 @@ do {									\
 	((last) = __switch_to_asm((prev), (next)));			\
 } while (0)
 #+end_example
+__switch_to_asm的实现在x86架构上分为32位和64位的版本，分别实现在arch/x86/entry/entry_32.S和arch/x86/entry/entry_64.S两个，通过命令：
+#+begin_example
+find . -name "*Makefile*" -exec grep -Rn --color=auto "entry_" {} +
+#+end_example
+知道编译哪个版本由BITS宏决定，在arch/x86/entry/Makefile里：
+#+begin_example
+obj-y				:= entry.o entry_$(BITS).o syscall_$(BITS).o
+#+end_example
+那么BITS在哪里定义，依据什么条件定义成多少呢？使用命令：
+#+begin_example
+find . -name "*Makefile*" -exec grep -Rn --color=auto "BITS" {} +
+#+end_example
+在arch/x86/Makefile里有：
+#+begin_example
+ifeq ($(CONFIG_X86_32),y)
+        BITS := 32
+        UTS_MACHINE := i386
+        CHECKFLAGS += -D__i386__
+
+        KBUILD_AFLAGS += -m32
+        KBUILD_CFLAGS += -m32
+
+        KBUILD_CFLAGS += -msoft-float -mregparm=3 -freg-struct-return
+
+        # Never want PIC in a 32-bit kernel, prevent breakage with GCC built
+        # with nonstandard options
+        KBUILD_CFLAGS += -fno-pic
+
+        # Align the stack to the register width instead of using the default
+        # alignment of 16 bytes. This reduces stack usage and the number of
+        # alignment instructions.
+        KBUILD_CFLAGS += $(cc_stack_align4)
+
+        # CPU-specific tuning. Anything which can be shared with UML should go here.
+        include $(srctree)/arch/x86/Makefile_32.cpu
+        KBUILD_CFLAGS += $(cflags-y)
+
+    ifneq ($(call clang-min-version, 160000),y)
+        # https://github.com/llvm/llvm-project/issues/53645
+        KBUILD_CFLAGS += -ffreestanding
+    endif
+
+        percpu_seg := fs
+else
+        BITS := 64
+#+end_example
+也就是说，只要没有定义CONFIG_X86_32的情况，BITS就是64，那么这时就知道分析entry_64.S里的__switch_to_asm的实现：
+#+begin_example
+/*
+ * %rdi: prev task
+ * %rsi: next task
+ */
+.pushsection .text, "ax"
+SYM_FUNC_START(__switch_to_asm)
+	ANNOTATE_NOENDBR
+	/*
+	 * Save callee-saved registers
+	 * This must match the order in inactive_task_frame
+	 */
+	pushq	%rbp
+	pushq	%rbx
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+	/* switch stack */
+	movq	%rsp, TASK_threadsp(%rdi)
+	movq	TASK_threadsp(%rsi), %rsp
+
+#ifdef CONFIG_STACKPROTECTOR
+	movq	TASK_stack_canary(%rsi), %rbx
+	movq	%rbx, PER_CPU_VAR(__stack_chk_guard)
+#endif
+
+	/*
+	 * When switching from a shallower to a deeper call stack
+	 * the RSB may either underflow or use entries populated
+	 * with userspace addresses. On CPUs where those concerns
+	 * exist, overwrite the RSB with entries which capture
+	 * speculative execution to prevent attack.
+	 */
+	FILL_RETURN_BUFFER %r12, RSB_CLEAR_LOOPS, X86_FEATURE_RSB_CTXSW
+
+	/* restore callee-saved registers */
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbx
+	popq	%rbp
+
+	jmp	__switch_to
+SYM_FUNC_END(__switch_to_asm)
+.popsection
+#+end_example
+调用__switch_to_asm函数时，rdi寄存器是prev任务，而rsi是next任务，先解释下：
+#+begin_example
+.pushsection .text, "ax"
+#+end_example
+的作用。
 
