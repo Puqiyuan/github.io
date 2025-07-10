@@ -2689,6 +2689,8 @@ CONFIG_STACKPROTECTOR配置一般是用于防御篡改栈上的返回地址这�
 
 在rsp寄存器switch成新的进程的栈后，最后的几个popq指令实际是恢复新进程之前通过pushq存储的callee-saved的寄存器。
 
+这里context switch只保存了callee-saved的寄存器，至于rax等其它寄存器是caller-saved的，编译器会根据ABI要求，决定是否在调用前保存这些值，编译器生成调用方会汇编来保存。
+
 最后又去到了__swith_to这个C函数，也就是说截止__switch_to_asm结束，CPU执行流还没有交到next进程手里，__switch_to这个C函数里还有一些处理切换的逻辑，在__switch_to的最后通过return语句才弹回next的rsp上的返回指令，且到next的执行流上去，所以后面还要继续分析__switch_to这个C函数：
 #+begin_example
 /*
