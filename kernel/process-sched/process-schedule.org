@@ -2908,3 +2908,5 @@ extern struct fpu *x86_task_fpu(struct task_struct *task);
 # define x86_task_fpu(task)	((struct fpu *)((void *)(task) + sizeof(*(task))))
 #endif
 #+end_example
+就可以通过一个task_struct的起始地址加上某个偏移就是fpu结构体的方式得到fpu结构体的地址。save_fpregs_to_fpstate是真正的执行xsave/fxsave等指令保存当前cpu浮点相关的信息到fpu::fpstate::regs:save或者fpu::fpstate::regs::fxsave内存区域。最后将当前cpu号放入fpu里的last_cpu记录下刚运行的cpu号。
+
