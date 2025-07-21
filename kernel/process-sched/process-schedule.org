@@ -2897,8 +2897,6 @@ static inline void switch_fpu(struct task_struct *old, int cpu)
 		trace_x86_fpu_regs_deactivated(old_fpu);
 	}
 }
-
-
 #+end_example
 其定义在linux/arch/x86/include/asm/fpu/sched.h里，那么x86_task_fpu的实现：
 #+begin_example
@@ -2910,3 +2908,121 @@ extern struct fpu *x86_task_fpu(struct task_struct *task);
 #+end_example
 就可以通过一个task_struct的起始地址加上某个偏移就是fpu结构体的方式得到fpu结构体的地址。save_fpregs_to_fpstate是真正的执行xsave/fxsave等指令保存当前cpu浮点相关的信息到fpu::fpstate::regs:save或者fpu::fpstate::regs::fxsave内存区域。最后将当前cpu号放入fpu里的last_cpu记录下刚运行的cpu号。
 
+往下的save_fsgs/load_TLS函数主要涉及x86架构的分段机制，在64位的long mode下，已经很少使用分段机制了，不过正确设置cs/ds等可以使用段描述符的低几位做权限检查。
+
+先看save_fsgs：
+#+begin_example
+static __always_inline void save_fsgs(struct task_struct *task)
+{
+	savesegment(fs, task->thread.fsindex);
+	savesegment(gs, task->thread.gsindex);
+	if (static_cpu_has(X86_FEATURE_FSGSBASE)) {
+		/*
+		 * If FSGSBASE is enabled, we can't make any useful guesses
+		 * about the base, and user code expects us to save the current
+		 * value.  Fortunately, reading the base directly is efficient.
+		 */
+		task->thread.fsbase = rdfsbase();
+		task->thread.gsbase = __rdgsbase_inactive();
+	} else {
+		save_base_legacy(task, task->thread.fsindex, FS);
+		save_base_legacy(task, task->thread.gsindex, GS);
+	}
+}
+#+end_example
+首先是保存fs/gs段寄存器的值到task_struct::thread里相应的成员里，因为后面可能会加载新的值到这些寄存器，传统上这些寄存器里存的是一个段选择子，用来在gdt/ldt里选择一个段描述符，这个段描述符里记录了某个段的起始地址、限长以及权限相关的信息。但是针对支持fsbase/gsbase的更现代的X86-64架构，基址信息记录在msr寄存器里了，所以fs/gs段选择子寄存器里的索引部分就没什么用了，它原来主要是在gdt/ldt中索引段描述符的。
+
+savesegment实现如下：
+#+begin_example
+/*
+ * Save a segment register away:
+ */
+#define savesegment(seg, value)				\
+	asm("mov %%" #seg ",%0":"=r" (value) : : "memory")
+#+end_example
+rdfsbase函数就是使用rdfsbase指令了，主要是将fsbase msr寄存器的值也保存到内存里。
+
+往下看load_TLS：
+#+begin_example
+	/*
+	 * Load TLS before restoring any segments so that segment loads
+	 * reference the correct GDT entries.
+	 */
+	load_TLS(next, cpu);
+#+end_example
+#+begin_example
+static inline void native_load_tls(struct thread_struct *t, unsigned int cpu)
+{
+	struct desc_struct *gdt = get_cpu_gdt_rw(cpu);
+	unsigned int i;
+
+	for (i = 0; i < GDT_ENTRY_TLS_ENTRIES; i++)
+		gdt[GDT_ENTRY_TLS_MIN + i] = t->tls_array[i];
+}
+#+end_example
+可以看到，这里是将每个线程自己的tls数据，也就是tls_array数组，里面是8-byte的段描述符，加载到了per-cpu的desc_struct数组里（当然这也是一个段描述符数组），从目前这里的代码可以看到gdt还是是一片内存，那么为什么写段描述符的信息到这个地址就可以反应给cpu访问thread线程变量时用这里的gdt里描述的段信息呢？先看get_cpu_gdt_rw实现：
+#+begin_example
+/* Provide the original GDT */
+static inline struct desc_struct *get_cpu_gdt_rw(unsigned int cpu)
+{
+	return per_cpu(gdt_page, cpu).gdt;
+}
+#+end_example
+可以看到就是获取per-cpu变量gdt_page，该变量定义如下：
+#+begin_example
+DEFINE_PER_CPU_PAGE_ALIGNED(struct gdt_page, gdt_page) = { .gdt = {
+#ifdef CONFIG_X86_64
+	/*
+	 * We need valid kernel segments for data and code in long mode too
+	 * IRET will check the segment types  kkeil 2000/10/28
+	 * Also sysret mandates a special GDT layout
+	 *
+	 * TLS descriptors are currently at a different place compared to i386.
+	 * Hopefully nobody expects them at a fixed place (Wine?)
+	 */
+	[GDT_ENTRY_KERNEL32_CS]		= GDT_ENTRY_INIT(DESC_CODE32, 0, 0xfffff),
+	[GDT_ENTRY_KERNEL_CS]		= GDT_ENTRY_INIT(DESC_CODE64, 0, 0xfffff),
+	[GDT_ENTRY_KERNEL_DS]		= GDT_ENTRY_INIT(DESC_DATA64, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER32_CS]	= GDT_ENTRY_INIT(DESC_CODE32 | DESC_USER, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(DESC_DATA64 | DESC_USER, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(DESC_CODE64 | DESC_USER, 0, 0xfffff),
+#else
+	[GDT_ENTRY_KERNEL_CS]		= GDT_ENTRY_INIT(DESC_CODE32, 0, 0xfffff),
+	[GDT_ENTRY_KERNEL_DS]		= GDT_ENTRY_INIT(DESC_DATA32, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(DESC_CODE32 | DESC_USER, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(DESC_DATA32 | DESC_USER, 0, 0xfffff),
+	/*
+	 * Segments used for calling PnP BIOS have byte granularity.
+	 * They code segments and data segments have fixed 64k limits,
+	 * the transfer segment sizes are set at run time.
+	 */
+	[GDT_ENTRY_PNPBIOS_CS32]	= GDT_ENTRY_INIT(DESC_CODE32_BIOS, 0, 0xffff),
+	[GDT_ENTRY_PNPBIOS_CS16]	= GDT_ENTRY_INIT(DESC_CODE16, 0, 0xffff),
+	[GDT_ENTRY_PNPBIOS_DS]		= GDT_ENTRY_INIT(DESC_DATA16, 0, 0xffff),
+	[GDT_ENTRY_PNPBIOS_TS1]		= GDT_ENTRY_INIT(DESC_DATA16, 0, 0),
+	[GDT_ENTRY_PNPBIOS_TS2]		= GDT_ENTRY_INIT(DESC_DATA16, 0, 0),
+	/*
+	 * The APM segments have byte granularity and their bases
+	 * are set at run time.  All have 64k limits.
+	 */
+	[GDT_ENTRY_APMBIOS_BASE]	= GDT_ENTRY_INIT(DESC_CODE32_BIOS, 0, 0xffff),
+	[GDT_ENTRY_APMBIOS_BASE+1]	= GDT_ENTRY_INIT(DESC_CODE16, 0, 0xffff),
+	[GDT_ENTRY_APMBIOS_BASE+2]	= GDT_ENTRY_INIT(DESC_DATA32_BIOS, 0, 0xffff),
+
+	[GDT_ENTRY_ESPFIX_SS]		= GDT_ENTRY_INIT(DESC_DATA32, 0, 0xfffff),
+	[GDT_ENTRY_PERCPU]		= GDT_ENTRY_INIT(DESC_DATA32, 0, 0xfffff),
+#endif
+} };
+EXPORT_PER_CPU_SYMBOL_GPL(gdt_page);
+#+end_example
+可以看到这里初始化了一些段描述符，而tls这种段描述符又在刚展示的native_load_tls里进行切换重新设置。
+
+但是目前为止，这些段描述符都还是在内存里，而在arch/x86/kernel/head_64.S里有如下一段汇编：
+#+begin_example
+	leaq	gdt_page(%rdx), %rax
+	movq	%rax, 2(%rsp)
+	lgdt	(%rsp)
+#+end_example
+在这里可以看到将gdt_page的的内存地址通过lgdt设置到了gdtr寄存器里，而gdtr寄存器里存放的正是cpu通过分段方式访存时需要查询的gdt段描述符表，这样lgdt执行完毕了设置在内存里的gdt表才起效，当然后续内核/os代码就可以根据需要更改gdt描述符表，但是gdtr一直指向这张表。
+
+另外，tls段描述符设置的来源tls_array哪里来的呢？
