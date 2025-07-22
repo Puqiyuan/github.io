@@ -3025,4 +3025,46 @@ EXPORT_PER_CPU_SYMBOL_GPL(gdt_page);
 #+end_example
 在这里可以看到将gdt_page的的内存地址通过lgdt设置到了gdtr寄存器里，而gdtr寄存器里存放的正是cpu通过分段方式访存时需要查询的gdt段描述符表，这样lgdt执行完毕了设置在内存里的gdt表才起效，当然后续内核/os代码就可以根据需要更改gdt描述符表，但是gdtr一直指向这张表。
 
-另外，tls段描述符设置的来源tls_array哪里来的呢？
+另外，tls段描述符设置的来源tls_array哪里来的呢？TLS主要是线程局部变量的存储空间，那么可以想见tls的段描述符是可以由每个进程自己设置的，比如系统调用set_thread_area：
+#+begin_example
+do_set_thread_area->set_tls_desc->fill_ldt
+#+end_example
+这样在fill_ldt里填充desc_struct描述符：
+#+begin_example
+static void set_tls_desc(struct task_struct *p, int idx,
+			 const struct user_desc *info, int n)
+{
+	struct thread_struct *t = &p->thread;
+	struct desc_struct *desc = &t->tls_array[idx - GDT_ENTRY_TLS_MIN];
+	int cpu;
+
+	/*
+	 * We must not get preempted while modifying the TLS.
+	 */
+	cpu = get_cpu();
+
+	while (n-- > 0) {
+		if (LDT_empty(info) || LDT_zero(info))
+			memset(desc, 0, sizeof(*desc));
+		else
+			fill_ldt(desc, info);
+		++info;
+		++desc;
+	}
+
+	if (t == &current->thread)
+		load_TLS(t, cpu);
+
+	put_cpu();
+}
+#+end_example
+这里user_desc就是来自用户态传递的描述符结构体。
+
+再往下的代码就是保存以及恢复es和ds段寄存器了，其代码实现前面都有涉及了，需要注意的是读取段寄存器（savesegment）仅返回段寄存器的内容（段选择子），但是写段寄存器的话，除了写入段选择子，还需要从gdt/ldt表里加载对应选择子的描述符到段寄存器的隐藏部分。
+
+pkru是一个控制内存页访问权限的寄存器，允许应用程序通过pkey_mprotect系统调用快速更改对某些内存区域的读写权限，而不需要修改页表，在上下文切换时通过x86_pkru_load去做pkru值的保存和恢复。
+
+再往下是更新两个x86架构下的per-cpu变量current_task和cpu_current_top_of_stack，这里主要想分析下task_top_of_stack的实现：
+#+begin_example
+#define task_top_of_stack(task) ((unsigned long)(task_pt_regs(task) + 1))
+#+end_example
