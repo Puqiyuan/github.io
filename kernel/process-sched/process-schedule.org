@@ -3068,3 +3068,34 @@ pkru是一个控制内存页访问权限的寄存器，允许应用程序通过p
 #+begin_example
 #define task_top_of_stack(task) ((unsigned long)(task_pt_regs(task) + 1))
 #+end_example
+#+begin_example
+#define task_pt_regs(task) \
+({									\
+	unsigned long __ptr = (unsigned long)task_stack_page(task);	\
+	__ptr += THREAD_SIZE - TOP_OF_KERNEL_STACK_PADDING;		\
+	((struct pt_regs *)__ptr) - 1;					\
+})
+#+end_example
+这里加减1从效果上看是多余的，但是主要是为了复用task_pt_regs这个接口的实现，THREAD_SIZE的实现各架构不同，对于X86-64来说，没有配置CONFIG_KASAN时就是4个page，页面大小为4KB时，就是16KB：
+#+begin_example
+#ifdef CONFIG_KASAN
+#define KASAN_STACK_ORDER 1
+#else
+#define KASAN_STACK_ORDER 0
+#endif
+
+#define THREAD_SIZE_ORDER	(2 + KASAN_STACK_ORDER)
+#define THREAD_SIZE  (PAGE_SIZE << THREAD_SIZE_ORDER)
+#+end_example
+task_stack_page实现如下：
+#+begin_example
+/*
+ * When accessing the stack of a non-current task that might exit, use
+ * try_get_task_stack() instead.  task_stack_page will return a pointer
+ * that could get freed out from under you.
+ */
+static __always_inline void *task_stack_page(const struct task_struct *task)
+{
+	return task->stack;
+}
+#+end_example
