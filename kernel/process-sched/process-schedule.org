@@ -3209,4 +3209,15 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	return rq;
 }
 #+end_example
-
+finish_task_switch的执行其实已经在新的next进程的逻辑流里了，因为switch_to->__switch_to_asm->__switch_to里最后的：
+#+begin_example
+return prev_p;
+#+end_example
+语是在切换为新的next进程栈的情况下执行ret指令的，这样会导致一是从新的栈顶弹出之前next作为prev时保存的下次需要待执行的rip，就是finish_task_switch函数，二是switch_to还将上面的prev_p返回写给了last：
+#+begin_example
+#define switch_to(prev, next, last)					\
+do {									\
+	((last) = __switch_to_asm((prev), (next)));			\
+} while (0)
+#+end_example
+last参数就是prev，注意这里往last写，其实已经是在切换栈的情况下，写的last（prev），其实是新进程next栈上的prev了，因为next之前作为prev时也是跑过conext_switch把自己切走了，那时已经在栈上开好了prev变量，这样switch_to一旦返回，实际cpu的执行逻辑流已经将prev切走了，finish_task_switch已经是在新的next进程的栈，寄存器环境等上执行了，相当于在next的逻辑流上帮忙做了一些切换完成后prev的清理工作。
