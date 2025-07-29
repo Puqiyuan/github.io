@@ -3220,4 +3220,106 @@ do {									\
 	((last) = __switch_to_asm((prev), (next)));			\
 } while (0)
 #+end_example
-last参数就是prev，注意这里往last写，其实已经是在切换栈的情况下，写的last（prev），其实是新进程next栈上的prev了，因为next之前作为prev时也是跑过conext_switch把自己切走了，那时已经在栈上开好了prev变量，这样switch_to一旦返回，实际cpu的执行逻辑流已经将prev切走了，finish_task_switch已经是在新的next进程的栈，寄存器环境等上执行了，相当于在next的逻辑流上帮忙做了一些切换完成后prev的清理工作。
+last参数就是prev，注意这里往last写，其实已经是在切换栈的情况下，写的last（prev），其实是新进程next栈上的prev了，因为next之前作为prev时也是跑过conext_switch把自己切走了，那时已经在栈上开好了prev变量，这样switch_to一旦返回，实际cpu的执行逻辑流已经将prev切走了，finish_task_switch已经是在新的next进程的栈，寄存器环境等上执行了，相当于在next的逻辑流上帮忙做了一些切换完成后prev的清理工作。所以接下来详细分析finish_task_switch时要时刻记住，CPU的执行环境/逻辑已经来到了新的next进程。
+
+开始的WARN_ONCE实际是检测抢占计数到现在这个点的正确性，因为schedule->preempt_disable会增加一次抢占计数，而raw_spin_lock_irq抢自旋锁的逻辑里又会关一次抢占。
+
+vtime_task_switch主要是在全动态节拍的情况下统计CPU的时间消耗。动态节拍又叫no_hz，传统上定时器中断会定周期到来，而CONFIG_NO_HZ_FULL是Linux内核中的一个选项，它启用了完全动态tickless系统（Full Dynticks）。启用这个选项后，某些CPU上可以在运行用户态任务时完全关闭周期性调度tick，以减少中断、降低抖动，适用于实时和高性能计算场景。在传统内核中，内核会为每个CPU设置一个周期性的定时器tick（通常为100Hz、250Hz或1000Hz，对应每10ms、4ms或1ms触发一次）。每次tick中断会执行任务调度、更新负载、统计CPU时间等。即使CPU上运行的是用户态任务，也会被tick打断。这样做的优点是简单、调度器行为可预测，缺点是中断频繁，功耗高，用户任务被频繁打断，实时jitter增大。开启CONFIG_NO_HZ_FULL后，可以使运行用户态任务的CPU在绝大多数时间不再收到周期性调度tick中断。CPU只在必要时才重新启用tick，例如进入内核、处理中断等，从而实现真正的tickless用户态执行环境。要使用这个功能，除了编译内核时启用CONFIG_NO_HZ_FULL，还需要通过boot参数指定具体启用的CPU，例如：nohz_full=1-3表示CPU1到CPU3启用full dynticks模式。
+
+目标CPU上最好只运行一个用户态任务，且该任务很少进入内核。通常会配合isolcpus=1-3和rcu_nocbs=1-3使用，以获得更好的隔离和实时性。
+
+在启用了NO_HZ_FULL并正确设置参数的CPU上，调度不再依赖周期性tick。调度改为事件驱动方式触发，例如系统调用返回后检查need_resched标志、进程显式调用schedule()、或其他CPU发出的IPI中断。也就是说，tick不再驱动调度器，而是调度器根据事件和状态自行决定是否调度。
+
+为了保证系统正常运行，还需要启用一些相关机制，例如RCU_NOCB_CPU用于支持非中断上下文下的RCU回调处理，VIRT_CPU_ACCOUNTING_GEN用于在无tick情况下精确地记录CPU使用时间，IRQ_WORK用于中断上下文中的异步任务处理。
+
+而CONFIG_NO_HZ_IDLE适用于大多数系统，它是在在CPU idle时才关闭tick；CONFIG_NO_HZ_FULL则适用于对jitter、实时性或能效有更高要求的场景，在用户态运行期间也能关闭tick。调度机制也从周期性驱动转变为完全事件驱动。
+
+所以vtime_task_switch正是针对full dyntikcs开启时，精确统计CPU时间是花在user space还是
+kernel space，因为这时已经没有周期性的tick到来更新时间消耗了，进程切换算是一个可以更新的点。
+
+vtime_task_switch实现如下：
+#+begin_example
+static inline void vtime_task_switch(struct task_struct *prev)
+{
+	if (vtime_accounting_enabled_this_cpu())
+		vtime_task_switch_generic(prev);
+}
+#+end_example
+先要判断一些配置是否开启：
+#+begin_example
+static inline bool vtime_accounting_enabled_this_cpu(void)
+{
+	return context_tracking_enabled_this_cpu();
+}
+#+end_example
+#+begin_example
+static __always_inline bool context_tracking_enabled_this_cpu(void)
+{
+	return context_tracking_enabled() && __this_cpu_read(context_tracking.active);
+}
+#+end_example
+而context_tracking_enabled的实现依赖CONFIG_CONTEXT_TRACKING_USER配置，CONTEXT_TRACKING_USER是一个内核配置项，用于支持“用户态上下文追踪”，其核心目的是为了让内核更好地知道CPU当前是否处于用户态、内核态或空闲态，这个信息对一些子系统非常关键，主要包括RCU需要知道CPU是否处于所谓的“扩展静默状态（extended quiescent state）”，这意味着该CPU处于用户态或空闲态，可以安全地执行某些延迟操作，比如释放内存等。启用CONTEXT_TRACKING_USER后，内核会在进入/退出用户态时显式通知RCU，从而提高精确性，尤其是在完全无时钟（NO_HZ_FULL）模式下。另外需要这个功能的就是Tickless cputime accounting（无时钟CPU时间统计）。传统的CPU时间统计依赖于定时器周期性地中断（时钟 tick）。而当使用NO_HZ_FULL模式关闭定时器tick后，系统需要通过别的方式知道任务在用户态/内核态运行了多长时间，这就需要context tracking的辅助，追踪上下文切换。通常在构建面向低延迟、节能或实时性强的内核（比如 NO_HZ_FULL）时会启用该选项。
+
+在笔者的环境下开启了这个配置，所以context_tracking_enabled实现如下：
+#+begin_example
+static __always_inline bool context_tracking_enabled_this_cpu(void)
+{
+	return context_tracking_enabled() && __this_cpu_read(context_tracking.active);
+}
+#+end_example
+#+begin_example
+static __always_inline bool context_tracking_enabled(void)
+{
+	return static_branch_unlikely(&context_tracking_key);
+}
+#+end_example
+context_tracking_key默认通过DEFINE_STATIC_KEY_FALSE_RO声明为FALSE，在开启了nohz的系统里，通过tick_nohz_init->ct_cpu_track_user开启这个key：
+#+begin_example
+void __init tick_nohz_init(void)
+{
+    ...
+    for_each_cpu(cpu, tick_nohz_full_mask)
+		ct_cpu_track_user(cpu);
+    ...
+}
+#+end_example
+从这段代码也可以看到nohz模式可以针对每个cpu来配置（tick_nohz_full_mask），ct_cpu_track_user实现如下：
+#+begin_example
+void __init ct_cpu_track_user(int cpu)
+{
+	static __initdata bool initialized = false;
+
+	if (!per_cpu(context_tracking.active, cpu)) {
+		per_cpu(context_tracking.active, cpu) = true;
+		static_branch_inc(&context_tracking_key);
+	}
+#+end_example
+这里也会将context_tracking.active设置为true，这样context_tracking_enabled_this_cpu就可以返回true。这样就可以调用vtime_task_switch_generic函数了：
+#+begin_example
+void vtime_task_switch_generic(struct task_struct *prev)
+{
+	struct vtime *vtime = &prev->vtime;
+
+	write_seqcount_begin(&vtime->seqcount);
+	if (vtime->state == VTIME_IDLE)
+		vtime_account_idle(prev);
+	else
+		__vtime_account_kernel(prev, vtime);
+	vtime->state = VTIME_INACTIVE;
+	vtime->cpu = -1;
+	write_seqcount_end(&vtime->seqcount);
+
+	vtime = &current->vtime;
+
+	write_seqcount_begin(&vtime->seqcount);
+	if (is_idle_task(current))
+		vtime->state = VTIME_IDLE;
+	else if (current->flags & PF_VCPU)
+		vtime->state = VTIME_GUEST;
+	else
+		vtime->state = VTIME_SYS;
+	vtime->starttime = sched_clock();
+	vtime->cpu = smp_processor_id();
+	write_seqcount_end(&vtime->seqcount);
+}
+#+end_example
