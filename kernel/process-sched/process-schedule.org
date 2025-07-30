@@ -3323,3 +3323,20 @@ void vtime_task_switch_generic(struct task_struct *prev)
 	write_seqcount_end(&vtime->seqcount);
 }
 #+end_example
+这里先介绍下write_seqcount_begin的实现，seqcount是一种序列锁，序列锁（seqlock）是一种Linux内核中的同步机制，专为写少读多的场景设计。它允许读者不加锁地访问共享数据，而写者加锁并更新一个序号（sequence counter）。其核心思想是，读者在读取数据前后记录sequence值，若值
+发生变化，则说明有写者正在修改数据，读者需重试，并且读前判断是奇数证明当前有写者正在写，需要等待其变成偶数，写者在修改数据前后更新sequence值，以此来通知读者“我正在修改数据”，写前加1变成奇数，写后再加1变成偶数，以下是write_seqcount_begin的实现：
+#+begin_example
+#define write_seqcount_begin(s)						\
+do {									\
+	seqprop_assert(s);						\
+									\
+	if (seqprop_preemptible(s))					\
+		preempt_disable();					\
+									\
+	do_write_seqcount_begin(seqprop_ptr(s));			\
+} while (0)
+#+end_example
+先分析下seqprop_preemptible的实现：
+#+begin_example
+#define seqprop_preemptible(s)		__seqprop(s, preemptible)(s)
+#+end_example
