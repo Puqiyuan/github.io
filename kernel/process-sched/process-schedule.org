@@ -3336,7 +3336,97 @@ do {									\
 	do_write_seqcount_begin(seqprop_ptr(s));			\
 } while (0)
 #+end_example
-先分析下seqprop_preemptible的实现：
+do_write_seqcount_begin实现如下：
 #+begin_example
-#define seqprop_preemptible(s)		__seqprop(s, preemptible)(s)
+static inline void do_write_seqcount_begin(seqcount_t *s)
+{
+	do_write_seqcount_begin_nested(s, 0);
+}
 #+end_example
+#+begin_example
+static inline void do_write_seqcount_begin_nested(seqcount_t *s, int subclass)
+{
+	seqcount_acquire(&s->dep_map, subclass, 0, _RET_IP_);
+	do_raw_write_seqcount_begin(s);
+}
+#+end_example
+#+begin_example
+static inline void do_raw_write_seqcount_begin(seqcount_t *s)
+{
+	kcsan_nestable_atomic_begin();
+	s->sequence++;
+	smp_wmb();
+}
+#+end_example
+这里可以看到就是对一个计数进行增加，加完后变成奇数，而在write_seqcount_end还会再次自增这个计数：
+#+begin_example
+/**
+ * write_seqcount_end() - end a seqcount_t write side critical section
+ * @s: Pointer to seqcount_t or any of the seqcount_LOCKNAME_t variants
+ *
+ * Context: Preemption will be automatically re-enabled if and only if
+ * the seqcount write serialization lock is associated, and preemptible.
+ */
+#define write_seqcount_end(s)						\
+do {									\
+	do_write_seqcount_end(seqprop_ptr(s));				\
+									\
+	if (seqprop_preemptible(s))					\
+		preempt_enable();					\
+} while (0)
+#+end_example
+#+begin_example
+static inline void do_write_seqcount_end(seqcount_t *s)
+{
+	seqcount_release(&s->dep_map, _RET_IP_);
+	do_raw_write_seqcount_end(s);
+}
+#+end_example
+这样这个sequence变成偶数，这种奇偶关系的变化会直接影响读端的接口，比如read_seqbegin的实现：
+#+begin_example
+/**
+ * read_seqbegin() - start a seqlock_t read side critical section
+ * @sl: Pointer to seqlock_t
+ *
+ * Return: count, to be passed to read_seqretry()
+ */
+static inline unsigned read_seqbegin(const seqlock_t *sl)
+{
+	return read_seqcount_begin(&sl->seqcount);
+}
+#+end_example
+#+begin_example
+/**
+ * read_seqcount_begin() - begin a seqcount_t read critical section
+ * @s: Pointer to seqcount_t or any of the seqcount_LOCKNAME_t variants
+ *
+ * Return: count to be passed to read_seqcount_retry()
+ */
+#define read_seqcount_begin(s)						\
+({									\
+	seqcount_lockdep_reader_access(seqprop_const_ptr(s));		\
+	raw_read_seqcount_begin(s);					\
+})
+#+end_example
+#+begin_example
+#define raw_read_seqcount_begin(s) __read_seqcount_begin(s)
+/**
+ * __read_seqcount_begin() - begin a seqcount_t read section
+ * @s: Pointer to seqcount_t or any of the seqcount_LOCKNAME_t variants
+ *
+ * Return: count to be passed to read_seqcount_retry()
+ */
+#define __read_seqcount_begin(s)					\
+({									\
+	unsigned __seq;							\
+									\
+	while (unlikely((__seq = seqprop_sequence(s)) & 1))		\
+		cpu_relax();						\
+									\
+	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);			\
+	__seq;								\
+})
+#+end_example
+从这里可以看到，读端要是遇到写者了，也就是sequence序列计数为奇数，就循环pause cpu降低功耗，直到写者写完将它改成偶数，这里读者就可以退出while循环了。
+
+ 现在回过头来看vtime_task_switch_generic的主体逻辑其实就是计数CPU处于某种状态下的时间长短，
