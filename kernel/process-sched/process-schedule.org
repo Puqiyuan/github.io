@@ -3429,4 +3429,60 @@ static inline unsigned read_seqbegin(const seqlock_t *sl)
 #+end_example
 从这里可以看到，读端要是遇到写者了，也就是sequence序列计数为奇数，就循环pause cpu降低功耗，直到写者写完将它改成偶数，这里读者就可以退出while循环了。
 
- 现在回过头来看vtime_task_switch_generic的主体逻辑其实就是计数CPU处于某种状态下的时间长短，
+ 现在回过头来看vtime_task_switch_generic的主体逻辑其实就是计数CPU处于某种状态下的时间长短， 比如vtime_account_idle实现如下：
+#+begin_example
+void vtime_account_idle(struct task_struct *tsk)
+{
+	account_idle_time(get_vtime_delta(&tsk->vtime));
+}
+#+end_example
+#+begin_example
+/*
+ * Account for idle time.
+ * @cputime: the CPU time spent in idle wait
+ */
+void account_idle_time(u64 cputime)
+{
+	u64 *cpustat = kcpustat_this_cpu->cpustat;
+	struct rq *rq = this_rq();
+
+	if (atomic_read(&rq->nr_iowait) > 0)
+		cpustat[CPUTIME_IOWAIT] += cputime;
+	else
+		cpustat[CPUTIME_IDLE] += cputime;
+}
+#+end_example
+#+begin_example
+static u64 get_vtime_delta(struct vtime *vtime)
+{
+	u64 delta = vtime_delta(vtime);
+	u64 other;
+
+	/*
+	 * Unlike tick based timing, vtime based timing never has lost
+	 * ticks, and no need for steal time accounting to make up for
+	 * lost ticks. Vtime accounts a rounded version of actual
+	 * elapsed time. Limit account_other_time to prevent rounding
+	 * errors from causing elapsed vtime to go negative.
+	 */
+	other = account_other_time(delta);
+	WARN_ON_ONCE(vtime->state == VTIME_INACTIVE);
+	vtime->starttime += delta;
+
+	return delta - other;
+}
+#+end_example
+可以看到这种情况是将delta时间给到了per-cpu里cpustat数组里，而starttime正是在vtime_task_switch_generic里稍后拿出current的vtime后写入的starttime，但是stime等其它时间的记录却不一样，比如vtime_task_switch_generic->__vtime_account_kernel->vtime_account_system：
+#+begin_example
+static void vtime_account_system(struct task_struct *tsk,
+				 struct vtime *vtime)
+{
+	vtime->stime += get_vtime_delta(vtime);
+	if (vtime->stime >= TICK_NSEC) {
+		account_system_time(tsk, irq_count(), vtime->stime);
+		vtime->stime = 0;
+	}
+}
+#+end_example
+可以看到是直接记录在了vtime结构体里的stime。
+vtime_task_swith_generic里前半部分逻辑是处理prev的情况，主要就是前面介绍的记录相应的时间delta，而后半部分主要是针对当前进程进行记录时间戳，以便下次它以prev身份进入vtime_task_swithc_generic时的前半部分计算消耗的delta时间。
