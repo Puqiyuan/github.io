@@ -1,4 +1,4 @@
-#+TITLE:进程调度
+#+TITLE:进程切换
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
@@ -7,7 +7,7 @@
 #+OPTIONS: html-link-use-abs-url:nil
 #+OPTIONS: htmlize:nil
 
-__schedule是进程调度的核心函数，它先调用pick_next_task函数算出需要运行哪个进程，然后调用context_switch函数完成切换。
+__schedule是进程切换(调度)的核心函数，它先调用pick_next_task函数算出需要运行哪个进程，然后调用context_switch函数完成切换。
 
 驱动调度器并进入__schedule这个核心调度函数主要有以下一些方式：
 
@@ -3486,3 +3486,34 @@ static void vtime_account_system(struct task_struct *tsk,
 #+end_example
 可以看到是直接记录在了vtime结构体里的stime。
 vtime_task_swith_generic里前半部分逻辑是处理prev的情况，主要就是前面介绍的记录相应的时间delta，而后半部分主要是针对当前进程进行记录时间戳，以便下次它以prev身份进入vtime_task_swithc_generic时的前半部分计算消耗的delta时间。
+
+perf_event_task_sched_in用于计数进程调度出入计数，与调度没有太大关系。
+
+finish_task是最后一次引用prev任务了：
+#+begin_example
+static inline void finish_task(struct task_struct *prev)
+{
+#ifdef CONFIG_SMP
+	/*
+	 * This must be the very last reference to @prev from this CPU. After
+	 * p->on_cpu is cleared, the task can be moved to a different CPU. We
+	 * must ensure this doesn't happen until the switch is completely
+	 * finished.
+	 *
+	 * In particular, the load of prev->state in finish_task_switch() must
+	 * happen before this.
+	 *
+	 * Pairs with the smp_cond_load_acquire() in try_to_wake_up().
+	 */
+	smp_store_release(&prev->on_cpu, 0);
+#endif
+}
+#+end_example
+将prev:on_cpu设置成0，表示没有在cpu上运行了。
+
+tick_nohz_task_switch功能前面有所介绍，这里主要想提一点，重新开启tick可以通过
+tick_sched_to_timer函数。
+
+finish_lock_switch->raw_spin_rq_unlock_irq里主要是释放锁以及调用local_irq_enable开启中断。
+
+以上就是进程切换的所有分析。
