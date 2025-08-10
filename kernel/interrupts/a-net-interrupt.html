@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-01-22 Wed 22:13 -->
+<!-- 2025-08-10 Sun 22:34 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X86-64架构下一个网卡中断的处理流程</title>
@@ -38,20 +38,20 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org08c908f">1. 中断向量表初始化</a>
+<li><a href="#org29c260c">1. 中断向量表初始化</a>
 <ul>
-<li><a href="#orgae1e096">1.1. 外部中断向量表构造</a></li>
-<li><a href="#org8276a66">1.2. 注册外部中断向量表</a></li>
+<li><a href="#orgeb435fa">1.1. 外部中断向量表构造</a></li>
+<li><a href="#org469715a">1.2. 注册外部中断向量表</a></li>
 </ul>
 </li>
-<li><a href="#orgda30a5d">2. 一个网卡中断的触发与执行</a></li>
+<li><a href="#org53fbfd9">2. 一个网卡中断的触发与执行</a></li>
 </ul>
 </div>
 </div>
 <p>
 本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
 </p>
-<pre class="example" id="org9f9127b">
+<pre class="example" id="orgd6eb396">
 =&gt; e1000_intr
 =&gt; __handle_irq_event_percpu
 =&gt; handle_irq_event
@@ -75,20 +75,20 @@
 =&gt; ret_from_fork
 =&gt; ret_from_fork_asm
 </pre>
-<div id="outline-container-org08c908f" class="outline-2">
-<h2 id="org08c908f"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div id="outline-container-org29c260c" class="outline-2">
+<h2 id="org29c260c"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
 </p>
 </div>
-<div id="outline-container-orgae1e096" class="outline-3">
-<h3 id="orgae1e096"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div id="outline-container-orgeb435fa" class="outline-3">
+<h3 id="orgeb435fa"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的汇编代码描述了外部中断向量表的内容：
 </p>
-<pre class="example" id="org45bf276">
+<pre class="example" id="orgb566d95">
 	.align IDT_ALIGN
 SYM_CODE_START(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
@@ -107,7 +107,7 @@ SYM_CODE_END(irq_entries_start)
 <p>
 这里NR_EXTERNAL_VECTORS以及FIRST_EXTERNAL_VECTOR被如下方式定义：
 </p>
-<pre class="example" id="org0b8e6d2">
+<pre class="example" id="orgc5552ca">
 /*
  * Posted interrupt notification vector for all device MSIs delivered to
  * the host kernel.
@@ -146,7 +146,7 @@ X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断�
 <p>
 最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
 </p>
-<pre class="example" id="org028f86d">
+<pre class="example" id="org6eaf493">
 ffffffff81e00230 &lt;irq_entries_start&gt;:
 ffffffff81e00230:       f3 0f 1e fa             endbr64
 ffffffff81e00234:       6a 20                   push   $0x20
@@ -178,17 +178,59 @@ ffffffff81e0024f:       cc                      int3
 </p>
 </div>
 </div>
-<div id="outline-container-org8276a66" class="outline-3">
-<h3 id="org8276a66"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div id="outline-container-org469715a" class="outline-3">
+<h3 id="org469715a"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+本节开始分析注册中断的函数idt_setup_apic_and_irq_gates：
+</p>
+<pre class="example" id="org1039cf4">
+/**
+ * idt_setup_apic_and_irq_gates - Setup APIC/SMP and normal interrupt gates
+ */
+void __init idt_setup_apic_and_irq_gates(void)
+{
+	int i = FIRST_EXTERNAL_VECTOR;
+	void *entry;
+
+	idt_setup_from_table(idt_table, apic_idts, ARRAY_SIZE(apic_idts), true);
+
+	for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
+		entry = irq_entries_start + IDT_ALIGN * (i - FIRST_EXTERNAL_VECTOR);
+		set_intr_gate(i, entry);
+	}
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	for_each_clear_bit_from(i, system_vectors, NR_VECTORS) {
+		/*
+		 * Don't set the non assigned system vectors in the
+		 * system_vectors bitmap. Otherwise they show up in
+		 * /proc/interrupts.
+		 */
+		entry = spurious_entries_start + IDT_ALIGN * (i - FIRST_SYSTEM_VECTOR);
+		set_intr_gate(i, entry);
+	}
+#endif
+	/* Map IDT into CPU entry area and reload it. */
+	idt_map_in_cea();
+	load_idt(&amp;idt_descr);
+
+	/* Make the IDT table read only */
+	set_memory_ro((unsigned long)&amp;idt_table, 1);
+
+	idt_setup_done = true;
+}
+</pre>
 </div>
 </div>
-<div id="outline-container-orgda30a5d" class="outline-2">
-<h2 id="orgda30a5d"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+</div>
+<div id="outline-container-org53fbfd9" class="outline-2">
+<h2 id="org53fbfd9"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-01-22 Wed 22:13</p>
+<p class="date">Created: 2025-08-10 Sun 22:34</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
