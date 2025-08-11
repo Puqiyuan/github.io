@@ -101,7 +101,7 @@ ffffffff81e0024f:       cc                      int3
 
 .align IDT_ALIGN指明了接下来的汇编符号（代码）要对齐到某个字节，现代Intel处理器一般启用了IBT(Intel CET，Control-flow Enforcement Technology)，这是一种安全机制，用于防范间接分支跳转攻击，这些攻击会劫持程序的控制流，跳转到恶意代码或利用程序中合法代码片段进行恶意行为，启用了这个配置，就会对齐到16字节处。
 
-.rept和.endr宏指令表示在它们之间的指令需要重复编出NR_EXTERNAL_VECTORS次，
+.rept宏指令表示在它们之间的指令需要重复编出NR_EXTERNAL_VECTORS次.
 ** 注册外部中断向量表
 本节开始分析注册中断的函数idt_setup_apic_and_irq_gates：
 #+begin_example
@@ -141,4 +141,68 @@ void __init idt_setup_apic_and_irq_gates(void)
 	idt_setup_done = true;
 }
 #+end_example
+该函数主要分为几个部分，第一个部分是将apic_idts里的中断向量拷贝到idt_table里，第二部分针对前面还没有设置的向量，通过set_intr_gate继续往idt_table里设置，以上两部分设置完后其实都还是在内存里，所以最后的第三部分就是通过idt_map_in_cea将这个表设置好映射关系，并将这个中断表通过lidt指令加载到idt寄存器。
+
+先分析第一部分，idt_setup_from_table函数：
+#+begin_example
+arch/x86/kernel/idt.c
+static __init void
+idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
+{
+	gate_desc desc;
+
+	for (; size > 0; t++, size--) {
+		idt_init_desc(&desc, t);
+		write_idt_entry(idt, t->vector, &desc);
+		if (sys)
+			set_bit(t->vector, system_vectors);
+	}
+}
+#+end_example
+这里首先介绍/分析apic_idts表：
+#+begin_example
+arch/x86/kernel/idt.c
+/*
+ * The APIC and SMP idt entries
+ */
+static const __initconst struct idt_data apic_idts[] = {
+#ifdef CONFIG_SMP
+	INTG(RESCHEDULE_VECTOR,			asm_sysvec_reschedule_ipi),
+	INTG(CALL_FUNCTION_VECTOR,		asm_sysvec_call_function),
+	INTG(CALL_FUNCTION_SINGLE_VECTOR,	asm_sysvec_call_function_single),
+	INTG(REBOOT_VECTOR,			asm_sysvec_reboot),
+#endif
+
+#ifdef CONFIG_X86_THERMAL_VECTOR
+	INTG(THERMAL_APIC_VECTOR,		asm_sysvec_thermal),
+#endif
+
+#ifdef CONFIG_X86_MCE_THRESHOLD
+	INTG(THRESHOLD_APIC_VECTOR,		asm_sysvec_threshold),
+#endif
+
+#ifdef CONFIG_X86_MCE_AMD
+	INTG(DEFERRED_ERROR_VECTOR,		asm_sysvec_deferred_error),
+#endif
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	INTG(LOCAL_TIMER_VECTOR,		asm_sysvec_apic_timer_interrupt),
+	INTG(X86_PLATFORM_IPI_VECTOR,		asm_sysvec_x86_platform_ipi),
+# if IS_ENABLED(CONFIG_KVM)
+	INTG(POSTED_INTR_VECTOR,		asm_sysvec_kvm_posted_intr_ipi),
+	INTG(POSTED_INTR_WAKEUP_VECTOR,		asm_sysvec_kvm_posted_intr_wakeup_ipi),
+	INTG(POSTED_INTR_NESTED_VECTOR,		asm_sysvec_kvm_posted_intr_nested_ipi),
+# endif
+# ifdef CONFIG_IRQ_WORK
+	INTG(IRQ_WORK_VECTOR,			asm_sysvec_irq_work),
+# endif
+	INTG(SPURIOUS_APIC_VECTOR,		asm_sysvec_spurious_apic_interrupt),
+	INTG(ERROR_APIC_VECTOR,			asm_sysvec_error_interrupt),
+# ifdef CONFIG_X86_POSTED_MSI
+	INTG(POSTED_MSI_NOTIFICATION_VECTOR,	asm_sysvec_posted_msi_notification),
+# endif
+#endif
+};
+#+end_example
+以asm_sysvec_reschedule_ipi为例分析它的实现，
 * 一个网卡中断的触发与执行

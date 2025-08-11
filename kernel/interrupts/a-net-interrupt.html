@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-08-10 Sun 22:34 -->
+<!-- 2025-08-11 Mon 22:17 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X86-64架构下一个网卡中断的处理流程</title>
@@ -38,20 +38,20 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org29c260c">1. 中断向量表初始化</a>
+<li><a href="#org7722e35">1. 中断向量表初始化</a>
 <ul>
-<li><a href="#orgeb435fa">1.1. 外部中断向量表构造</a></li>
-<li><a href="#org469715a">1.2. 注册外部中断向量表</a></li>
+<li><a href="#org733b8d2">1.1. 外部中断向量表构造</a></li>
+<li><a href="#orgaa47b05">1.2. 注册外部中断向量表</a></li>
 </ul>
 </li>
-<li><a href="#org53fbfd9">2. 一个网卡中断的触发与执行</a></li>
+<li><a href="#org12c8cba">2. 一个网卡中断的触发与执行</a></li>
 </ul>
 </div>
 </div>
 <p>
 本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
 </p>
-<pre class="example" id="orgd6eb396">
+<pre class="example" id="orgafa9492">
 =&gt; e1000_intr
 =&gt; __handle_irq_event_percpu
 =&gt; handle_irq_event
@@ -75,20 +75,20 @@
 =&gt; ret_from_fork
 =&gt; ret_from_fork_asm
 </pre>
-<div id="outline-container-org29c260c" class="outline-2">
-<h2 id="org29c260c"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div id="outline-container-org7722e35" class="outline-2">
+<h2 id="org7722e35"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
 </p>
 </div>
-<div id="outline-container-orgeb435fa" class="outline-3">
-<h3 id="orgeb435fa"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div id="outline-container-org733b8d2" class="outline-3">
+<h3 id="org733b8d2"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的汇编代码描述了外部中断向量表的内容：
 </p>
-<pre class="example" id="orgb566d95">
+<pre class="example" id="orgde17440">
 	.align IDT_ALIGN
 SYM_CODE_START(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
@@ -107,7 +107,7 @@ SYM_CODE_END(irq_entries_start)
 <p>
 这里NR_EXTERNAL_VECTORS以及FIRST_EXTERNAL_VECTOR被如下方式定义：
 </p>
-<pre class="example" id="orgc5552ca">
+<pre class="example" id="org7ce7690">
 /*
  * Posted interrupt notification vector for all device MSIs delivered to
  * the host kernel.
@@ -146,7 +146,7 @@ X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断�
 <p>
 最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
 </p>
-<pre class="example" id="org6eaf493">
+<pre class="example" id="orgdac77cc">
 ffffffff81e00230 &lt;irq_entries_start&gt;:
 ffffffff81e00230:       f3 0f 1e fa             endbr64
 ffffffff81e00234:       6a 20                   push   $0x20
@@ -174,17 +174,17 @@ ffffffff81e0024f:       cc                      int3
 </p>
 
 <p>
-.rept和.endr宏指令表示在它们之间的指令需要重复编出NR_EXTERNAL_VECTORS次，
+.rept宏指令表示在它们之间的指令需要重复编出NR_EXTERNAL_VECTORS次.
 </p>
 </div>
 </div>
-<div id="outline-container-org469715a" class="outline-3">
-<h3 id="org469715a"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div id="outline-container-orgaa47b05" class="outline-3">
+<h3 id="orgaa47b05"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 本节开始分析注册中断的函数idt_setup_apic_and_irq_gates：
 </p>
-<pre class="example" id="org1039cf4">
+<pre class="example" id="org07fdaa7">
 /**
  * idt_setup_apic_and_irq_gates - Setup APIC/SMP and normal interrupt gates
  */
@@ -221,16 +221,88 @@ void __init idt_setup_apic_and_irq_gates(void)
 	idt_setup_done = true;
 }
 </pre>
+<p>
+该函数主要分为几个部分，第一个部分是将apic_idts里的中断向量拷贝到idt_table里，第二部分针对前面还没有设置的向量，通过set_intr_gate继续往idt_table里设置，以上两部分设置完后其实都还是在内存里，所以最后的第三部分就是通过idt_map_in_cea将这个表设置好映射关系，并将这个中断表通过lidt指令加载到idt寄存器。
+</p>
+
+<p>
+先分析第一部分，idt_setup_from_table函数：
+</p>
+<pre class="example" id="org456faa8">
+arch/x86/kernel/idt.c
+static __init void
+idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
+{
+	gate_desc desc;
+
+	for (; size &gt; 0; t++, size--) {
+		idt_init_desc(&amp;desc, t);
+		write_idt_entry(idt, t-&gt;vector, &amp;desc);
+		if (sys)
+			set_bit(t-&gt;vector, system_vectors);
+	}
+}
+</pre>
+<p>
+这里首先介绍/分析apic_idts表：
+</p>
+<pre class="example" id="org097207b">
+arch/x86/kernel/idt.c
+/*
+ * The APIC and SMP idt entries
+ */
+static const __initconst struct idt_data apic_idts[] = {
+#ifdef CONFIG_SMP
+	INTG(RESCHEDULE_VECTOR,			asm_sysvec_reschedule_ipi),
+	INTG(CALL_FUNCTION_VECTOR,		asm_sysvec_call_function),
+	INTG(CALL_FUNCTION_SINGLE_VECTOR,	asm_sysvec_call_function_single),
+	INTG(REBOOT_VECTOR,			asm_sysvec_reboot),
+#endif
+
+#ifdef CONFIG_X86_THERMAL_VECTOR
+	INTG(THERMAL_APIC_VECTOR,		asm_sysvec_thermal),
+#endif
+
+#ifdef CONFIG_X86_MCE_THRESHOLD
+	INTG(THRESHOLD_APIC_VECTOR,		asm_sysvec_threshold),
+#endif
+
+#ifdef CONFIG_X86_MCE_AMD
+	INTG(DEFERRED_ERROR_VECTOR,		asm_sysvec_deferred_error),
+#endif
+
+#ifdef CONFIG_X86_LOCAL_APIC
+	INTG(LOCAL_TIMER_VECTOR,		asm_sysvec_apic_timer_interrupt),
+	INTG(X86_PLATFORM_IPI_VECTOR,		asm_sysvec_x86_platform_ipi),
+# if IS_ENABLED(CONFIG_KVM)
+	INTG(POSTED_INTR_VECTOR,		asm_sysvec_kvm_posted_intr_ipi),
+	INTG(POSTED_INTR_WAKEUP_VECTOR,		asm_sysvec_kvm_posted_intr_wakeup_ipi),
+	INTG(POSTED_INTR_NESTED_VECTOR,		asm_sysvec_kvm_posted_intr_nested_ipi),
+# endif
+# ifdef CONFIG_IRQ_WORK
+	INTG(IRQ_WORK_VECTOR,			asm_sysvec_irq_work),
+# endif
+	INTG(SPURIOUS_APIC_VECTOR,		asm_sysvec_spurious_apic_interrupt),
+	INTG(ERROR_APIC_VECTOR,			asm_sysvec_error_interrupt),
+# ifdef CONFIG_X86_POSTED_MSI
+	INTG(POSTED_MSI_NOTIFICATION_VECTOR,	asm_sysvec_posted_msi_notification),
+# endif
+#endif
+};
+</pre>
+<p>
+以asm_sysvec_reschedule_ipi为例分析它的实现，
+</p>
 </div>
 </div>
 </div>
-<div id="outline-container-org53fbfd9" class="outline-2">
-<h2 id="org53fbfd9"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+<div id="outline-container-org12c8cba" class="outline-2">
+<h2 id="org12c8cba"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-08-10 Sun 22:34</p>
+<p class="date">Created: 2025-08-11 Mon 22:17</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
