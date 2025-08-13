@@ -204,5 +204,156 @@ static const __initconst struct idt_data apic_idts[] = {
 #endif
 };
 #+end_example
-以asm_sysvec_reschedule_ipi为例分析它的实现，
+以asm_sysvec_reschedule_ipi为例分析它的实现：
+#+begin_example
+DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
+#+end_example
+而DECLARE_IDTENTRY会依据当前编译单元是.c文件或.S文件有不同的定义，对于.c来说：
+#+begin_example
+arch/x86/include/asm/idtentry.h
+/**
+ * DECLARE_IDTENTRY - Declare functions for simple IDT entry points
+ *		      No error code pushed by hardware
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Declares four functions:
+ * - The ASM entry point: asm_##func
+ * - The XEN PV trap entry point: xen_##func (maybe unused)
+ * - The C handler called from the FRED event dispatcher (maybe unused)
+ * - The C handler called from the ASM entry point
+ *
+ * Note: This is the C variant of DECLARE_IDTENTRY(). As the name says it
+ * declares the entry points for usage in C code. There is an ASM variant
+ * as well which is used to emit the entry stubs in entry_32/64.S.
+ */
+#define DECLARE_IDTENTRY(vector, func)					\
+	asmlinkage void asm_##func(void);				\
+	asmlinkage void xen_asm_##func(void);				\
+	void fred_##func(struct pt_regs *regs);				\
+	__visible void func(struct pt_regs *regs)
+#+end_example
+以上只是给出了比如asm_sysvec_reschedule_ipi这样符号声明，但是对于编译汇编文件.S时再给出asm_sysvec_reschedule_ipi的定义：
+#+begin_example
+arch/x86/include/asm/idtentry.h
+
+#else /* !__ASSEMBLER__ */
+
+/*
+ * The ASM variants for DECLARE_IDTENTRY*() which emit the ASM entry stubs.
+ */
+#define DECLARE_IDTENTRY(vector, func)					\
+	idtentry vector asm_##func func has_error_code=0
+#+end_example
+identry是实现在arch/x86/entry/entry_64.S里的宏，用来给出参数asm_##func（也就是asm_sysvec_reschedule_ipi）符号的定义，idtentry实际抽象出了所有中断entry时需要做的公共动作，这样定义出的asm_sysvec_reschedule_ipi可以理解为中断发生后的第一个要跳转到的地址，具体里面的代码留待后面分析中断执行时再细节分析，这里可以通过反汇编vmlinux先搂一眼asm_sysvec_reschedule_ipi的指令级实现：
+#+begin_example
+ffffffff81e01630 <asm_sysvec_reschedule_ipi>:
+ffffffff81e01630:       f3 0f 1e fa             endbr64
+ffffffff81e01634:       90                      nop
+ffffffff81e01635:       90                      nop
+ffffffff81e01636:       90                      nop
+ffffffff81e01637:       fc                      cld
+ffffffff81e01638:       6a ff                   push   $0xffffffffffffffff
+ffffffff81e0163a:       e8 f1 05 00 00          call   ffffffff81e01c30 <error_entry>
+ffffffff81e0163f:       48 89 c4                mov    %rax,%rsp
+ffffffff81e01642:       48 89 e7                mov    %rsp,%rdi
+ffffffff81e01645:       e8 36 35 ef ff          call   ffffffff81cf4b80 <sysvec_reschedule_ipi>
+ffffffff81e0164a:       e9 21 07 00 00          jmp    ffffffff81e01d70 <error_return>
+ffffffff81e0164f:       90                      nop
+#+end_example
+而asm_sysvec_reboot具有类似的结构：
+#+begin_example
+ffffffff81e01650 <asm_sysvec_reboot>:
+ffffffff81e01650:       f3 0f 1e fa             endbr64
+ffffffff81e01654:       90                      nop
+ffffffff81e01655:       90                      nop
+ffffffff81e01656:       90                      nop
+ffffffff81e01657:       fc                      cld
+ffffffff81e01658:       6a ff                   push   $0xffffffffffffffff
+ffffffff81e0165a:       e8 d1 05 00 00          call   ffffffff81e01c30 <error_entry>
+ffffffff81e0165f:       48 89 c4                mov    %rax,%rsp
+ffffffff81e01662:       48 89 e7                mov    %rsp,%rdi
+ffffffff81e01665:       e8 86 34 ef ff          call   ffffffff81cf4af0 <sysvec_reboot>
+ffffffff81e0166a:       e9 01 07 00 00          jmp    ffffffff81e01d70 <error_return>
+ffffffff81e0166f:       90                      nop
+#+end_example
+可以想见，error_entry里就会有具体中断句柄（sysvec_reschedule_ipi/sysvec_reboot等）进入前的现场保存，而error_return里会有中断句柄返回前的现场恢复操作，这些细节留待后面中断执行时再分析在，这里还是聚焦中断向量表的注册。
+
+分析到目前，就是想回答说类似asm_sysvec_reschedule_ipi/asm_sysvec_reboot等这样的句柄有了定义（addr），那么INTG的实现就可以赋值了：
+#+begin_example
+#define G(_vector, _addr, _ist, _type, _dpl, _segment)	\
+	{						\
+		.vector		= _vector,		\
+		.bits.ist	= _ist,			\
+		.bits.type	= _type,		\
+		.bits.dpl	= _dpl,			\
+		.bits.p		= 1,			\
+		.addr		= _addr,		\
+		.segment	= _segment,		\
+	}
+
+/* Interrupt gate */
+#define INTG(_vector, _addr)				\
+	G(_vector, _addr, DEFAULT_STACK, GATE_INTERRUPT, DPL0, __KERNEL_CS)
+#+end_example
+这里比较关键的就是跳转地址给到了idt_data::addr，这样apic_idts表的内容就构造完了，回过头来看，apic_idts里其实就是除开0-31的cpu内部异常以及32-NR_EXTERNAL_VECTORS的外部中断的系统向量，主要是内核用来管理的比如重调度，让所有cpu执行某个函数等。
+
+再回到idt_setup_apic_and_irq_gates->idt_setup_from_table函数，这里再贴下：
+#+begin_example
+static __init void
+idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
+{
+	gate_desc desc;
+
+	for (; size > 0; t++, size--) {
+		idt_init_desc(&desc, t);
+		write_idt_entry(idt, t->vector, &desc);
+		if (sys)
+			set_bit(t->vector, system_vectors);
+	}
+}
+#+end_example
+对于apic_idts里的所有条目，都要调用相应的函数进行处理，每个条目作为输入调用idt_init_desc函数：
+#+begin_example
+static inline void idt_init_desc(gate_desc *gate, const struct idt_data *d)
+{
+	unsigned long addr = (unsigned long) d->addr;
+
+	gate->offset_low	= (u16) addr;
+	gate->segment		= (u16) d->segment;
+	gate->bits		= d->bits;
+	gate->offset_middle	= (u16) (addr >> 16);
+#ifdef CONFIG_X86_64
+	gate->offset_high	= (u32) (addr >> 32);
+	gate->reserved		= 0;
+#endif
+}
+#+end_example
+这里可以看到，主要的逻辑是地址需要转换成low/middle/high部分，其它都是拷贝赋值，设置好gate_desc后，就调用write_idt_entry将这个中断描述符拷贝到全局表idt_table里，其实际实现就是native_write_idt_entry：
+#+begin_example
+static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_desc *gate)
+{
+	memcpy(&idt[entry], gate, sizeof(*gate));
+}
+#+end_example
+这里entry传入的就是中断号，它也指明了应该将这个中断描述符拷贝到idt_table里的哪个位置。最后system_vectors是一个全局的bitmap，它记录了哪些中断已经被设置，并且主要针对sys vector（系统向量）才设置为true，也就是apic_idts里的向量。
+
+继续往下看：
+#+begin_example
+	for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
+		entry = irq_entries_start + IDT_ALIGN * (i - FIRST_EXTERNAL_VECTOR);
+		set_intr_gate(i, entry);
+	}
+#+end_example
+这段代码主要是针对从第一个外部向量FIRST_SYSTEM_VECTOR开始，如果在system_vectors里还没有设置的话，就将irq_entries_start起始的向量条目的地址通过set_intr_gate设置到idt_table里：
+#+begin_example
+static __init void set_intr_gate(unsigned int n, const void *addr)
+{
+	struct idt_data data;
+
+	init_idt_data(&data, n, addr);
+
+	idt_setup_from_table(idt_table, &data, 1, false);
+}
+#+end_example
 * 一个网卡中断的触发与执行
