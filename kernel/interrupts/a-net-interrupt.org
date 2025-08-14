@@ -277,7 +277,88 @@ ffffffff81e01665:       e8 86 34 ef ff          call   ffffffff81cf4af0 <sysvec_
 ffffffff81e0166a:       e9 01 07 00 00          jmp    ffffffff81e01d70 <error_return>
 ffffffff81e0166f:       90                      nop
 #+end_example
-可以想见，error_entry里就会有具体中断句柄（sysvec_reschedule_ipi/sysvec_reboot等）进入前的现场保存，而error_return里会有中断句柄返回前的现场恢复操作，这些细节留待后面中断执行时再分析在，这里还是聚焦中断向量表的注册。
+可以想见，error_entry里就会有具体中断句柄（sysvec_reschedule_ipi/sysvec_reboot等）进入前的现场保存，而error_return里会有中断句柄返回前的现场恢复操作，而call sysvec_reschedule_ipi，其实就是宏汇编调用链：
+#+begin_example
+identry->idtentry_body->call \cfunc，
+#+end_example
+这里cfunc就是identry的第三个参数cfunc，在这个例子下就是上面DECLARE_IDTENTRY的第二个参数sysvec_reschedule_ipi：
+#+begin_example
+DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
+#+end_example
+所以才有了上面贴的反汇编里有指令call sysvec_reschedule_ipi，那么这个符号又是哪里定义的呢？如下：
+#+begin_example
+arch/x86/kernel/smp.c 
+
+DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
+{
+	apic_eoi();
+	trace_reschedule_entry(RESCHEDULE_VECTOR);
+	inc_irq_stat(irq_resched_count);
+	scheduler_ipi();
+	trace_reschedule_exit(RESCHEDULE_VECTOR);
+}
+#+end_example
+#+begin_example
+arch/x86/include/asm/idtentry.h
+
+#define DEFINE_IDTENTRY_SYSVEC_SIMPLE(func)				\
+static __always_inline void __##func(struct pt_regs *regs);		\
+									\
+static __always_inline void instr_##func(struct pt_regs *regs)		\
+{									\
+	__irq_enter_raw();						\
+	__##func (regs);						\
+	__irq_exit_raw();						\
+}									\
+									\
+__visible noinstr void func(struct pt_regs *regs)			\
+{									\
+	irqentry_state_t state = irqentry_enter(regs);			\
+									\
+	kvm_set_cpu_l1tf_flush_l1d();                                   \
+	instrumentation_begin();					\
+	instr_##func (regs);						\
+	instrumentation_end();						\
+	irqentry_exit(regs, state);					\
+}									\
+									\
+void fred_##func(struct pt_regs *regs)					\
+{									\
+	instr_##func (regs);						\
+}									\
+									\
+static __always_inline void __##func(struct pt_regs *regs)
+#+end_example
+注意这里最后的__##func的函数体就是前面的：
+#+begin_example
+{
+	apic_eoi();
+	trace_reschedule_entry(RESCHEDULE_VECTOR);
+	inc_irq_stat(irq_resched_count);
+	scheduler_ipi();
+	trace_reschedule_exit(RESCHEDULE_VECTOR);
+}
+#+end_example
+相当于说identry宏汇编里面会封装所有中断处理的公共逻辑比如保持/恢复现场，而具体的业务逻辑
+（具体的某个中断号对应的处理逻辑）则由传进去的cfunc决定，这里是sysvec_reschedule_ipi符号，
+类似使用这种的还有很多比如：
+#+begin_example
+DECLARE_IDTENTRY_SYSVEC(REBOOT_VECTOR,			sysvec_reboot);
+#+end_example
+这些逻辑也体现了一种封装/继承的思想，未来打算将某个向量号XXX，分配给某个具体函数funcxxx处理时只需写：
+#+begin_example
+DECLARE_IDTENTRY_SYSVEC(XXX, funcxxx)
+#+end_example
+同时用类似DEFINE_IDTENTRY_SYSVEC_SIMPLE这样的宏来给出其具体的业务逻辑：
+#+begin_example
+DEFINE_IDTENTRY_SYSVEC_SIMPLE(funcxxx)
+#+end_example
+对于sysvec_reschedule_ipi的具体业务逻辑就是scheduler_ipi，而至于公共的中断处理逻辑，如下宏调用链会替我们操心处理好（并定义出相关符号可以调用）：
+#+begin_example
+DECLARE_IDTENTRY_SYSVEC->DECLARE_IDTENTRY->idtentry
+#+end_example
+
+具体执行的这些细节留待后面中断执行时再分析，这里还是聚焦中断向量表的注册。
 
 分析到目前，就是想回答说类似asm_sysvec_reschedule_ipi/asm_sysvec_reboot等这样的句柄有了定义（addr），那么INTG的实现就可以赋值了：
 #+begin_example
@@ -354,6 +435,65 @@ static __init void set_intr_gate(unsigned int n, const void *addr)
 	init_idt_data(&data, n, addr);
 
 	idt_setup_from_table(idt_table, &data, 1, false);
+}
+#+end_example
+这里通过init_idt_data初始化一个idt_data，然后调用前面介绍过的idt_setup_from_table将irq_entries_start里的中断句柄也设置到idt_table里了，只不过注意这里最后一个参数是false，因为这是外部中断了，不是系统向量。
+
+再往下的代码，是针对从i开始，在system_vectors里还没有设置向量的，要设置一个伪中断向量处理函数到idt_table，以作为一个兜底的处理手段，如果某个中断向量没有被内核分配给实际设备驱动（比如硬件根本没有使用这个向量），但硬件/芯片组错误地触发了这个中断，就会走到common_spurious->spurious_interrupt 这个入口。如果没有这个处理，CPU接到未注册向量的中断时会导致异常（或直接挂死），所以需要有一个安全的默认处理逻辑来“吃掉”它。比如某些老硬件、总线、电气干扰可能导致错误中断信号。在handle_spurious_interrupt里，内核不会尝试去真正处理这个中断，而是记录一次spurious interrupt计数（方便/proc/interrupts统计）。通常直接返回，不触发调度，也不应答给具体驱动。某些平台可能会尝试向APIC发送End-Of-Interrupt(EOI)以防止中断卡死。
+
+spurious_entries_start定义如下：
+#+begin_example
+./arch/x86/include/asm/idtentry.h
+SYM_CODE_START(spurious_entries_start)
+    vector=FIRST_SYSTEM_VECTOR
+    .rept NR_SYSTEM_VECTORS
+	UNWIND_HINT_IRET_REGS
+0 :
+	ENDBR
+	.byte	0x6a, vector
+	jmp	asm_spurious_interrupt
+	/* Ensure that the above is IDT_ALIGN bytes max */
+	.fill 0b + IDT_ALIGN - ., 1, 0xcc
+	vector = vector+1
+    .endr
+SYM_CODE_END(spurious_entries_start)
+#+end_example
+asm_spurious_interrupt类似前面定义符号asm_sysvec_reschedule_ipi，在编译C文件时只有声明：
+#+begin_example
+arch/x86/include/asm/idtentry.h
+
+DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	spurious_interrupt);
+
+#define DECLARE_IDTENTRY_IRQ(vector, func)				\
+	DECLARE_IDTENTRY_ERRORCODE(vector, func)
+
+#define DECLARE_IDTENTRY_ERRORCODE(vector, func)			\
+	asmlinkage void asm_##func(void);				\
+	asmlinkage void xen_asm_##func(void);				\
+	__visible void func(struct pt_regs *regs, unsigned long error_code)
+#+end_example
+而在汇编.S文件时，才给出这个符号的定义：
+#+begin_example
+arch/x86/include/asm/idtentry.h
+
+#define DECLARE_IDTENTRY_ERRORCODE(vector, func)			\
+	idtentry vector asm_##func func has_error_code=1
+#+end_example
+这和前面介绍ipi中断时类似。
+
+下一个要重点分析的就是idt_map_in_cea函数：
+#+begin_example
+static void __init idt_map_in_cea(void)
+{
+	/*
+	 * Set the IDT descriptor to a fixed read-only location in the cpu
+	 * entry area, so that the "sidt" instruction will not leak the
+	 * location of the kernel, and to defend the IDT against arbitrary
+	 * memory write vulnerabilities.
+	 */
+	cea_set_pte(CPU_ENTRY_AREA_RO_IDT_VADDR, __pa_symbol(idt_table),
+		    PAGE_KERNEL_RO);
+	idt_descr.address = CPU_ENTRY_AREA_RO_IDT;
 }
 #+end_example
 * 一个网卡中断的触发与执行
