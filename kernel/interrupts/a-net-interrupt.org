@@ -496,4 +496,44 @@ static void __init idt_map_in_cea(void)
 	idt_descr.address = CPU_ENTRY_AREA_RO_IDT;
 }
 #+end_example
+这里首先介绍一个宏CPU_ENTRY_AREA_RO_IDT_VADDR：
+#+begin_example
+arch/x86/include/asm/pgtable_areas.h 
+#define CPU_ENTRY_AREA_RO_IDT_VADDR	((void *)CPU_ENTRY_AREA_RO_IDT)
+
+/* Single page reserved for the readonly IDT mapping: */
+#define CPU_ENTRY_AREA_RO_IDT		CPU_ENTRY_AREA_BASE
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable_64_types.h
+#define CPU_ENTRY_AREA_BASE	(CPU_ENTRY_AREA_PGD << P4D_SHIFT)
+
+#define CPU_ENTRY_AREA_PGD	_AC(-4, UL)
+#define P4D_SHIFT		39
+#+end_example
+也就是说，CPU_ENTRY_AREA_RO_IDT_VADDR最后的值就是0xfffffe0000000000，这是一个虚拟地址，x86-64下虚拟地址的分布介绍在Documentation/arch/x86/x86_64/mm.rst文件里，比如0000000000000000-00007fffffffefff共计128TB是用户空间的虚拟内存。而ffffc90000000000-ffffe8ffffffffff共计32TB是内核的vmalloc/ioremap空间了。
+
+回到CPU_ENTRY_AREA_RO_IDT_VADDR（fffffe0000000000），fffffe0000000000-fffffe7fffffffff的512GB是cpu_entry_area mapping区域，这个区域就是提供类似idt表，可以进入中断处理代码，中断可以在用户态程序运行时产生，所以它是Page-Global页，这样的页用户态和内核态都可以访问，并且在任务切换或者写cr3时，page global的页不会刷tlb，也就是这样的页是固定映射，而cea_set_pte函数正是在完成这样的映射：
+#+begin_example
+void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
+{
+	unsigned long va = (unsigned long) cea_vaddr;
+	pte_t pte = pfn_pte(pa >> PAGE_SHIFT, flags);
+
+	/*
+	 * The cpu_entry_area is shared between the user and kernel
+	 * page tables.  All of its ptes can safely be global.
+	 * _PAGE_GLOBAL gets reused to help indicate PROT_NONE for
+	 * non-present PTEs, so be careful not to set it in that
+	 * case to avoid confusion.
+	 */
+	if (boot_cpu_has(X86_FEATURE_PGE) &&
+	    (pgprot_val(flags) & _PAGE_PRESENT))
+		pte = pte_set_flags(pte, _PAGE_GLOBAL);
+
+	set_pte_vaddr(va, pte);
+}
+#+end_example
+整个函数是在设置各级页表的页表项内容，以完成虚拟地址到idt_table所在物理地址的映射，要映射到idt_table的物理地址，那么必须先知道idt_table的物理地址，这通过宏__pa_symbol做到，
+
 * 一个网卡中断的触发与执行
