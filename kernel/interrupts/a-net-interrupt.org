@@ -534,6 +534,18 @@ void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 	set_pte_vaddr(va, pte);
 }
 #+end_example
-整个函数是在设置各级页表的页表项内容，以完成虚拟地址到idt_table所在物理地址的映射，要映射到idt_table的物理地址，那么必须先知道idt_table的物理地址，这通过宏__pa_symbol做到，
+整个函数是在设置各级页表的页表项内容，以完成虚拟地址到idt_table所在物理地址的映射，要映射到idt_table的物理地址，那么必须先知道idt_table的物理地址，这通过宏__pa_symbol做到：
+#+begin_example
+arch/x86/include/asm/page.h
 
+#define __pa_symbol(x) \
+	__phys_addr_symbol(__phys_reloc_hide((unsigned long)(x)))
+#+end_example
+#+begin_example
+arch/x86/include/asm/page_64.h
+
+#define __phys_addr_symbol(x) \
+	((unsigned long)(x) - __START_KERNEL_map + phys_base)
+#+end_example
+这里涉及到两个关键变量，一是
 * 一个网卡中断的触发与执行

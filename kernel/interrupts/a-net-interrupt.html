@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-08-15 Fri 22:21 -->
+<!-- 2025-08-16 Sat 22:26 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X86-64架构下一个网卡中断的处理流程</title>
@@ -38,20 +38,20 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#org89aced1">1. 中断向量表初始化</a>
+<li><a href="#orgf82fba7">1. 中断向量表初始化</a>
 <ul>
-<li><a href="#orgb0056eb">1.1. 外部中断向量表构造</a></li>
-<li><a href="#orgfc39dd7">1.2. 注册外部中断向量表</a></li>
+<li><a href="#orgb4ad43d">1.1. 外部中断向量表构造</a></li>
+<li><a href="#org76dd15a">1.2. 注册外部中断向量表</a></li>
 </ul>
 </li>
-<li><a href="#orgb382f4b">2. 一个网卡中断的触发与执行</a></li>
+<li><a href="#orgfa33ca5">2. 一个网卡中断的触发与执行</a></li>
 </ul>
 </div>
 </div>
 <p>
 本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
 </p>
-<pre class="example" id="org1944459">
+<pre class="example" id="orga06dc7f">
 =&gt; e1000_intr
 =&gt; __handle_irq_event_percpu
 =&gt; handle_irq_event
@@ -75,20 +75,20 @@
 =&gt; ret_from_fork
 =&gt; ret_from_fork_asm
 </pre>
-<div id="outline-container-org89aced1" class="outline-2">
-<h2 id="org89aced1"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div id="outline-container-orgf82fba7" class="outline-2">
+<h2 id="orgf82fba7"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
 </p>
 </div>
-<div id="outline-container-orgb0056eb" class="outline-3">
-<h3 id="orgb0056eb"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div id="outline-container-orgb4ad43d" class="outline-3">
+<h3 id="orgb4ad43d"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的汇编代码描述了外部中断向量表的内容：
 </p>
-<pre class="example" id="orga91d227">
+<pre class="example" id="orgaa5f799">
 	.align IDT_ALIGN
 SYM_CODE_START(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
@@ -107,7 +107,7 @@ SYM_CODE_END(irq_entries_start)
 <p>
 这里NR_EXTERNAL_VECTORS以及FIRST_EXTERNAL_VECTOR被如下方式定义：
 </p>
-<pre class="example" id="org37b9132">
+<pre class="example" id="org70f5d04">
 /*
  * Posted interrupt notification vector for all device MSIs delivered to
  * the host kernel.
@@ -146,7 +146,7 @@ X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断�
 <p>
 最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
 </p>
-<pre class="example" id="orgf7e80f5">
+<pre class="example" id="org425ba01">
 ffffffff81e00230 &lt;irq_entries_start&gt;:
 ffffffff81e00230:       f3 0f 1e fa             endbr64
 ffffffff81e00234:       6a 20                   push   $0x20
@@ -178,13 +178,13 @@ ffffffff81e0024f:       cc                      int3
 </p>
 </div>
 </div>
-<div id="outline-container-orgfc39dd7" class="outline-3">
-<h3 id="orgfc39dd7"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div id="outline-container-org76dd15a" class="outline-3">
+<h3 id="org76dd15a"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 本节开始分析注册中断的函数idt_setup_apic_and_irq_gates：
 </p>
-<pre class="example" id="org52a102d">
+<pre class="example" id="org8ce3cfe">
 /**
  * idt_setup_apic_and_irq_gates - Setup APIC/SMP and normal interrupt gates
  */
@@ -228,7 +228,7 @@ void __init idt_setup_apic_and_irq_gates(void)
 <p>
 先分析第一部分，idt_setup_from_table函数：
 </p>
-<pre class="example" id="org558b1d2">
+<pre class="example" id="orgc2e7034">
 arch/x86/kernel/idt.c
 static __init void
 idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
@@ -246,7 +246,7 @@ idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sy
 <p>
 这里首先介绍/分析apic_idts表：
 </p>
-<pre class="example" id="orgf8a2b74">
+<pre class="example" id="orgd62de38">
 arch/x86/kernel/idt.c
 /*
  * The APIC and SMP idt entries
@@ -293,13 +293,13 @@ static const __initconst struct idt_data apic_idts[] = {
 <p>
 以asm_sysvec_reschedule_ipi为例分析它的实现：
 </p>
-<pre class="example" id="org80b02d6">
+<pre class="example" id="org74049ae">
 DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
 </pre>
 <p>
 而DECLARE_IDTENTRY会依据当前编译单元是.c文件或.S文件有不同的定义，对于.c来说：
 </p>
-<pre class="example" id="orgacec3b4">
+<pre class="example" id="org1962804">
 arch/x86/include/asm/idtentry.h
 /**
  * DECLARE_IDTENTRY - Declare functions for simple IDT entry points
@@ -326,7 +326,7 @@ arch/x86/include/asm/idtentry.h
 <p>
 以上只是给出了比如asm_sysvec_reschedule_ipi这样符号声明，但是对于编译汇编文件.S时再给出asm_sysvec_reschedule_ipi的定义：
 </p>
-<pre class="example" id="org6f9c62d">
+<pre class="example" id="org55285e2">
 arch/x86/include/asm/idtentry.h
 
 #else /* !__ASSEMBLER__ */
@@ -340,7 +340,7 @@ arch/x86/include/asm/idtentry.h
 <p>
 identry是实现在arch/x86/entry/entry_64.S里的宏，用来给出参数asm_##func（也就是asm_sysvec_reschedule_ipi）符号的定义，idtentry实际抽象出了所有中断entry时需要做的公共动作，这样定义出的asm_sysvec_reschedule_ipi可以理解为中断发生后的第一个要跳转到的地址，具体里面的代码留待后面分析中断执行时再细节分析，这里可以通过反汇编vmlinux先搂一眼asm_sysvec_reschedule_ipi的指令级实现：
 </p>
-<pre class="example" id="org0a3ddc7">
+<pre class="example" id="org76bfd1b">
 ffffffff81e01630 &lt;asm_sysvec_reschedule_ipi&gt;:
 ffffffff81e01630:       f3 0f 1e fa             endbr64
 ffffffff81e01634:       90                      nop
@@ -358,7 +358,7 @@ ffffffff81e0164f:       90                      nop
 <p>
 而asm_sysvec_reboot具有类似的结构：
 </p>
-<pre class="example" id="orga3e5bf1">
+<pre class="example" id="org9820332">
 ffffffff81e01650 &lt;asm_sysvec_reboot&gt;:
 ffffffff81e01650:       f3 0f 1e fa             endbr64
 ffffffff81e01654:       90                      nop
@@ -376,19 +376,19 @@ ffffffff81e0166f:       90                      nop
 <p>
 可以想见，error_entry里就会有具体中断句柄（sysvec_reschedule_ipi/sysvec_reboot等）进入前的现场保存，而error_return里会有中断句柄返回前的现场恢复操作，而call sysvec_reschedule_ipi，其实就是宏汇编调用链：
 </p>
-<pre class="example" id="org08ed920">
+<pre class="example" id="org916190a">
 identry-&gt;idtentry_body-&gt;call \cfunc，
 </pre>
 <p>
 这里cfunc就是identry的第三个参数cfunc，在这个例子下就是上面DECLARE_IDTENTRY的第二个参数sysvec_reschedule_ipi：
 </p>
-<pre class="example" id="orgbd2cedf">
+<pre class="example" id="org24b3cab">
 DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
 </pre>
 <p>
 所以才有了上面贴的反汇编里有指令call sysvec_reschedule_ipi，那么这个符号又是哪里定义的呢？如下：
 </p>
-<pre class="example" id="org07badc8">
+<pre class="example" id="org5b11021">
 arch/x86/kernel/smp.c 
 
 DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
@@ -400,7 +400,7 @@ DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
 	trace_reschedule_exit(RESCHEDULE_VECTOR);
 }
 </pre>
-<pre class="example" id="orgb422b29">
+<pre class="example" id="orgaed96d4">
 arch/x86/include/asm/idtentry.h
 
 #define DEFINE_IDTENTRY_SYSVEC_SIMPLE(func)				\
@@ -434,7 +434,7 @@ static __always_inline void __##func(struct pt_regs *regs)
 <p>
 注意这里最后的__##func的函数体就是前面的：
 </p>
-<pre class="example" id="org1d87545">
+<pre class="example" id="orga735818">
 {
 	apic_eoi();
 	trace_reschedule_entry(RESCHEDULE_VECTOR);
@@ -448,25 +448,25 @@ static __always_inline void __##func(struct pt_regs *regs)
 （具体的某个中断号对应的处理逻辑）则由传进去的cfunc决定，这里是sysvec_reschedule_ipi符号，
 类似使用这种的还有很多比如：
 </p>
-<pre class="example" id="org64df529">
+<pre class="example" id="org1bf18a3">
 DECLARE_IDTENTRY_SYSVEC(REBOOT_VECTOR,			sysvec_reboot);
 </pre>
 <p>
 这些逻辑也体现了一种封装/继承的思想，未来打算将某个向量号XXX，分配给某个具体函数funcxxx处理时只需写：
 </p>
-<pre class="example" id="orgdd9efac">
+<pre class="example" id="org990ffba">
 DECLARE_IDTENTRY_SYSVEC(XXX, funcxxx)
 </pre>
 <p>
 同时用类似DEFINE_IDTENTRY_SYSVEC_SIMPLE这样的宏来给出其具体的业务逻辑：
 </p>
-<pre class="example" id="orgec27ca2">
+<pre class="example" id="orgae2e4a3">
 DEFINE_IDTENTRY_SYSVEC_SIMPLE(funcxxx)
 </pre>
 <p>
 对于sysvec_reschedule_ipi的具体业务逻辑就是scheduler_ipi，而至于公共的中断处理逻辑，如下宏调用链会替我们操心处理好（并定义出相关符号可以调用）：
 </p>
-<pre class="example" id="org5a6f417">
+<pre class="example" id="orgfd69262">
 DECLARE_IDTENTRY_SYSVEC-&gt;DECLARE_IDTENTRY-&gt;idtentry
 </pre>
 
@@ -477,7 +477,7 @@ DECLARE_IDTENTRY_SYSVEC-&gt;DECLARE_IDTENTRY-&gt;idtentry
 <p>
 分析到目前，就是想回答说类似asm_sysvec_reschedule_ipi/asm_sysvec_reboot等这样的句柄有了定义（addr），那么INTG的实现就可以赋值了：
 </p>
-<pre class="example" id="org300fa52">
+<pre class="example" id="orga2edf77">
 #define G(_vector, _addr, _ist, _type, _dpl, _segment)	\
 	{						\
 		.vector		= _vector,		\
@@ -500,7 +500,7 @@ DECLARE_IDTENTRY_SYSVEC-&gt;DECLARE_IDTENTRY-&gt;idtentry
 <p>
 再回到idt_setup_apic_and_irq_gates-&gt;idt_setup_from_table函数，这里再贴下：
 </p>
-<pre class="example" id="org3dbabcd">
+<pre class="example" id="org7776db7">
 static __init void
 idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
 {
@@ -517,7 +517,7 @@ idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sy
 <p>
 对于apic_idts里的所有条目，都要调用相应的函数进行处理，每个条目作为输入调用idt_init_desc函数：
 </p>
-<pre class="example" id="orgc32442c">
+<pre class="example" id="org7acd30c">
 static inline void idt_init_desc(gate_desc *gate, const struct idt_data *d)
 {
 	unsigned long addr = (unsigned long) d-&gt;addr;
@@ -535,7 +535,7 @@ static inline void idt_init_desc(gate_desc *gate, const struct idt_data *d)
 <p>
 这里可以看到，主要的逻辑是地址需要转换成low/middle/high部分，其它都是拷贝赋值，设置好gate_desc后，就调用write_idt_entry将这个中断描述符拷贝到全局表idt_table里，其实际实现就是native_write_idt_entry：
 </p>
-<pre class="example" id="org8c107d0">
+<pre class="example" id="org79ea336">
 static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_desc *gate)
 {
 	memcpy(&amp;idt[entry], gate, sizeof(*gate));
@@ -548,7 +548,7 @@ static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_
 <p>
 继续往下看：
 </p>
-<pre class="example" id="orgc5f9ef2">
+<pre class="example" id="orga36cc72">
 for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 	entry = irq_entries_start + IDT_ALIGN * (i - FIRST_EXTERNAL_VECTOR);
 	set_intr_gate(i, entry);
@@ -557,7 +557,7 @@ for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 <p>
 这段代码主要是针对从第一个外部向量FIRST_SYSTEM_VECTOR开始，如果在system_vectors里还没有设置的话，就将irq_entries_start起始的向量条目的地址通过set_intr_gate设置到idt_table里：
 </p>
-<pre class="example" id="orgc49e19d">
+<pre class="example" id="org0c53e24">
 static __init void set_intr_gate(unsigned int n, const void *addr)
 {
 	struct idt_data data;
@@ -578,7 +578,7 @@ static __init void set_intr_gate(unsigned int n, const void *addr)
 <p>
 spurious_entries_start定义如下：
 </p>
-<pre class="example" id="org8fd6268">
+<pre class="example" id="org40d7e10">
 ./arch/x86/include/asm/idtentry.h
 SYM_CODE_START(spurious_entries_start)
     vector=FIRST_SYSTEM_VECTOR
@@ -597,7 +597,7 @@ SYM_CODE_END(spurious_entries_start)
 <p>
 asm_spurious_interrupt类似前面定义符号asm_sysvec_reschedule_ipi，在编译C文件时只有声明：
 </p>
-<pre class="example" id="org45f59c0">
+<pre class="example" id="org2908b21">
 arch/x86/include/asm/idtentry.h
 
 DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	spurious_interrupt);
@@ -613,7 +613,7 @@ DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	spurious_interrupt);
 <p>
 而在汇编.S文件时，才给出这个符号的定义：
 </p>
-<pre class="example" id="org4e56389">
+<pre class="example" id="orgbd105e2">
 arch/x86/include/asm/idtentry.h
 
 #define DECLARE_IDTENTRY_ERRORCODE(vector, func)			\
@@ -626,7 +626,7 @@ arch/x86/include/asm/idtentry.h
 <p>
 下一个要重点分析的就是idt_map_in_cea函数：
 </p>
-<pre class="example" id="orgc93f74f">
+<pre class="example" id="org284deb3">
 static void __init idt_map_in_cea(void)
 {
 	/*
@@ -643,14 +643,14 @@ static void __init idt_map_in_cea(void)
 <p>
 这里首先介绍一个宏CPU_ENTRY_AREA_RO_IDT_VADDR：
 </p>
-<pre class="example" id="org339ded2">
+<pre class="example" id="org59a73c8">
 arch/x86/include/asm/pgtable_areas.h 
 #define CPU_ENTRY_AREA_RO_IDT_VADDR	((void *)CPU_ENTRY_AREA_RO_IDT)
 
 /* Single page reserved for the readonly IDT mapping: */
 #define CPU_ENTRY_AREA_RO_IDT		CPU_ENTRY_AREA_BASE
 </pre>
-<pre class="example" id="org2f2e0cb">
+<pre class="example" id="org1fdcebe">
 arch/x86/include/asm/pgtable_64_types.h
 #define CPU_ENTRY_AREA_BASE	(CPU_ENTRY_AREA_PGD &lt;&lt; P4D_SHIFT)
 
@@ -664,7 +664,7 @@ arch/x86/include/asm/pgtable_64_types.h
 <p>
 回到CPU_ENTRY_AREA_RO_IDT_VADDR（fffffe0000000000），fffffe0000000000-fffffe7fffffffff的512GB是cpu_entry_area mapping区域，这个区域就是提供类似idt表，可以进入中断处理代码，中断可以在用户态程序运行时产生，所以它是Page-Global页，这样的页用户态和内核态都可以访问，并且在任务切换或者写cr3时，page global的页不会刷tlb，也就是这样的页是固定映射，而cea_set_pte函数正是在完成这样的映射：
 </p>
-<pre class="example" id="org7d7cc6e">
+<pre class="example" id="org90488c1">
 void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 {
 	unsigned long va = (unsigned long) cea_vaddr;
@@ -685,19 +685,33 @@ void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 }
 </pre>
 <p>
-整个函数是在设置各级页表的页表项内容，以完成虚拟地址到idt_table所在物理地址的映射，要映射到idt_table的物理地址，那么必须先知道idt_table的物理地址，这通过宏__pa_symbol做到，
+整个函数是在设置各级页表的页表项内容，以完成虚拟地址到idt_table所在物理地址的映射，要映射到idt_table的物理地址，那么必须先知道idt_table的物理地址，这通过宏__pa_symbol做到：
+</p>
+<pre class="example" id="orgd97fb2b">
+arch/x86/include/asm/page.h
+
+#define __pa_symbol(x) \
+	__phys_addr_symbol(__phys_reloc_hide((unsigned long)(x)))
+</pre>
+<pre class="example" id="orgf522f34">
+arch/x86/include/asm/page_64.h
+
+#define __phys_addr_symbol(x) \
+	((unsigned long)(x) - __START_KERNEL_map + phys_base)
+</pre>
+<p>
+这里涉及到两个关键变量，一是
 </p>
 </div>
 </div>
 </div>
-
-<div id="outline-container-orgb382f4b" class="outline-2">
-<h2 id="orgb382f4b"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+<div id="outline-container-orgfa33ca5" class="outline-2">
+<h2 id="orgfa33ca5"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-08-15 Fri 22:21</p>
+<p class="date">Created: 2025-08-16 Sat 22:26</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
