@@ -562,8 +562,7 @@ ffffffff80000000 |   -2    GB | ffffffff9fffffff |  512 MB | kernel text mapping
 /* Must be page-aligned because the real IDT is used in the cpu entry area */
 static gate_desc idt_table[IDT_ENTRIES] __page_aligned_bss;
 #+end_example
-另一个phys_base表示实际内核镜像映射在哪个物理地址上，也就是__START_KERNEL_map虚拟地址映射
-在phys_base这个物理地址上，且按地址往后依次映射。phys_base在__startup_64函数里定出：
+另一个phys_base表示实际内核镜像映射在哪个物理地址上，也就是__START_KERNEL_map虚拟地址映射在phys_base这个物理地址上，且按地址往后依次映射。phys_base在__startup_64函数里定出：
 #+begin_example
 	/*
 	 * Compute the delta between the address I am compiled to run at
@@ -571,6 +570,62 @@ static gate_desc idt_table[IDT_ENTRIES] __page_aligned_bss;
 	 */
 	phys_base = load_delta = __START_KERNEL_map + p2v_offset;
 #+end_example
-__startup_64这个函数由
-__pa_symbol(sym) 适用于编译时已知的符号地址。
+__startup_64这个函数由startup_64汇编函数调用：
+#+begin_example
+arch/x86/kernel/head_64.S
+
+	call	__startup_64
+#+end_example
+关于startup_64和__startup_64的具体细节逻辑参见笔者其它介绍启动过程的文章，这里只是需要知道，传入p2v_offset会用来计算内核镜像映射的起始物理地址phys_base，并且这个值在开启KASLR地址随机化时，它是随机变化的，正常来说，我们会假定内核映射的起始虚拟地址是__START_KERNEL_map，对应的起始物理地址就是0，但是处于安全考虑，这个起始物理地址会有一定的随机偏移，那么起始物理地址phys_base离起始虚拟地址__START_KERNEL_map的距离记为p2v_offset，那么有：
+#+begin_example
+p2v_offset = phys_base - __START_KERNEL_map
+#+end_example
+在startup_64里可以根据rip，先有p2v_offset作为参数调用__startup_64这个C函数，这样自然有：
+#+begin_example
+phys_base = __START_KERNEL_map + p2v_offset
+#+end_example
+直观的理解就是__START_KERNEL_map映射到了起始物理地址phys_base，这样内核镜像里的virt addr减去__START_KERNEL_map再加上phys_base，就是这个虚拟地址对应的物理地址。__pa_symbol(sym) 适用
+于编译时已知的符号地址，也就是来自内核镜像自身的符号转成物理地址。这种转换方式可以理解成内核里手工计算virt addr/phys addr之间的转换（内核镜像自身的地址），能转换的前提是，在启动过程的__startup_64函数里提前建立了将内核镜像自身由虚拟地址范围[__START_KERNEL_map，__START_KERNEL_map+image_size]映射到物理地址范围[phys_base，phys_base+image_size]的范围，这样硬件上有CPU访问虚拟地址（0xffffffff81000000 起始），MMU根据CR3页表转换到物理地址（phys_base），代码里比如调试、符号地址计算时，可以像这里这样手工做转换，这样转出来的虚拟地址访问，cpu访问不会报Page Fault，原因是页表没有建立。
+
+第三个参数是页表项的权限，它会和接下来在cea_set_pte里相关逻辑得到的物理地址拼成pte条目进行设置到对应的页表项，在内存里。现在详细分析这个PAGE_KERNEL_RO：
+#+begin_example
+arch/x86/include/asm/pgtable_types.h
+
+#define PAGE_KERNEL_RO		__pgprot_mask(__PAGE_KERNEL_RO         | _ENC)
+#+end_example
+_ENC主要是和AMD的一个内存加密功能有关，这里暂不介绍。先看__pgprot_mask宏：
+#+begin_example
+arch/x86/include/asm/pgtable_types.h
+
+#define __pgprot_mask(x)	__pgprot((x) & __default_kernel_pte_mask)
+#define __pg(x)			__pgprot(x)
+#define __pgprot(x)		((pgprot_t) { (x) } )
+typedef struct pgprot { pgprotval_t pgprot; } pgprot_t;
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable_64_types.h
+
+typedef unsigned long	pgprotval_t;
+#+end_example
+可以看到__pgprot_mask最后出来的其实就是一个unsigned long的数，只不过里面的各个bit位各有意义。__default_kernel_pte_mask一般在开启时，会清除_PAGE_GLOBAL标志，因为这个表示的是页面所有用户都可以访问（包括用户/内核态）：
+#+begin_example
+arch/x86/mm/init.c: probe_page_size_mask
+
+	/* Except when with PTI where the kernel is mostly non-Global: */
+	if (cpu_feature_enabled(X86_FEATURE_PTI))
+		__default_kernel_pte_mask &= ~_PAGE_GLOBAL;
+#+end_example
+#+begin_example
+arch/x86/mm/init_64.c
+
+/* Bits allowed in normal kernel mappings: */
+pteval_t __default_kernel_pte_mask __read_mostly = ~0;p
+#+end_example
+而__PAGE_KERNEL_RO按如下方式定义出：
+#+begin_example
+arch/x86/include/asm/pgtable_types.h
+
+#define __PAGE_KERNEL_RO	 (__PP|   0|   0|___A|__NX|   0|   0|___G)
+#+end_example
+
 * 一个网卡中断的触发与执行
