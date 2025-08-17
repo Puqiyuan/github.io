@@ -547,5 +547,30 @@ arch/x86/include/asm/page_64.h
 #define __phys_addr_symbol(x) \
 	((unsigned long)(x) - __START_KERNEL_map + phys_base)
 #+end_example
-这里涉及到两个关键变量，一是
+这里涉及到两个关键变量，一是__START_KERNEL_map，一是phys_base，x86-64架构上一般如下定义__START_KERNEL_map：
+#+begin_example
+x86/include/asm/page_64_types.h
+
+#define __START_KERNEL_map	_AC(0xffffffff80000000, UL)
+#+end_example
+根据Documentation/arch/x86/x86_64/mm.rst的描述，这个地址段主要用来映射内核镜像自身：
+#+begin_example
+ffffffff80000000 |   -2    GB | ffffffff9fffffff |  512 MB | kernel text mapping, mapped to physical address 0
+#+end_example
+那么idt_table属于内核镜像里的符号，可以采用__phys_addr_symbol获取内核镜像里符号的物理地址：
+#+begin_example
+/* Must be page-aligned because the real IDT is used in the cpu entry area */
+static gate_desc idt_table[IDT_ENTRIES] __page_aligned_bss;
+#+end_example
+另一个phys_base表示实际内核镜像映射在哪个物理地址上，也就是__START_KERNEL_map虚拟地址映射
+在phys_base这个物理地址上，且按地址往后依次映射。phys_base在__startup_64函数里定出：
+#+begin_example
+	/*
+	 * Compute the delta between the address I am compiled to run at
+	 * and the address I am actually running at.
+	 */
+	phys_base = load_delta = __START_KERNEL_map + p2v_offset;
+#+end_example
+__startup_64这个函数由
+__pa_symbol(sym) 适用于编译时已知的符号地址。
 * 一个网卡中断的触发与执行
