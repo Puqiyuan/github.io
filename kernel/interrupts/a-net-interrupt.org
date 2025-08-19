@@ -685,7 +685,70 @@ static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
 #+end_example
 这里可以看到page_nr作为页帧号左移了PAGE_SHIFT，所以实际组成pte的物理地址部分是页对齐物理地址，而业内偏移由虚拟地址低 12位提供。但当时传入的page_nr也是idt_table的具体物理地址（对其到某个字节的）右移了PAGE_SHIFT，这时得到的PFN物理页帧号，二者不是多余且最后的pfn也不等于__pa_symbol(idt_table)的结果。
 
-继续往下看pfn_pte的一个警告检查，
+继续往下看pfn_pte的一个警告检查，如果pgprot里只设置了_PAGE_DIRTY，但没有设置_PAGE_RW，这是一种特殊的“不合常理”的组合，但是这种组合可以用来标记shadow stacks（一种CET feature），通常如果一个页被标记为可写(_PAGE_RW)，CPU在写访问时会设置_PAGE_DIRTY。如果页不可写(!_PAGE_RW)，那么硬件通常不会去设置_PAGE_DIRTY，也就是“不合理”的组合就是没有允许可写，却
+置上了_PAGE_DIRTY。
+
+继续往下看代码：
+#+begin_example
+/*
+ * A clear pte value is special, and doesn't get inverted.
+ *
+ * Note that even users that only pass a pgprot_t (rather
+ * than a full pte) won't trigger the special zero case,
+ * because even PAGE_NONE has _PAGE_PROTNONE | _PAGE_ACCESSED
+ * set. So the all zero case really is limited to just the
+ * cleared page table entry case.
+ */
+static inline bool __pte_needs_invert(u64 val)
+{
+	return val && !(val & _PAGE_PRESENT);
+}
+
+/* Get a mask to xor with the page table entry to get the correct pfn. */
+static inline u64 protnone_mask(u64 val)
+{
+	return __pte_needs_invert(val) ?  ~0ull : 0;
+}
+#+end_example
+在 x86（特别是 64 位内核）里，页表项（PTE）中存的不是纯粹的物理页帧号(PFN)，而是PFN + 一堆标志位。为了支持mprotect(PROT_NONE)这种“逻辑上存在，但不可访问”的内存映射，Linux 内核引入了一种关于PROTNONE的pfn异或存放机制，内核用反转（invert）PFN的方式来区分普通的“不存在”页，普通有效页以及“PROTNONE”页，如果val != 0以及val & _PAGE_PRESENT!= 0，意味着这个页表项确实映射了一个物理页，所以__pte_needs_invert(val)返回false，不会对pte里的PFN做invert，而如果val = = 0这是最普通的“没映射”的情况，内核调用pte_clear函数就是这样。同样不会做invert。最后，如果val != 0并且val & _PAGE_PRESENT == 0这就是mprotect(PROT_NONE)的典型情况：页逻辑存在，但不可访问。内核为了区分它和“空页”，把PFN部分取反存进去。所以这里__pte_needs_invert(val)返回true，要做invert还原PFN。所以：
+#+begin_example
+pfn ^= protnone_mask(pgprot_val(pgprot));
+#+end_example
+正是看是否需要针对PROTNONE的情况做异或还原真实的PFN，当然这里的情况是不需要，因为前面有__PP位被设置，protnone_mask返回0，任何数与0做异或还是它自己。
+
+再往下看：
+#+begin_example
+/* Extracts the PFN from a (pte|pmd|pud|pgd)val_t of a 4KB page */
+#define PTE_PFN_MASK		((pteval_t)PHYSICAL_PAGE_MASK)
+#+end_example
+这个宏用来从一个页表条目值里提取出4KB对齐的PFN号码，因为页表条目高位是物理地址，低位部分是一堆权限标志，但是64位的地址也不是高位所有部分都是有效的物理地址，所以有这个PHYSICAL_PAGE_MASK来提取：
+#+begin_example
+#define PHYSICAL_PAGE_MASK	(((signed long)PAGE_MASK) & __PHYSICAL_MASK)
+#+end_example
+PAGE_MASK用来屏蔽掉低位部分的标志：
+#+begin_example
+#define PAGE_MASK	(~(PAGE_SIZE - 1))
+#+end_example
+而__PHYSICAL_MASK用来指明哪些物理bit是有效的：
+#+begin_example
+#define __PHYSICAL_MASK		physical_mask
+#+end_example
+#+begin_example
+phys_addr_t physical_mask __ro_after_init = (1ULL << __PHYSICAL_MASK_SHIFT) - 1;
+#define __PHYSICAL_MASK_SHIFT 52
+#+end_example
+最后__pte实现就很简单了：
+#+begin_example
+#define __pte(x)	native_make_pte(x)
+#+end_example
+#+begin_example
+static inline pte_t native_make_pte(pteval_t val)
+{
+	return (pte_t) { .pte = val };
+}
+#+end_example
+就是一个简单的赋值操作。
+介绍完了pfn_pte，继续往下分析cea_set_pte函数，
 
 介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，
 * 一个网卡中断的触发与执行

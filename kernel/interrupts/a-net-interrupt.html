@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="cn">
 <head>
-<!-- 2025-08-18 Mon 22:09 -->
+<!-- 2025-08-19 Tue 22:43 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>X86-64架构下一个网卡中断的处理流程</title>
@@ -38,20 +38,20 @@
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgbd4a77f">1. 中断向量表初始化</a>
+<li><a href="#orgb8644a3">1. 中断向量表初始化</a>
 <ul>
-<li><a href="#orgc22a6f2">1.1. 外部中断向量表构造</a></li>
-<li><a href="#org0ad4361">1.2. 注册外部中断向量表</a></li>
+<li><a href="#org65bb3ba">1.1. 外部中断向量表构造</a></li>
+<li><a href="#org62b9739">1.2. 注册外部中断向量表</a></li>
 </ul>
 </li>
-<li><a href="#orgaeaea5a">2. 一个网卡中断的触发与执行</a></li>
+<li><a href="#orgda60a9d">2. 一个网卡中断的触发与执行</a></li>
 </ul>
 </div>
 </div>
 <p>
 本文以一个网卡中断的处理过程来研究X86-64的中断管理，这个调用流程如下：
 </p>
-<pre class="example" id="org36fc0ec">
+<pre class="example" id="org3beb70c">
 =&gt; e1000_intr
 =&gt; __handle_irq_event_percpu
 =&gt; handle_irq_event
@@ -75,20 +75,20 @@
 =&gt; ret_from_fork
 =&gt; ret_from_fork_asm
 </pre>
-<div id="outline-container-orgbd4a77f" class="outline-2">
-<h2 id="orgbd4a77f"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
+<div id="outline-container-orgb8644a3" class="outline-2">
+<h2 id="orgb8644a3"><span class="section-number-2">1.</span> 中断向量表初始化</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 X86-64的外部中断通过idt_setup_apic_and_irq_gates函数来注册，但是外部中断表本身的内容通过irq_entries_start符号描述。下面分这两方面来介绍X86-64的初始化。
 </p>
 </div>
-<div id="outline-container-orgc22a6f2" class="outline-3">
-<h3 id="orgc22a6f2"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
+<div id="outline-container-org65bb3ba" class="outline-3">
+<h3 id="org65bb3ba"><span class="section-number-3">1.1.</span> 外部中断向量表构造</h3>
 <div class="outline-text-3" id="text-1-1">
 <p>
 下面的汇编代码描述了外部中断向量表的内容：
 </p>
-<pre class="example" id="orgdd350d5">
+<pre class="example" id="org0cc0a72">
 	.align IDT_ALIGN
 SYM_CODE_START(irq_entries_start)
     vector=FIRST_EXTERNAL_VECTOR
@@ -107,7 +107,7 @@ SYM_CODE_END(irq_entries_start)
 <p>
 这里NR_EXTERNAL_VECTORS以及FIRST_EXTERNAL_VECTOR被如下方式定义：
 </p>
-<pre class="example" id="orgb1c39b2">
+<pre class="example" id="org0ad95de">
 /*
  * Posted interrupt notification vector for all device MSIs delivered to
  * the host kernel.
@@ -146,7 +146,7 @@ X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断�
 <p>
 最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
 </p>
-<pre class="example" id="orgb55c0a8">
+<pre class="example" id="orga710a63">
 ffffffff81e00230 &lt;irq_entries_start&gt;:
 ffffffff81e00230:       f3 0f 1e fa             endbr64
 ffffffff81e00234:       6a 20                   push   $0x20
@@ -178,13 +178,13 @@ ffffffff81e0024f:       cc                      int3
 </p>
 </div>
 </div>
-<div id="outline-container-org0ad4361" class="outline-3">
-<h3 id="org0ad4361"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
+<div id="outline-container-org62b9739" class="outline-3">
+<h3 id="org62b9739"><span class="section-number-3">1.2.</span> 注册外部中断向量表</h3>
 <div class="outline-text-3" id="text-1-2">
 <p>
 本节开始分析注册中断的函数idt_setup_apic_and_irq_gates：
 </p>
-<pre class="example" id="orgd895330">
+<pre class="example" id="org4848b0c">
 /**
  * idt_setup_apic_and_irq_gates - Setup APIC/SMP and normal interrupt gates
  */
@@ -228,7 +228,7 @@ void __init idt_setup_apic_and_irq_gates(void)
 <p>
 先分析第一部分，idt_setup_from_table函数：
 </p>
-<pre class="example" id="orga286c5c">
+<pre class="example" id="org6608244">
 arch/x86/kernel/idt.c
 static __init void
 idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
@@ -246,7 +246,7 @@ idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sy
 <p>
 这里首先介绍/分析apic_idts表：
 </p>
-<pre class="example" id="org88e4bca">
+<pre class="example" id="org44b996a">
 arch/x86/kernel/idt.c
 /*
  * The APIC and SMP idt entries
@@ -293,13 +293,13 @@ static const __initconst struct idt_data apic_idts[] = {
 <p>
 以asm_sysvec_reschedule_ipi为例分析它的实现：
 </p>
-<pre class="example" id="org8c0c4ad">
+<pre class="example" id="orgc51582d">
 DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
 </pre>
 <p>
 而DECLARE_IDTENTRY会依据当前编译单元是.c文件或.S文件有不同的定义，对于.c来说：
 </p>
-<pre class="example" id="org74e1f96">
+<pre class="example" id="orgbeee184">
 arch/x86/include/asm/idtentry.h
 /**
  * DECLARE_IDTENTRY - Declare functions for simple IDT entry points
@@ -326,7 +326,7 @@ arch/x86/include/asm/idtentry.h
 <p>
 以上只是给出了比如asm_sysvec_reschedule_ipi这样符号声明，但是对于编译汇编文件.S时再给出asm_sysvec_reschedule_ipi的定义：
 </p>
-<pre class="example" id="org7655e39">
+<pre class="example" id="org400b257">
 arch/x86/include/asm/idtentry.h
 
 #else /* !__ASSEMBLER__ */
@@ -340,7 +340,7 @@ arch/x86/include/asm/idtentry.h
 <p>
 identry是实现在arch/x86/entry/entry_64.S里的宏，用来给出参数asm_##func（也就是asm_sysvec_reschedule_ipi）符号的定义，idtentry实际抽象出了所有中断entry时需要做的公共动作，这样定义出的asm_sysvec_reschedule_ipi可以理解为中断发生后的第一个要跳转到的地址，具体里面的代码留待后面分析中断执行时再细节分析，这里可以通过反汇编vmlinux先搂一眼asm_sysvec_reschedule_ipi的指令级实现：
 </p>
-<pre class="example" id="orgecc689d">
+<pre class="example" id="org33d64e8">
 ffffffff81e01630 &lt;asm_sysvec_reschedule_ipi&gt;:
 ffffffff81e01630:       f3 0f 1e fa             endbr64
 ffffffff81e01634:       90                      nop
@@ -358,7 +358,7 @@ ffffffff81e0164f:       90                      nop
 <p>
 而asm_sysvec_reboot具有类似的结构：
 </p>
-<pre class="example" id="org7cfe680">
+<pre class="example" id="orgadcf489">
 ffffffff81e01650 &lt;asm_sysvec_reboot&gt;:
 ffffffff81e01650:       f3 0f 1e fa             endbr64
 ffffffff81e01654:       90                      nop
@@ -376,19 +376,19 @@ ffffffff81e0166f:       90                      nop
 <p>
 可以想见，error_entry里就会有具体中断句柄（sysvec_reschedule_ipi/sysvec_reboot等）进入前的现场保存，而error_return里会有中断句柄返回前的现场恢复操作，而call sysvec_reschedule_ipi，其实就是宏汇编调用链：
 </p>
-<pre class="example" id="orge2024c2">
+<pre class="example" id="org5d040b9">
 identry-&gt;idtentry_body-&gt;call \cfunc，
 </pre>
 <p>
 这里cfunc就是identry的第三个参数cfunc，在这个例子下就是上面DECLARE_IDTENTRY的第二个参数sysvec_reschedule_ipi：
 </p>
-<pre class="example" id="org915708c">
+<pre class="example" id="orgd094667">
 DECLARE_IDTENTRY(RESCHEDULE_VECTOR,			sysvec_reschedule_ipi);
 </pre>
 <p>
 所以才有了上面贴的反汇编里有指令call sysvec_reschedule_ipi，那么这个符号又是哪里定义的呢？如下：
 </p>
-<pre class="example" id="orge74aba0">
+<pre class="example" id="orgdea5e50">
 arch/x86/kernel/smp.c 
 
 DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
@@ -400,7 +400,7 @@ DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
 	trace_reschedule_exit(RESCHEDULE_VECTOR);
 }
 </pre>
-<pre class="example" id="org42be671">
+<pre class="example" id="org34febcc">
 arch/x86/include/asm/idtentry.h
 
 #define DEFINE_IDTENTRY_SYSVEC_SIMPLE(func)				\
@@ -434,7 +434,7 @@ static __always_inline void __##func(struct pt_regs *regs)
 <p>
 注意这里最后的__##func的函数体就是前面的：
 </p>
-<pre class="example" id="org1ef0509">
+<pre class="example" id="org5aa661e">
 {
 	apic_eoi();
 	trace_reschedule_entry(RESCHEDULE_VECTOR);
@@ -448,25 +448,25 @@ static __always_inline void __##func(struct pt_regs *regs)
 （具体的某个中断号对应的处理逻辑）则由传进去的cfunc决定，这里是sysvec_reschedule_ipi符号，
 类似使用这种的还有很多比如：
 </p>
-<pre class="example" id="org7f9dc4a">
+<pre class="example" id="org2937405">
 DECLARE_IDTENTRY_SYSVEC(REBOOT_VECTOR,			sysvec_reboot);
 </pre>
 <p>
 这些逻辑也体现了一种封装/继承的思想，未来打算将某个向量号XXX，分配给某个具体函数funcxxx处理时只需写：
 </p>
-<pre class="example" id="org5d32ef8">
+<pre class="example" id="orgff65847">
 DECLARE_IDTENTRY_SYSVEC(XXX, funcxxx)
 </pre>
 <p>
 同时用类似DEFINE_IDTENTRY_SYSVEC_SIMPLE这样的宏来给出其具体的业务逻辑：
 </p>
-<pre class="example" id="orgfbbb33b">
+<pre class="example" id="org7ff6920">
 DEFINE_IDTENTRY_SYSVEC_SIMPLE(funcxxx)
 </pre>
 <p>
 对于sysvec_reschedule_ipi的具体业务逻辑就是scheduler_ipi，而至于公共的中断处理逻辑，如下宏调用链会替我们操心处理好（并定义出相关符号可以调用）：
 </p>
-<pre class="example" id="org59d6c33">
+<pre class="example" id="orge34b5c2">
 DECLARE_IDTENTRY_SYSVEC-&gt;DECLARE_IDTENTRY-&gt;idtentry
 </pre>
 
@@ -477,7 +477,7 @@ DECLARE_IDTENTRY_SYSVEC-&gt;DECLARE_IDTENTRY-&gt;idtentry
 <p>
 分析到目前，就是想回答说类似asm_sysvec_reschedule_ipi/asm_sysvec_reboot等这样的句柄有了定义（addr），那么INTG的实现就可以赋值了：
 </p>
-<pre class="example" id="org8b450f1">
+<pre class="example" id="orgc823864">
 #define G(_vector, _addr, _ist, _type, _dpl, _segment)	\
 	{						\
 		.vector		= _vector,		\
@@ -500,7 +500,7 @@ DECLARE_IDTENTRY_SYSVEC-&gt;DECLARE_IDTENTRY-&gt;idtentry
 <p>
 再回到idt_setup_apic_and_irq_gates-&gt;idt_setup_from_table函数，这里再贴下：
 </p>
-<pre class="example" id="org6d2b7d1">
+<pre class="example" id="orgd45cff5">
 static __init void
 idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sys)
 {
@@ -517,7 +517,7 @@ idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sy
 <p>
 对于apic_idts里的所有条目，都要调用相应的函数进行处理，每个条目作为输入调用idt_init_desc函数：
 </p>
-<pre class="example" id="orgac7b7cd">
+<pre class="example" id="org814cf68">
 static inline void idt_init_desc(gate_desc *gate, const struct idt_data *d)
 {
 	unsigned long addr = (unsigned long) d-&gt;addr;
@@ -535,7 +535,7 @@ static inline void idt_init_desc(gate_desc *gate, const struct idt_data *d)
 <p>
 这里可以看到，主要的逻辑是地址需要转换成low/middle/high部分，其它都是拷贝赋值，设置好gate_desc后，就调用write_idt_entry将这个中断描述符拷贝到全局表idt_table里，其实际实现就是native_write_idt_entry：
 </p>
-<pre class="example" id="orgc61e344">
+<pre class="example" id="org2b00a8a">
 static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_desc *gate)
 {
 	memcpy(&amp;idt[entry], gate, sizeof(*gate));
@@ -548,7 +548,7 @@ static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_
 <p>
 继续往下看：
 </p>
-<pre class="example" id="org2ba7408">
+<pre class="example" id="org25fb862">
 for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 	entry = irq_entries_start + IDT_ALIGN * (i - FIRST_EXTERNAL_VECTOR);
 	set_intr_gate(i, entry);
@@ -557,7 +557,7 @@ for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 <p>
 这段代码主要是针对从第一个外部向量FIRST_SYSTEM_VECTOR开始，如果在system_vectors里还没有设置的话，就将irq_entries_start起始的向量条目的地址通过set_intr_gate设置到idt_table里：
 </p>
-<pre class="example" id="org853a067">
+<pre class="example" id="orgad3162d">
 static __init void set_intr_gate(unsigned int n, const void *addr)
 {
 	struct idt_data data;
@@ -578,7 +578,7 @@ static __init void set_intr_gate(unsigned int n, const void *addr)
 <p>
 spurious_entries_start定义如下：
 </p>
-<pre class="example" id="org6db348c">
+<pre class="example" id="org855cc1f">
 ./arch/x86/include/asm/idtentry.h
 SYM_CODE_START(spurious_entries_start)
     vector=FIRST_SYSTEM_VECTOR
@@ -597,7 +597,7 @@ SYM_CODE_END(spurious_entries_start)
 <p>
 asm_spurious_interrupt类似前面定义符号asm_sysvec_reschedule_ipi，在编译C文件时只有声明：
 </p>
-<pre class="example" id="orga9f7586">
+<pre class="example" id="org34ae616">
 arch/x86/include/asm/idtentry.h
 
 DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	spurious_interrupt);
@@ -613,7 +613,7 @@ DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	spurious_interrupt);
 <p>
 而在汇编.S文件时，才给出这个符号的定义：
 </p>
-<pre class="example" id="orgc00495f">
+<pre class="example" id="org0d1c263">
 arch/x86/include/asm/idtentry.h
 
 #define DECLARE_IDTENTRY_ERRORCODE(vector, func)			\
@@ -626,7 +626,7 @@ arch/x86/include/asm/idtentry.h
 <p>
 下一个要重点分析的就是idt_map_in_cea函数：
 </p>
-<pre class="example" id="orga2814d0">
+<pre class="example" id="org78df741">
 static void __init idt_map_in_cea(void)
 {
 	/*
@@ -643,14 +643,14 @@ static void __init idt_map_in_cea(void)
 <p>
 这里首先介绍一个宏CPU_ENTRY_AREA_RO_IDT_VADDR：
 </p>
-<pre class="example" id="orge516c1f">
+<pre class="example" id="orgc6ecdfc">
 arch/x86/include/asm/pgtable_areas.h 
 #define CPU_ENTRY_AREA_RO_IDT_VADDR	((void *)CPU_ENTRY_AREA_RO_IDT)
 
 /* Single page reserved for the readonly IDT mapping: */
 #define CPU_ENTRY_AREA_RO_IDT		CPU_ENTRY_AREA_BASE
 </pre>
-<pre class="example" id="orgf4bbc7a">
+<pre class="example" id="org53e0487">
 arch/x86/include/asm/pgtable_64_types.h
 #define CPU_ENTRY_AREA_BASE	(CPU_ENTRY_AREA_PGD &lt;&lt; P4D_SHIFT)
 
@@ -664,7 +664,7 @@ arch/x86/include/asm/pgtable_64_types.h
 <p>
 回到CPU_ENTRY_AREA_RO_IDT_VADDR（fffffe0000000000），fffffe0000000000-fffffe7fffffffff的512GB是cpu_entry_area mapping区域，这个区域就是提供类似idt表，可以进入中断处理代码，中断可以在用户态程序运行时产生，所以它是Page-Global页，这样的页用户态和内核态都可以访问，并且在任务切换或者写cr3时，page global的页不会刷tlb，也就是这样的页是固定映射，而cea_set_pte函数正是在完成这样的映射：
 </p>
-<pre class="example" id="org54fdfee">
+<pre class="example" id="org61bd041">
 void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 {
 	unsigned long va = (unsigned long) cea_vaddr;
@@ -687,13 +687,13 @@ void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 <p>
 整个函数是在设置各级页表的页表项内容，以完成虚拟地址到idt_table所在物理地址的映射，要映射到idt_table的物理地址，那么必须先知道idt_table的物理地址，这通过宏__pa_symbol做到：
 </p>
-<pre class="example" id="orgd807e33">
+<pre class="example" id="org6639c7d">
 arch/x86/include/asm/page.h
 
 #define __pa_symbol(x) \
 	__phys_addr_symbol(__phys_reloc_hide((unsigned long)(x)))
 </pre>
-<pre class="example" id="org464b399">
+<pre class="example" id="orgcba1d38">
 arch/x86/include/asm/page_64.h
 
 #define __phys_addr_symbol(x) \
@@ -702,7 +702,7 @@ arch/x86/include/asm/page_64.h
 <p>
 这里涉及到两个关键变量，一是__START_KERNEL_map，一是phys_base，x86-64架构上一般如下定义__START_KERNEL_map：
 </p>
-<pre class="example" id="orgfe4d52c">
+<pre class="example" id="orgdfd204e">
 x86/include/asm/page_64_types.h
 
 #define __START_KERNEL_map	_AC(0xffffffff80000000, UL)
@@ -710,20 +710,20 @@ x86/include/asm/page_64_types.h
 <p>
 根据Documentation/arch/x86/x86_64/mm.rst的描述，这个地址段主要用来映射内核镜像自身：
 </p>
-<pre class="example" id="org435579c">
+<pre class="example" id="orga416493">
 ffffffff80000000 |   -2    GB | ffffffff9fffffff |  512 MB | kernel text mapping, mapped to physical address 0
 </pre>
 <p>
 那么idt_table属于内核镜像里的符号，可以采用__phys_addr_symbol获取内核镜像里符号的物理地址：
 </p>
-<pre class="example" id="orgffb1cf2">
+<pre class="example" id="org7ef35ec">
 /* Must be page-aligned because the real IDT is used in the cpu entry area */
 static gate_desc idt_table[IDT_ENTRIES] __page_aligned_bss;
 </pre>
 <p>
 另一个phys_base表示实际内核镜像映射在哪个物理地址上，也就是__START_KERNEL_map虚拟地址映射在phys_base这个物理地址上，且按地址往后依次映射。phys_base在__startup_64函数里定出：
 </p>
-<pre class="example" id="org65a1007">
+<pre class="example" id="org38076a8">
 /*
  * Compute the delta between the address I am compiled to run at
  * and the address I am actually running at.
@@ -733,7 +733,7 @@ phys_base = load_delta = __START_KERNEL_map + p2v_offset;
 <p>
 __startup_64这个函数由startup_64汇编函数调用：
 </p>
-<pre class="example" id="org329a705">
+<pre class="example" id="org3e8b9b1">
 arch/x86/kernel/head_64.S
 
 	call	__startup_64
@@ -741,13 +741,13 @@ arch/x86/kernel/head_64.S
 <p>
 关于startup_64和__startup_64的具体细节逻辑参见笔者其它介绍启动过程的文章，这里只是需要知道，传入p2v_offset会用来计算内核镜像映射的起始物理地址phys_base，并且这个值在开启KASLR地址随机化时，它是随机变化的，正常来说，我们会假定内核映射的起始虚拟地址是__START_KERNEL_map，对应的起始物理地址就是0，但是处于安全考虑，这个起始物理地址会有一定的随机偏移，那么起始物理地址phys_base离起始虚拟地址__START_KERNEL_map的距离记为p2v_offset，那么有：
 </p>
-<pre class="example" id="org76bead4">
+<pre class="example" id="orgda80560">
 p2v_offset = phys_base - __START_KERNEL_map
 </pre>
 <p>
 在startup_64里可以根据rip，先有p2v_offset作为参数调用__startup_64这个C函数，这样自然有：
 </p>
-<pre class="example" id="org63eeebf">
+<pre class="example" id="orge5bf2dc">
 phys_base = __START_KERNEL_map + p2v_offset
 </pre>
 <p>
@@ -758,7 +758,7 @@ phys_base = __START_KERNEL_map + p2v_offset
 <p>
 第三个参数是页表项的权限，它会和接下来在cea_set_pte里相关逻辑得到的物理地址拼成pte条目进行设置到对应的页表项，在内存里。现在详细分析这个PAGE_KERNEL_RO：
 </p>
-<pre class="example" id="org59dc30d">
+<pre class="example" id="org3ced693">
 arch/x86/include/asm/pgtable_types.h
 
 #define PAGE_KERNEL_RO		__pgprot_mask(__PAGE_KERNEL_RO         | _ENC)
@@ -766,7 +766,7 @@ arch/x86/include/asm/pgtable_types.h
 <p>
 _ENC主要是和AMD的一个内存加密功能有关，这里暂不介绍。先看__pgprot_mask宏：
 </p>
-<pre class="example" id="org6dc92d9">
+<pre class="example" id="org3cd5acd">
 arch/x86/include/asm/pgtable_types.h
 
 #define __pgprot_mask(x)	__pgprot((x) &amp; __default_kernel_pte_mask)
@@ -774,7 +774,7 @@ arch/x86/include/asm/pgtable_types.h
 #define __pgprot(x)		((pgprot_t) { (x) } )
 typedef struct pgprot { pgprotval_t pgprot; } pgprot_t;
 </pre>
-<pre class="example" id="orgfc96067">
+<pre class="example" id="org41d34c0">
 arch/x86/include/asm/pgtable_64_types.h
 
 typedef unsigned long	pgprotval_t;
@@ -782,14 +782,14 @@ typedef unsigned long	pgprotval_t;
 <p>
 可以看到__pgprot_mask最后出来的其实就是一个unsigned long的数，只不过里面的各个bit位各有意义。__default_kernel_pte_mask一般在开启时，会清除_PAGE_GLOBAL标志，因为这个表示的是页面所有用户都可以访问（包括用户/内核态）：
 </p>
-<pre class="example" id="org1b57735">
+<pre class="example" id="org422e865">
 arch/x86/mm/init.c: probe_page_size_mask
 
 	/* Except when with PTI where the kernel is mostly non-Global: */
 	if (cpu_feature_enabled(X86_FEATURE_PTI))
 		__default_kernel_pte_mask &amp;= ~_PAGE_GLOBAL;
 </pre>
-<pre class="example" id="org0a3db73">
+<pre class="example" id="org926d26b">
 arch/x86/mm/init_64.c
 
 /* Bits allowed in normal kernel mappings: */
@@ -798,7 +798,7 @@ pteval_t __default_kernel_pte_mask __read_mostly = ~0;p
 <p>
 而__PAGE_KERNEL_RO按如下方式定义出：
 </p>
-<pre class="example" id="org7414c0c">
+<pre class="example" id="org2588f9d">
 arch/x86/include/asm/pgtable_types.h
 
 #define __PAGE_KERNEL_RO	 (__PP|   0|   0|___A|__NX|   0|   0|___G)
@@ -806,7 +806,7 @@ arch/x86/include/asm/pgtable_types.h
 <p>
 __PP这些宏都是硬件页表项里的值，比如__PP按如下代码定出：
 </p>
-<pre class="example" id="orgd29b558">
+<pre class="example" id="org15df96c">
 arch/x86/include/asm/pgtable_types.h
 
 #define __PP _PAGE_PRESENT
@@ -817,7 +817,7 @@ arch/x86/include/asm/pgtable_types.h
 这些bit位在硬件手册上是有描述的，比如对于x86-64的四级映射成4KB大小的物理页面时，intel sdm vol3有表解释各个bit位控制的权限：
 </p>
 
-<div id="org4f72010" class="figure">
+<div id="org989fa44" class="figure">
 <p><img src="./img/4kb-pte.png" alt="4kb-pte.png" width="20%" height="20%">
 </p>
 <p><span class="figure-number">Figure 1: </span>映射4KB的页表条目格式</p>
@@ -826,7 +826,7 @@ arch/x86/include/asm/pgtable_types.h
 <p>
 其它权限位就不一一展开了，现在介绍完了调用cea_set_pte的参数，可以回过头来分析cea_set_pte本身的实现了：
 </p>
-<pre class="example" id="org9dd3ca6">
+<pre class="example" id="orgc685f53">
 void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 {
 	unsigned long va = (unsigned long) cea_vaddr;
@@ -849,19 +849,19 @@ void cea_set_pte(void *cea_vaddr, phys_addr_t pa, pgprot_t flags)
 <p>
 pte_t类型的量是最终写入到内存页表里的页表项内容，它定义如下:
 </p>
-<pre class="example" id="orgd54c6c8">
+<pre class="example" id="org6418769">
 typedef struct { pteval_t pte; } pte_t;
 </pre>
 <p>
 pteval_t一般依据32/64 bit架构不同而有不同的定义，一般64位下就是一个unsigned long：
 </p>
-<pre class="example" id="orgddaf376">
+<pre class="example" id="orge86617a">
 typedef unsigned long	pteval_t;
 </pre>
 <p>
 从这里也可以看到一个pte entry应该是64 bit长。pfn_pte是一个在mm代码里经常看到的小接口，它接受一个物理地址和一串权限，将它们组合在一起形成一个pte条目：
 </p>
-<pre class="example" id="org8eb44ed">
+<pre class="example" id="org055fd08">
 static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
 {
 	phys_addr_t pfn = (phys_addr_t)page_nr &lt;&lt; PAGE_SHIFT;
@@ -878,7 +878,88 @@ static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
 </p>
 
 <p>
-继续往下看pfn_pte的一个警告检查，
+继续往下看pfn_pte的一个警告检查，如果pgprot里只设置了_PAGE_DIRTY，但没有设置_PAGE_RW，这是一种特殊的“不合常理”的组合，但是这种组合可以用来标记shadow stacks（一种CET feature），通常如果一个页被标记为可写(_PAGE_RW)，CPU在写访问时会设置_PAGE_DIRTY。如果页不可写(!_PAGE_RW)，那么硬件通常不会去设置_PAGE_DIRTY，也就是“不合理”的组合就是没有允许可写，却
+置上了_PAGE_DIRTY。
+</p>
+
+<p>
+继续往下看代码：
+</p>
+<pre class="example" id="org0ecd779">
+/*
+ * A clear pte value is special, and doesn't get inverted.
+ *
+ * Note that even users that only pass a pgprot_t (rather
+ * than a full pte) won't trigger the special zero case,
+ * because even PAGE_NONE has _PAGE_PROTNONE | _PAGE_ACCESSED
+ * set. So the all zero case really is limited to just the
+ * cleared page table entry case.
+ */
+static inline bool __pte_needs_invert(u64 val)
+{
+	return val &amp;&amp; !(val &amp; _PAGE_PRESENT);
+}
+
+/* Get a mask to xor with the page table entry to get the correct pfn. */
+static inline u64 protnone_mask(u64 val)
+{
+	return __pte_needs_invert(val) ?  ~0ull : 0;
+}
+</pre>
+<p>
+在 x86（特别是 64 位内核）里，页表项（PTE）中存的不是纯粹的物理页帧号(PFN)，而是PFN + 一堆标志位。为了支持mprotect(PROT_NONE)这种“逻辑上存在，但不可访问”的内存映射，Linux 内核引入了一种关于PROTNONE的pfn异或存放机制，内核用反转（invert）PFN的方式来区分普通的“不存在”页，普通有效页以及“PROTNONE”页，如果val != 0以及val &amp; _PAGE_PRESENT!= 0，意味着这个页表项确实映射了一个物理页，所以__pte_needs_invert(val)返回false，不会对pte里的PFN做invert，而如果val = = 0这是最普通的“没映射”的情况，内核调用pte_clear函数就是这样。同样不会做invert。最后，如果val != 0并且val &amp; _PAGE_PRESENT == 0这就是mprotect(PROT_NONE)的典型情况：页逻辑存在，但不可访问。内核为了区分它和“空页”，把PFN部分取反存进去。所以这里__pte_needs_invert(val)返回true，要做invert还原PFN。所以：
+</p>
+<pre class="example" id="org1c6d4b9">
+pfn ^= protnone_mask(pgprot_val(pgprot));
+</pre>
+<p>
+正是看是否需要针对PROTNONE的情况做异或还原真实的PFN，当然这里的情况是不需要，因为前面有__PP位被设置，protnone_mask返回0，任何数与0做异或还是它自己。
+</p>
+
+<p>
+再往下看：
+</p>
+<pre class="example" id="org2fbf391">
+/* Extracts the PFN from a (pte|pmd|pud|pgd)val_t of a 4KB page */
+#define PTE_PFN_MASK		((pteval_t)PHYSICAL_PAGE_MASK)
+</pre>
+<p>
+这个宏用来从一个页表条目值里提取出4KB对齐的PFN号码，因为页表条目高位是物理地址，低位部分是一堆权限标志，但是64位的地址也不是高位所有部分都是有效的物理地址，所以有这个PHYSICAL_PAGE_MASK来提取：
+</p>
+<pre class="example" id="org1e98d91">
+#define PHYSICAL_PAGE_MASK	(((signed long)PAGE_MASK) &amp; __PHYSICAL_MASK)
+</pre>
+<p>
+PAGE_MASK用来屏蔽掉低位部分的标志：
+</p>
+<pre class="example" id="orgb6530c0">
+#define PAGE_MASK	(~(PAGE_SIZE - 1))
+</pre>
+<p>
+而__PHYSICAL_MASK用来指明哪些物理bit是有效的：
+</p>
+<pre class="example" id="orgf2b2f33">
+#define __PHYSICAL_MASK		physical_mask
+</pre>
+<pre class="example" id="org224efae">
+phys_addr_t physical_mask __ro_after_init = (1ULL &lt;&lt; __PHYSICAL_MASK_SHIFT) - 1;
+#define __PHYSICAL_MASK_SHIFT 52
+</pre>
+<p>
+最后__pte实现就很简单了：
+</p>
+<pre class="example" id="orgd98de64">
+#define __pte(x)	native_make_pte(x)
+</pre>
+<pre class="example" id="org28d457d">
+static inline pte_t native_make_pte(pteval_t val)
+{
+	return (pte_t) { .pte = val };
+}
+</pre>
+<p>
+就是一个简单的赋值操作。
+介绍完了pfn_pte，继续往下分析cea_set_pte函数，
 </p>
 
 <p>
@@ -887,13 +968,13 @@ static inline pte_t pfn_pte(unsigned long page_nr, pgprot_t pgprot)
 </div>
 </div>
 </div>
-<div id="outline-container-orgaeaea5a" class="outline-2">
-<h2 id="orgaeaea5a"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
+<div id="outline-container-orgda60a9d" class="outline-2">
+<h2 id="orgda60a9d"><span class="section-number-2">2.</span> 一个网卡中断的触发与执行</h2>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
-<p class="date">Created: 2025-08-18 Mon 22:09</p>
+<p class="date">Created: 2025-08-19 Tue 22:43</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
