@@ -748,7 +748,122 @@ static inline pte_t native_make_pte(pteval_t val)
 }
 #+end_example
 就是一个简单的赋值操作。
-介绍完了pfn_pte，继续往下分析cea_set_pte函数，
+介绍完了pfn_pte，继续往下分析cea_set_pte函数，注意接下来的一段注释，是在说硬件只在present=1时才会真正解读global位，present=0时，global位对硬件来说无意义，所以Linux就“蹭”了一下，把它拿来表示PROT_NONE。这就是注释里说的：要小心别在non-present页上乱设global，否则会跟PROT_NONE混淆，那么这里的情况就是判断出设置了present位，就再设置global位，这样这些映射是全局性的，给它们设_PAGE_GLOBAL可以避免在CR3切换（进程切换）时被flush，提升性能。
+
+pte_set_flags的实现本身比较简单，只是列出下：
+#+begin_example
+static inline pte_t pte_set_flags(pte_t pte, pteval_t set)
+{
+	pteval_t v = native_pte_val(pte);
+
+	return native_make_pte(v | set);
+}
+#+end_example
+#+begin_example
+static inline pte_t native_make_pte(pteval_t val)
+{
+	return (pte_t) { .pte = val };
+}
+#+end_example
+现在有了虚拟地址va以及pte，继续调用set_pte_vaddr来设置pte值：
+#+begin_example
+arch/x86/mm/init_64.c
+
+void set_pte_vaddr(unsigned long vaddr, pte_t pteval)
+{
+	pgd_t *pgd;
+	p4d_t *p4d_page;
+
+	pr_debug("set_pte_vaddr %lx to %lx\n", vaddr, native_pte_val(pteval));
+
+	pgd = pgd_offset_k(vaddr);
+	if (pgd_none(*pgd)) {
+		printk(KERN_ERR
+			"PGD FIXMAP MISSING, it should be setup in head.S!\n");
+		return;
+	}
+
+	p4d_page = p4d_offset(pgd, 0);
+	set_pte_vaddr_p4d(p4d_page, vaddr, pteval);
+}
+#+end_example
+本质上从set_pte_vaddr开始，就是在一级一级的设置页表项条目的值，这涉及到页表项的计算，在详细分析这个函数前，结合crash里的vtop命令输出的结果，可以验证代码分析的计算结果，vtop用于把一个虚拟地址转换成物理地址，这里的虚拟地址就是前面提到过的0xfffffe0000000000：
+#+begin_example
+crash> vtop 0xfffffe0000000000
+VIRTUAL           PHYSICAL
+fffffe0000000000  5db2d000
+
+PGD DIRECTORY: ffffffffb3422000
+PAGE DIRECTORY: 23ffc5067
+   PUD: 23ffc5000 => 1003b8067
+   PMD: 1003b8000 => 1003b9067
+   PTE: 1003b9000 => 800000005db2d121
+  PAGE: 5db2d000
+
+      PTE         PHYSICAL  FLAGS
+800000005db2d121  5db2d000  (PRESENT|ACCESSED|GLOBAL|NX)
+
+      PAGE        PHYSICAL      MAPPING       INDEX CNT FLAGS
+ffffde8e4176cb40  5db2d000                0        0  1 fffffc0002000 reserved
+#+end_example
+
+pgd_offset_k用于从内核空间（init_mm）里找到对应虚拟地址address的pgd条目，并返回指向这个条目的指针：
+#+begin_example
+include/linux/pgtable.h
+
+/*
+ * a shortcut which implies the use of the kernel's pgd, instead
+ * of a process's
+ */
+#define pgd_offset_k(address)		pgd_offset(&init_mm, (address))
+#define pgd_offset(mm, address)		pgd_offset_pgd((mm)->pgd, (address))
+static inline pgd_t *pgd_offset_pgd(pgd_t *pgd, unsigned long address)
+{
+	return (pgd + pgd_index(address));
+};
+#define pgd_index(a)  (((a) >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable_64_types.h
+
+/*
+ * PGDIR_SHIFT determines what a top-level page table entry can map
+ */
+#define PGDIR_SHIFT	pgdir_shift
+#define PTRS_PER_PGD	512
+#+end_example
+pgdir_shift初始默认就是39：
+#+begin_example
+arch/x86/kernel/head64.c
+
+unsigned int pgdir_shift __ro_after_init = 39;
+#+end_example
+只有在开启5级页表时pgdir_shift才可能会调整变大，在crash中使用p pgdir_shift命令可以看到其为39：
+#+begin_example
+crash> p pgdir_shift
+pgdir_shift = $29 = 39
+#+end_example
+那么根据前面pgd_offset_k的代码，最后pgd_offset_k返回的地址就是：
+#+begin_example
+init_mm.pgd + (address >> 39 & 511) * 8
+#+end_example
+这里先分析下init_mm.pgd在代码里是如何得到的，
+
+而在crash里可以知道pgd的值：
+#+begin_example
+crash> p init_mm.pgd
+$30 = (pgd_t *) 0xffffffffb3422000 <init_top_pgt>
+#+end_example
+注意最后乘以8是因为对指针加1实际是加8。这样：
+#+begin_example
+0xffffffffb3422000 + (0xfffffe0000000000 >> 39 & 511) * 8 = 0xffffffffb3422fe0
+#+end_example
+crash里rd这个内存上的值是可以和crash里得到的顶级页表条目的值23ffc5067对应的：
+#+begin_example
+crash> rd 0xffffffffb3422fe0
+ffffffffb3422fe0:  000000023ffc5067                    gP.?....
+#+end_example
+所以总结pgd_offset_k相当于说从内核页表里读出虚拟地址对应的顶级页表条目的值对应的指针。
 
 介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，
 * 一个网卡中断的触发与执行
