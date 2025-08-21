@@ -847,9 +847,37 @@ pgdir_shift = $29 = 39
 #+begin_example
 init_mm.pgd + (address >> 39 & 511) * 8
 #+end_example
-这里先分析下init_mm.pgd在代码里是如何得到的，
+这里先分析下init_mm.pgd在代码里是如何得到的：
+#+begin_example
+mm/init-mm.c
 
-而在crash里可以知道pgd的值：
+struct mm_struct init_mm = {
+    ...
+    .pgd		= swapper_pg_dir,
+    ...
+};
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable_64.h
+
+#define swapper_pg_dir init_top_pgt
+#+end_example
+而init_top_pgt在汇编文件里填充，静态初始化内核启动用的顶层PGD：
+#+begin_example
+arch/x86/kernel/head_64.S
+
+SYM_DATA_START_PTI_ALIGNED(init_top_pgt)
+	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
+	.org    init_top_pgt + L4_PAGE_OFFSET*8, 0
+	.quad   level3_ident_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
+	.org    init_top_pgt + L4_START_KERNEL*8, 0
+	/* (2^48-(2*1024*1024*1024))/(2^39) = 511 */
+	.quad   level3_kernel_pgt - __START_KERNEL_map + _PAGE_TABLE_NOENC
+	.fill	PTI_USER_PGD_FILL,8,0
+SYM_DATA_END(init_top_pgt)
+#+end_example
+
+然后在crash里可以知道pgd（init_top_pgt）的值：
 #+begin_example
 crash> p init_mm.pgd
 $30 = (pgd_t *) 0xffffffffb3422000 <init_top_pgt>
@@ -863,7 +891,75 @@ crash里rd这个内存上的值是可以和crash里得到的顶级页表条目�
 crash> rd 0xffffffffb3422fe0
 ffffffffb3422fe0:  000000023ffc5067                    gP.?....
 #+end_example
-所以总结pgd_offset_k相当于说从内核页表里读出虚拟地址对应的顶级页表条目的值对应的指针。
+所以总结pgd_offset_k相当于说从内核页表里读出虚拟地址对应的顶级页表条目的值对应的指针。中间的判断是检查顶级pgd指向的条目应该有值，因为其在上面的head_64.S里通过汇编填充，应该是有值的。
+
+继续往下看对p4d_offset的调用：
+#+begin_example
+arch/x86/include/asm/pgtable.h
+
+/* to find an entry in a page-table-directory. */
+static inline p4d_t *p4d_offset(pgd_t *pgd, unsigned long address)
+{
+	if (!pgtable_l5_enabled())
+		return (p4d_t *)pgd;
+	return (p4d_t *)pgd_page_vaddr(*pgd) + p4d_index(address);
+}
+#+end_example
+AMD桌面上一般没有启动5级页表（cat /proc/self/maps只看到12个非0字符，一个4bit，共48bit），所以走后面的语句：
+#+begin_example
+arch/x86/include/asm/pgtable.h
+
+static inline unsigned long pgd_page_vaddr(pgd_t pgd)
+{
+	return (unsigned long)__va((unsigned long)pgd_val(pgd) & PTE_PFN_MASK);
+}
+#+end_example
+#+begin_example
+arch/x86/include/asm/page.h
+
+#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+#+end_example
+#+begin_example
+arch/x86/include/asm/page_types.h
+
+#define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
+#+end_example
+#+begin_example
+arch/x86/include/asm/page_64_types.h
+
+#define __PAGE_OFFSET           page_offset_base
+#+end_example
+page_offset_base会在arch/x86/mm/kaslr.c进行随机化，所以最终PAGE_OFFSET的值也是不固定会有随机性，在crash里可以知道page_offset_base的值：
+#+begin_example
+crash> p/x page_offset_base
+$38 = 0xffff8a92c0000000
+#+end_example
+*pgd其实是取出pgd对应的页表条目里的值，里面存放了所有p4d条目所在的物理基地址，取出来值后还要和PTE_PFN_MASK做与，和前面介绍PTE_PFN_MASK类似，目的也是去除页表条目值的高位无效部分以及低位标志位部分。得到的这个物理地址再通过__va转换得到虚拟地址，因为cpu后面再往下访问多级页表时，需要访问这个地址，cpu再开启了MMU分页，只能通过虚拟地址来访存。这样最终返回的这个p4d_page地址为：
+#+begin_example
+p4d_page = 0xffff8a92c0000000+0x23ffc5000 = 0xffff8a94fffc5000
+#+end_example
+crash里rd上面的地址，可以得到p4d（pud，四级页表时）这级页表条目的值：
+#+begin_example
+crash> rd 0xffff8a94fffc5000
+ffff8a94fffc5000:  00000001003b8067                    g.;.....
+#+end_example
+这和crash里看到的值是对应的：
+#+begin_example
+   PUD: 23ffc5000 => 1003b8067
+#+end_example
+继续往下分析set_pte_vaddr_p4d：
+#+begin_example
+arch/x86/mm/init_64.c
+
+void set_pte_vaddr_p4d(p4d_t *p4d_page, unsigned long vaddr, pte_t new_pte)
+{
+	p4d_t *p4d = p4d_page + p4d_index(vaddr);
+	pud_t *pud = fill_pud(p4d, vaddr);
+
+	__set_pte_vaddr(pud, vaddr, new_pte);
+}
+#+end_example
+
 
 介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，
 * 一个网卡中断的触发与执行
