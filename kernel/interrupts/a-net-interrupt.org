@@ -876,6 +876,7 @@ SYM_DATA_START_PTI_ALIGNED(init_top_pgt)
 	.fill	PTI_USER_PGD_FILL,8,0
 SYM_DATA_END(init_top_pgt)
 #+end_example
+这里前两个.quad是针对恒等映射建立的，在cpu刚切分页机制时，可能已经有指令是分页机制前预取的，如果没有恒等映射，可能导致问题。最后一个.quad是建立内核高区虚拟地址映射，而level3_ident_pg/level3_kernel_pgt在笔者另外的文章进行分析，它们也定义在arch/x86/include/asm/pgtable_64.h里。
 
 然后在crash里可以知道pgd（init_top_pgt）的值：
 #+begin_example
@@ -960,6 +961,145 @@ void set_pte_vaddr_p4d(p4d_t *p4d_page, unsigned long vaddr, pte_t new_pte)
 }
 #+end_example
 
+p4d_index如下定义：
+#+begin_example
+arch/x86/include/asm/pgtable.h
+
+static inline unsigned long p4d_index(unsigned long address)
+{
+	return (address >> P4D_SHIFT) & (PTRS_PER_P4D - 1);
+}
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable_64_types.h
+
+#define PTRS_PER_P4D		ptrs_per_p4d
+#+end_example
+#+begin_example
+arch/x86/boot/compressed/pgtable_64.c
+
+unsigned int __section(".data") ptrs_per_p4d = 1;
+#+end_example
+在crash里也可以查看变量ptrs_per_p4d，其值为1，这样p4d_index返回0，也就是说p4d这一层默认不存在，p4d和p4d_page相等为0xffff8a94fffc5000，fill_pud定义如下：
+#+begin_example
+arch/x86/mm/init_64.c
+
+static pud_t *fill_pud(p4d_t *p4d, unsigned long vaddr)
+{
+	if (p4d_none(*p4d)) {
+		pud_t *pud = (pud_t *)spp_getpage();
+		p4d_populate(&init_mm, p4d, pud);
+		if (pud != pud_offset(p4d, 0))
+			printk(KERN_ERR "PAGETABLE BUG #01! %p <-> %p\n",
+			       pud, pud_offset(p4d, 0));
+	}
+	return pud_offset(p4d, vaddr);
+}
+#+end_example
+参数p4d实际是一个虚拟地址，里面存放一个页表条目，该条目存放下级页表的物理基地址以及一些可
+能标志位，如果p4d所指向的条目没有值的话，说明很可能这个条目还没有分配物理页以及和flag一起
+构造条目值，是这样的话，就先通过spp_getpage获得下级页表的物理空间（页面），并返回这个物理
+页面对应的虚拟地址为pud：
+#+begin_example
+/*
+ * NOTE: This function is marked __ref because it calls __init function
+ * (alloc_bootmem_pages). It's safe to do it ONLY when after_bootmem == 0.
+ */
+static __ref void *spp_getpage(void)
+{
+	void *ptr;
+
+	if (after_bootmem)
+		ptr = (void *) get_zeroed_page(GFP_ATOMIC);
+	else
+		ptr = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+
+	if (!ptr || ((unsigned long)ptr & ~PAGE_MASK)) {
+		panic("set_pte_phys: cannot allocate page data %s\n",
+			after_bootmem ? "after bootmem" : "");
+	}
+
+	pr_debug("spp_getpage %p\n", ptr);
+
+	return ptr;
+}
+#+end_example
+关于__ref简单介绍下，内核镜像里某些段是被init/exit修饰的，这样初始化完成或者/注销时，这些段会被丢弃，这样就可能引出一个潜在的问题，那就是在非init/exit段里用init/exit段里的东西，modpost做了这样的检查，出现这样的情况时就打印警告，但是某些代码确实需要在早期时引用init/exit里的内容，启动完毕正常运行时，又走另外的代码，但它本身可能不在init/exit里，这就需要__ref放入一个单独的段来规避modpost发出的警告，这就是下面的注释说的事情：
+#+begin_example
+/*
+ * modpost check for section mismatches during the kernel build.
+ * A section mismatch happens when there are references from a
+ * code or data section to an init section (both code or data).
+ * The init sections are (for most archs) discarded by the kernel
+ * when early init has completed so all such references are potential bugs.
+ * For exit sections the same issue exists.
+ *
+ * The following markers are used for the cases where the reference to
+ * the *init / *exit section (code or data) is valid and will teach
+ * modpost not to issue a warning.  Intended semantics is that a code or
+ * data tagged __ref* can reference code or data from init section without
+ * producing a warning (of course, no warning does not mean code is
+ * correct, so optimally document why the __ref is needed and why it's OK).
+ *
+ * The markers follow same syntax rules as __init / __initdata.
+ */
+#define __ref            __section(".ref.text") noinline
+#+end_example
+有了上面的理解再来看spp_getpage就简单了：
+#+begin_example
+/*
+ * NOTE: This function is marked __ref because it calls __init function
+ * (alloc_bootmem_pages). It's safe to do it ONLY when after_bootmem == 0.
+ */
+static __ref void *spp_getpage(void)
+{
+	void *ptr;
+
+	if (after_bootmem)
+		ptr = (void *) get_zeroed_page(GFP_ATOMIC);
+	else
+		ptr = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+
+	if (!ptr || ((unsigned long)ptr & ~PAGE_MASK)) {
+		panic("set_pte_phys: cannot allocate page data %s\n",
+			after_bootmem ? "after bootmem" : "");
+	}
+
+	pr_debug("spp_getpage %p\n", ptr);
+
+	return ptr;
+}
+#+end_example
+启动阶段使用memblock内存分配器，memblock_alloc函数，启动完成后使用buddy system提供的get_zeroed_page。
+然后通过p4d_populate将条目值设置到p4d指向的条目上：
+#+begin_example
+arch/x86/include/asm/pgalloc.h
+
+static inline void p4d_populate(struct mm_struct *mm, p4d_t *p4d, pud_t *pud)
+{
+	paravirt_alloc_pud(mm, __pa(pud) >> PAGE_SHIFT);
+	set_p4d(p4d, __p4d(_PAGE_TABLE | __pa(pud)));
+}
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable.h
+
+#ifndef set_p4d
+# define set_p4d(p4dp, p4d)		native_set_p4d(p4dp, p4d)
+#endif
+#+end_example
+_PAGE_TABLE是一个常见的用于非底层pte页表条目的标志组合：
+#+begin_example
+/*
+ * Page tables needs to have Write=1 in order for any lower PTEs to be
+ * writable. This includes shadow stack memory (Write=0, Dirty=1)
+ */
+
+#define _PAGE_TABLE		 (__PP|__RW|_USR|___A|   0|___D|   0|   0| _ENC)
+#+end_example
+page table权限标志需要可写，这样可以在里面填上指向下级页表的条目。
 
 介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，
+
+
 * 一个网卡中断的触发与执行
