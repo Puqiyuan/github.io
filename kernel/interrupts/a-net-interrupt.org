@@ -1081,13 +1081,6 @@ static inline void p4d_populate(struct mm_struct *mm, p4d_t *p4d, pud_t *pud)
 	set_p4d(p4d, __p4d(_PAGE_TABLE | __pa(pud)));
 }
 #+end_example
-#+begin_example
-arch/x86/include/asm/pgtable.h
-
-#ifndef set_p4d
-# define set_p4d(p4dp, p4d)		native_set_p4d(p4dp, p4d)
-#endif
-#+end_example
 _PAGE_TABLE是一个常见的用于非底层pte页表条目的标志组合：
 #+begin_example
 /*
@@ -1097,7 +1090,58 @@ _PAGE_TABLE是一个常见的用于非底层pte页表条目的标志组合：
 
 #define _PAGE_TABLE		 (__PP|__RW|_USR|___A|   0|___D|   0|   0| _ENC)
 #+end_example
-page table权限标志需要可写，这样可以在里面填上指向下级页表的条目。
+page table权限标志需要可写，这样可以在里面填上指向下级页表的条目。__pa用于将一个内核虚拟地址转换成物理地址：
+#+begin_example
+arch/x86/include/asm/page.h
+
+#ifndef __pa
+#define __pa(x)		__phys_addr((unsigned long)(x))
+#endif
+#+end_example
+#+begin_example
+arch/x86/include/asm/page_64.h
+
+#define __phys_addr(x)		__phys_addr_nodebug(x)
+
+static __always_inline unsigned long __phys_addr_nodebug(unsigned long x)
+{
+	unsigned long y = x - __START_KERNEL_map;
+
+	/* use the carry flag to determine if x was < __START_KERNEL_map */
+	x = y + ((x > y) ? phys_base : (__START_KERNEL_map - PAGE_OFFSET));
+
+	return x;
+}
+#+end_example
+这里__phys_addr_nodebug实际是前面介绍过的__phys_addr_symbol的一个加强版本，对于内核镜像自身的符号，也就是x > __START_KERNEL_map时，使用前面介绍过的转换公式：phy_addr = x
+-__START_KERNEL_map + phy_base，而x < __START_KERNEL_map时，差值y会溢出变得无限大，导致x >
+y不满足，这时返回的phy_addr(x) = x - __START_KERNEL_map + __START_KERNEL_map - PAGE_OFFSET
+= x - PAGE_OFFSET，也就是所有物理内存都会映射在内核空间的虚拟地址在PAGE_OFFSET，这样给定内核空间的虚拟地址，减去PAGE_OFFSET即得物理地址。
+
+__p4d本身不用介绍了，就是拿页表flag标志_PAGE_TABLE和物理地址一起组成一个页表项，继续看代码，
+#+begin_example
+arch/x86/include/asm/pgtable.h
+
+#ifndef set_p4d
+# define set_p4d(p4dp, p4d)		native_set_p4d(p4dp, p4d)
+#endif
+#+end_example
+#+begin_example
+static inline void native_set_p4d(p4d_t *p4dp, p4d_t p4d)
+{
+	pgd_t pgd;
+
+	if (pgtable_l5_enabled() ||
+	    !IS_ENABLED(CONFIG_MITIGATION_PAGE_TABLE_ISOLATION)) {
+		WRITE_ONCE(*p4dp, p4d);
+		return;
+	}
+
+	pgd = native_make_pgd(native_p4d_val(p4d));
+	pgd = pti_set_user_pgtbl((pgd_t *)p4dp, pgd);
+	WRITE_ONCE(*p4dp, native_make_p4d(native_pgd_val(pgd)));
+}
+#+end_example
 
 介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，
 
