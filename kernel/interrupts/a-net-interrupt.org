@@ -1142,8 +1142,76 @@ static inline void native_set_p4d(p4d_t *p4dp, p4d_t p4d)
 	WRITE_ONCE(*p4dp, native_make_p4d(native_pgd_val(pgd)));
 }
 #+end_example
+WRITE_ONCE前面两行是关于pti内核/用户态页表隔离的逻辑，最后一行是设置对应的p4d值到p4dp所指向的位置，这里WRITE_ONCE是一个宏，传入*p4dp这样表达式在宏里展开，实际写的就是p4dp所指向的位置。
 
-介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，
+__set_pte_vaddr里最终的结果就是这样一级级的填充页表，没有分配物理页面时就通过spp_getpage去得到页面，再具体的细节就不详细分析了。最终内核虚拟地址CPU_ENTRY_AREA_RO_IDT_VADDR（或CPU_ENTRY_AREA_RO_IDT，为0xfffffe0000000000）上就映射了idt_table，内核态和用户态都可以访问。
 
+介绍完了cea_set_pte后，这里想验证几个地址转换/映射的最终结果，这可以在crash里去实验，首先可以打印下vtop 0xfffffe0000000000的结果：
+#+begin_example
+crash> vtop 0xfffffe0000000000
+VIRTUAL           PHYSICAL
+fffffe0000000000  5db2d000
 
+PGD DIRECTORY: ffffffffb3422000
+PAGE DIRECTORY: 23ffc5067
+   PUD: 23ffc5000 => 1003b8067
+   PMD: 1003b8000 => 1003b9067
+   PTE: 1003b9000 => 800000005db2d121
+  PAGE: 5db2d000
+
+      PTE         PHYSICAL  FLAGS
+800000005db2d121  5db2d000  (PRESENT|ACCESSED|GLOBAL|NX)
+
+      PAGE        PHYSICAL      MAPPING       INDEX CNT FLAGS
+ffffde8e4176cb40  5db2d000                0        0  1 fffffc0002000 reserved
+#+end_example
+可见，最终这个虚拟地址被映射到了5db2d000这个物理页面，那么想必idt_table这个量就在这个物理页面上，再回过头来看上面的设置页表的过程，其实就是已知了idt_table的物理页面，最后一级的pte值是知道的，只是在建立中间页表条目的值，这样在crash里也可以打印idt_table的映射情况，来验证其对应的物理地址就是5db2d000：
+#+begin_example
+crash> p &idt_table
+$71 = (gate_desc (*)[256]) 0xffffffffb3f2d000 <idt_table>
+crash> vtop 0xffffffffb3f2d000
+VIRTUAL           PHYSICAL
+ffffffffb3f2d000  5db2d000
+
+PGD DIRECTORY: ffffffffb3422000
+PAGE DIRECTORY: 5d027067
+   PUD: 5d027ff0 => 5d028063
+   PMD: 5d028cf8 => 1003ba063
+   PTE: 1003ba968 => 800000005db2d121
+  PAGE: 5db2d000
+
+      PTE         PHYSICAL  FLAGS
+800000005db2d121  5db2d000  (PRESENT|ACCESSED|GLOBAL|NX)
+      PAGE        PHYSICAL      MAPPING       INDEX CNT FLAGS
+ffffde8e4176cb40  5db2d000                0        0  1 fffffc0002000 reserve
+#+end_example
+可见物理地址确实一样，也就是idt_table这个物理地址映射了两个虚拟地址，一个是idt_table本身有个虚拟地址，一个是CPU_ENTRY_AREA_RO_IDT_VADDR（0xfffffe0000000000）。
+
+这里其实访问idt表既能通过idt_table自身有个虚拟地址，也能通过CPU_ENTRY_AREA_RO_IDT_VADDR，但是通过前者的话可能会暴露内核随机化的情况，可以猜到内核偏移的基地址，所以会再映射到这个CPU_ENTRY_AREA_RO_IDT_VADDR虚拟地址上，这样用户态使用sidt/lidt指令得到的是一个固定的且只读的地址，与内核随机化信息无关。但是crash里打印不出RO（read only）位，因为crash里实际只是打印设置为1的位，但是在x86上只读对应的硬件状态位其实就是_PAGE_RW=0。
+
+调用load_idt是将这个0xfffffe0000000000设置到idtr寄存器，进而让修改过的新的中断描述符表生效：
+#+begin_example
+	load_idt(&idt_descr);
+#+end_example
+#+begin_example
+#define load_idt(dtr)				native_load_idt(dtr)
+static __always_inline void native_load_idt(const struct desc_ptr *dtr)
+{
+	asm volatile("lidt %0"::"m" (*dtr));
+}
+#+end_example
+
+idt_setup_apic_and_irq_gates最后还通过set_memory_ro->change_page_attr_clear来将idt_table的_PAGE_RW和_PAGE_DIRTY同时清掉，这样原始的idt_table也就是只读的了，注意这里是同时清掉_PAGE_RW和_PAGE_DIRTY位，避免出现只读页却是脏的。
+#+begin_example
+	/* Make the IDT table read only */
+	set_memory_ro((unsigned long)&idt_table, 1);
+#+end_example
+#+begin_example
+int set_memory_ro(unsigned long addr, int numpages)
+{
+	return change_page_attr_clear(&addr, numpages, __pgprot(_PAGE_RW | _PAGE_DIRTY), 0);
+}
+#+end_example
+
+以上就是x86-64中断描述符表的注册过程。
 * 一个网卡中断的触发与执行
