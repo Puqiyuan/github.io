@@ -1215,3 +1215,80 @@ int set_memory_ro(unsigned long addr, int numpages)
 
 以上就是x86-64中断描述符表的注册过程。
 * 一个网卡中断的触发与执行
+前层已经分析了外部中断的注册，所有外部中断的向量都在irq_entries_start符号处为起始，它们具有相似的结构。SYM_CODE_START符号本身的定义很简单，就是将中断向量号push到栈上，然后jmp跳转到asm_common_interrupt处处理，中断发生时，硬件自动跳转到irq_entries_staret某个具体的向量号对应的条目开始处理，这样事先在这里push vector号，造成的效果就是好像硬件告诉我们的是哪个中断（号）触发了。
+
+下面继续分析asm_common_interrupt的逻辑，分析它之前需要先找到它的定义，这里再重复下前面节其实都提到过的代码，主要是想简明的总结下“一个宏同时被汇编代码和C代码使用的情况”：
+#+begin_example
+arch/x86/include/asm/idtentry.h
+
+/* Device interrupts common/spurious */
+DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	common_interrupt);
+#+end_example
+这个文件可以理解成所有中断定义的统一入口，同样的DECLARE_IDTENTRY_IRQ宏，在处理.c文件和汇编.S文件时有不同的定义：
+#+begin_example
+arch/x86/include/asm/idtentry.h
+
+#ifndef __ASSEMBLER__
+/**
+ * DECLARE_IDTENTRY_ERRORCODE - Declare functions for simple IDT entry points
+ *				Error code pushed by hardware
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Declares three functions:
+ * - The ASM entry point: asm_##func
+ * - The XEN PV trap entry point: xen_##func (maybe unused)
+ * - The C handler called from the ASM entry point
+ *
+ * Same as DECLARE_IDTENTRY, but has an extra error_code argument for the
+ * C-handler.
+ */
+#define DECLARE_IDTENTRY_ERRORCODE(vector, func)			\
+	asmlinkage void asm_##func(void);				\
+	asmlinkage void xen_asm_##func(void);				\
+	__visible void func(struct pt_regs *regs, unsigned long error_code)
+
+/**
+ * DECLARE_IDTENTRY_IRQ - Declare functions for device interrupt IDT entry
+ *			  points (common/spurious)
+ * @vector:	Vector number (ignored for C)
+ * @func:	Function name of the entry point
+ *
+ * Maps to DECLARE_IDTENTRY_ERRORCODE()
+ */
+#define DECLARE_IDTENTRY_IRQ(vector, func)				\
+	DECLARE_IDTENTRY_ERRORCODE(vector, func)
+
+
+#else /* !__ASSEMBLER__ */
+/* Entries for common/spurious (device) interrupts */
+#define DECLARE_IDTENTRY_IRQ(vector, func)				\
+	idtentry_irq vector func
+#+end_example
+可见，对于c文件来说，asm_common_interrupt这些符号只有声明，真正的定义在处理.S文件时，有自
+定义宏汇编idtentry_irq进行展开，这样这个idtentry.h同时会被:
+#+begin_example
+./arch/x86/kernel/idt.c:14:#include <asm/idtentry.h>
+#+end_example
+这样的.c文件包括，也会被：
+#+begin_example
+./arch/x86/entry/entry_64.S:552:#include <asm/idtentry.h>
+#+end_example
+这样的汇编文件包括。但是不同的文件看到的实现不一样，一个只有声明，一个却有定义。这其实正是Linux内核在“同一份描述文件同时服务于C和汇编”的一个经典技巧。一个中断/异常向量，需要两部分内容，一是汇编入口（stub）：CPU 硬件跳进来的第一条指令，保存上下文->调用C handler->恢复->iretq，二是C层handler：真正处理逻辑的函数。这就天然涉及汇编代码+C代码两个世界，但它们可能都需要引用相同的东西，但是在汇编文件里必须给出定义，是因为汇编最终要生成机器码，符号不能只声明；而在C里只需要声明，定义交给汇编文件来提供。
+
+那么本节就是关心其在汇编文件arch/x86/entry/entry_64.S（X86-64架构，对于X86-32是arch/x86/entry/entry_32.S）里的具体实现了：
+#+begin_example
+/*
+ * Interrupt entry/exit.
+ *
+ + The interrupt stubs push (vector) onto the stack, which is the error_code
+ * position of idtentry exceptions, and jump to one of the two idtentry points
+ * (common/spurious).
+ *
+ * common_interrupt is a hotpath, align it to a cache line
+ */
+.macro idtentry_irq vector cfunc
+	.p2align CONFIG_X86_L1_CACHE_SHIFT
+	idtentry \vector asm_\cfunc \cfunc has_error_code=1
+.endm
+#+end_example
