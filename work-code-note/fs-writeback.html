@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2025-09-03 Wed 14:18 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>page cache回写机制</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+<!--/*--><![CDATA[/*><!--*/
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">page cache回写机制</h1>
+<p>
+write syscall在xfs上可以通过如下路径去标记一次脏，以xfs上写一个短串比如hello到文件里可以有
+如下调用路径：
+</p>
+<pre class="example" id="orge379bcd">
+=&gt; __mark_inode_dirty
+=&gt; iomap_write_end.isra.7
+=&gt; iomap_write_actor
+=&gt; iomap_apply
+=&gt; iomap_file_buffered_write
+=&gt; xfs_file_buffered_write
+=&gt; xfs_file_write_iter
+=&gt; new_sync_write
+=&gt; __vfs_write
+=&gt; vfs_write
+=&gt; ksys_write
+=&gt; __arm64_sys_write
+=&gt; el0_svc_handler
+=&gt; el0_svc
+</pre>
+<p>
+最后的__mark_inode_dirty具体的调用路径如下：
+</p>
+<pre class="example" id="orgb825587">
+iomap_write_end-&gt;iomap_write_end_inline-&gt;mark_inode_dirty-&gt;__mark_inode_dirty
+</pre>
+<p>
+在iomap_
+在__mark_inode_dirty里有如下逻辑：
+</p>
+<pre class="example" id="orgaacba71">
+/**
+ * __mark_inode_dirty -	internal function
+ *
+ * @inode: inode to mark
+ * @flags: what kind of dirty (i.e. I_DIRTY_SYNC)
+ *
+ * Mark an inode as dirty. Callers should use mark_inode_dirty or
+ * mark_inode_dirty_sync.
+ *
+ * Put the inode on the super block's dirty list.
+ *
+ * CAREFUL! We mark it dirty unconditionally, but move it onto the
+ * dirty list only if it is hashed or if it refers to a blockdev.
+ * If it was not hashed, it will never be added to the dirty list
+ * even if it is later hashed, as it will have been marked dirty already.
+ *
+ * In short, make sure you hash any inodes _before_ you start marking
+ * them dirty.
+ *
+ * Note that for blockdevs, inode-&gt;dirtied_when represents the dirtying time of
+ * the block-special inode (/dev/hda1) itself.  And the -&gt;dirtied_when field of
+ * the kernel-internal blockdev inode represents the dirtying time of the
+ * blockdev's pages.  This is why for I_DIRTY_PAGES we always use
+ * page-&gt;mapping-&gt;host, so the page-dirtying time is recorded in the internal
+ * blockdev inode.
+ */
+void __mark_inode_dirty(struct inode *inode, int flags)
+{
+	struct super_block *sb = inode-&gt;i_sb;
+	int dirtytime;
+
+	trace_writeback_mark_inode_dirty(inode, flags);
+
+	/*
+	 * Don't do this for I_DIRTY_PAGES - that doesn't actually
+	 * dirty the inode itself
+	 */
+	if (flags &amp; (I_DIRTY_INODE | I_DIRTY_TIME)) {
+		trace_writeback_dirty_inode_start(inode, flags);
+
+		if (sb-&gt;s_op-&gt;dirty_inode)
+			sb-&gt;s_op-&gt;dirty_inode(inode, flags);
+
+		trace_writeback_dirty_inode(inode, flags);
+	}
+	if (flags &amp; I_DIRTY_INODE)
+		flags &amp;= ~I_DIRTY_TIME;
+	dirtytime = flags &amp; I_DIRTY_TIME;
+
+	/*
+	 * Paired with smp_mb() in __writeback_single_inode() for the
+	 * following lockless i_state test.  See there for details.
+	 */
+	smp_mb();
+
+	if (((inode-&gt;i_state &amp; flags) == flags) ||
+	    (dirtytime &amp;&amp; (inode-&gt;i_state &amp; I_DIRTY_INODE)))
+		return;
+
+	if (unlikely(block_dump))
+		block_dump___mark_inode_dirty(inode);
+
+	spin_lock(&amp;inode-&gt;i_lock);
+	if (dirtytime &amp;&amp; (inode-&gt;i_state &amp; I_DIRTY_INODE))
+		goto out_unlock_inode;
+	if ((inode-&gt;i_state &amp; flags) != flags) {
+		const int was_dirty = inode-&gt;i_state &amp; I_DIRTY;
+
+		inode_attach_wb(inode, NULL);
+
+		if (flags &amp; I_DIRTY_INODE)
+			inode-&gt;i_state &amp;= ~I_DIRTY_TIME;
+		inode-&gt;i_state |= flags;
+
+		/*
+		 * If the inode is queued for writeback by flush worker, just
+		 * update its dirty state. Once the flush worker is done with
+		 * the inode it will place it on the appropriate superblock
+		 * list, based upon its state.
+		 */
+		if (inode-&gt;i_state &amp; I_SYNC_QUEUED)
+			goto out_unlock_inode;
+
+		/*
+		 * Only add valid (hashed) inodes to the superblock's
+		 * dirty list.  Add blockdev inodes as well.
+		 */
+		if (!S_ISBLK(inode-&gt;i_mode)) {
+			if (inode_unhashed(inode))
+				goto out_unlock_inode;
+		}
+		if (inode-&gt;i_state &amp; I_FREEING)
+			goto out_unlock_inode;
+
+		/*
+		 * If the inode was already on b_dirty/b_io/b_more_io, don't
+		 * reposition it (that would break b_dirty time-ordering).
+		 */
+		if (!was_dirty) {
+			struct bdi_writeback *wb;
+			struct list_head *dirty_list;
+			bool wakeup_bdi = false;
+
+			wb = locked_inode_to_wb_and_lock_list(inode);
+
+			WARN((wb-&gt;bdi-&gt;capabilities &amp; BDI_CAP_WRITEBACK) &amp;&amp;
+			     !test_bit(WB_registered, &amp;wb-&gt;state),
+			     "bdi-%s not registered\n", bdi_dev_name(wb-&gt;bdi));
+
+			inode-&gt;dirtied_when = jiffies;
+			if (dirtytime)
+				inode-&gt;dirtied_time_when = jiffies;
+
+			if (inode-&gt;i_state &amp; I_DIRTY)
+				dirty_list = &amp;wb-&gt;b_dirty;
+			else
+				dirty_list = &amp;wb-&gt;b_dirty_time;
+
+			wakeup_bdi = inode_io_list_move_locked(inode, wb,
+							       dirty_list);
+
+			spin_unlock(&amp;wb-&gt;list_lock);
+			trace_writeback_dirty_inode_enqueue(inode);
+
+			/*
+			 * If this is the first dirty inode for this bdi,
+			 * we have to wake-up the corresponding bdi thread
+			 * to make sure background write-back happens
+			 * later.
+			 */
+			if (wakeup_bdi &amp;&amp;
+			    (wb-&gt;bdi-&gt;capabilities &amp; BDI_CAP_WRITEBACK))
+				wb_wakeup_delayed(wb);
+			return;
+		}
+	}
+out_unlock_inode:
+	spin_unlock(&amp;inode-&gt;i_lock);
+}
+</pre>
+<p>
+分析这个函数的逻辑，第一次脏写页时会通过wb_wakeup_delayed唤醒回写线程：
+</p>
+<pre class="example" id="orgaf8064a">
+/*
+ * This function is used when the first inode for this wb is marked dirty. It
+ * wakes-up the corresponding bdi thread which should then take care of the
+ * periodic background write-out of dirty inodes. Since the write-out would
+ * starts only 'dirty_writeback_interval' centisecs from now anyway, we just
+ * set up a timer which wakes the bdi thread up later.
+ *
+ * Note, we wouldn't bother setting up the timer, but this function is on the
+ * fast-path (used by '__mark_inode_dirty()'), so we save few context switches
+ * by delaying the wake-up.
+ *
+ * We have to be careful not to postpone flush work if it is scheduled for
+ * earlier. Thus we use queue_delayed_work().
+ */
+void wb_wakeup_delayed(struct bdi_writeback *wb)
+{
+	unsigned long timeout;
+
+	timeout = msecs_to_jiffies(dirty_writeback_interval * 10);
+	spin_lock_bh(&amp;wb-&gt;work_lock);
+	if (test_bit(WB_registered, &amp;wb-&gt;state))
+		queue_delayed_work(bdi_wq, &amp;wb-&gt;dwork, timeout);
+	spin_unlock_bh(&amp;wb-&gt;work_lock);
+}
+</pre>
+<p>
+这里有一个比较关键的参数就是dirty_writeback_interval，dirty_writeback_interval默认是5s，并且可以通过/proc/sys/vm/dirty_writeback_centisecs去配置，它控制了隔多久去唤醒回写线程：
+</p>
+<pre class="example" id="org531c8e2">
+/*
+ * The interval between `kupdate'-style writebacks
+ */
+unsigned int dirty_writeback_interval = 5 * 100; /* centiseconds */
+</pre>
+<p>
+dwork这个延迟工作项在wb_init里初始化，其回调函数为wb_workfn：
+</p>
+<pre class="example" id="org0694fd7">
+INIT_DELAYED_WORK(&amp;wb-&gt;dwork, wb_workfn);
+</pre>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2025-09-03 Wed 14:18</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
