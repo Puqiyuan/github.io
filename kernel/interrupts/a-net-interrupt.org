@@ -1276,8 +1276,26 @@ arch/x86/include/asm/idtentry.h
 #+end_example
 这样的汇编文件包括。但是不同的文件看到的实现不一样，一个只有声明，一个却有定义。这其实正是Linux内核在“同一份描述文件同时服务于C和汇编”的一个经典技巧。一个中断/异常向量，需要两部分内容，一是汇编入口（stub）：CPU 硬件跳进来的第一条指令，保存上下文->调用C handler->恢复->iretq，二是C层handler：真正处理逻辑的函数。这就天然涉及汇编代码+C代码两个世界，但它们可能都需要引用相同的东西，但是在汇编文件里必须给出定义，是因为汇编最终要生成机器码，符号不能只声明；而在C里只需要声明，定义交给汇编文件来提供。
 
-那么本节就是关心其在汇编文件arch/x86/entry/entry_64.S（X86-64架构，对于X86-32是arch/x86/entry/entry_32.S）里的具体实现了：
+下面继续研究asm_common_interrupt实现，首先根据前面的反汇编：
 #+begin_example
+ffffffff81e00230:       f3 0f 1e fa             endbr64
+ffffffff81e00234:       6a 20                   push   $0x20
+ffffffff81e00236:       e9 05 13 00 00          jmp    ffffffff81e01540 <asm_common_interrupt>
+ffffffff81e0023b:       cc                      int3
+ffffffff81e0023c:       cc                      int3
+ffffffff81e0023d:       cc                      int3
+ffffffff81e0023e:       cc                      int3
+ffffffff81e0023f:       cc                      int3
+#+end_example
+需要找到asm_common_interrupt的实现，本节就是关心其在汇编文件arch/x86/entry/entry_64.S（X86-64架构，对于X86-32是arch/x86/entry/entry_32.S）里的具体实现了：
+#+begin_example
+#define DECLARE_IDTENTRY_IRQ(vector, func)				\
+	idtentry_irq vector func
+#+end_example
+idtentry_irq在entry_64.S实现如下：
+#+begin_example
+arch/x86/entry/entry_64.S
+
 /*
  * Interrupt entry/exit.
  *
