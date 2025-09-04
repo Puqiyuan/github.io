@@ -1289,6 +1289,19 @@ ffffffff81e0023f:       cc                      int3
 #+end_example
 需要找到asm_common_interrupt的实现，本节就是关心其在汇编文件arch/x86/entry/entry_64.S（X86-64架构，对于X86-32是arch/x86/entry/entry_32.S）里的具体实现了：
 #+begin_example
+/* Device interrupts common/spurious */
+DECLARE_IDTENTRY_IRQ(X86_TRAP_OTHER,	common_interrupt);
+#+end_example
+#+begin_example
+/*
+ * Dummy trap number so the low level ASM macro vector number checks do not
+ * match which results in emitting plain IDTENTRY stubs without bells and
+ * whistles.
+ */
+#define X86_TRAP_OTHER		0xFFFF
+#+end_example
+这里X86_TRAP_OTHER只是一个占位符，实际的vector number在更早的irq_entries_start里push到栈上了，继续看代码实现：
+#+begin_example
 #define DECLARE_IDTENTRY_IRQ(vector, func)				\
 	idtentry_irq vector func
 #+end_example
@@ -1310,3 +1323,56 @@ arch/x86/entry/entry_64.S
 	idtentry \vector asm_\cfunc \cfunc has_error_code=1
 .endm
 #+end_example
+.p2align强制下一个符号地址对齐到2^CONFIG_X86_L1_CACHE_SHIFT的边界。CONFIG_X86_L1_CACHE_SHIFT通常是6（意味着64字节对齐），与典型CPU L1 cache line大小一致。这样可以确保中断入口函数落在单独的cache line，减少cache miss和伪共享。
+
+这里可以看到就会有asm_common_interrupt以及common_interrupt符号了，在idtentry里会进一步定义asm_common_interrupt符号，但是common_interrupt作为一个C函数，其实现在另外的地方，稍后分析，先继续往下看idtentry：
+#+begin_example
+/**
+ * idtentry - Macro to generate entry stubs for simple IDT entries
+ * @vector:		Vector number
+ * @asmsym:		ASM symbol for the entry point
+ * @cfunc:		C function to be called
+ * @has_error_code:	Hardware pushed error code on stack
+ *
+ * The macro emits code to set up the kernel context for straight forward
+ * and simple IDT entries. No IST stack, no paranoid entry checks.
+ */
+.macro idtentry vector asmsym cfunc has_error_code:req
+SYM_CODE_START(\asmsym)
+
+	.if \vector == X86_TRAP_BP
+		/* #BP advances %rip to the next instruction */
+		UNWIND_HINT_IRET_ENTRY offset=\has_error_code*8 signal=0
+	.else
+		UNWIND_HINT_IRET_ENTRY offset=\has_error_code*8
+	.endif
+
+	ENDBR
+	ASM_CLAC
+	cld
+
+	.if \has_error_code == 0
+		pushq	$-1			/* ORIG_RAX: no syscall to restart */
+	.endif
+
+	.if \vector == X86_TRAP_BP
+		/*
+		 * If coming from kernel space, create a 6-word gap to allow the
+		 * int3 handler to emulate a call instruction.
+		 */
+		testb	$3, CS-ORIG_RAX(%rsp)
+		jnz	.Lfrom_usermode_no_gap_\@
+		.rept	6
+		pushq	5*8(%rsp)
+		.endr
+		UNWIND_HINT_IRET_REGS offset=8
+.Lfrom_usermode_no_gap_\@:
+	.endif
+
+	idtentry_body \cfunc \has_error_code
+
+_ASM_NOKPROBE(\asmsym)
+SYM_CODE_END(\asmsym)
+.endm
+#+end_example
+首先展开SYM_CODE_START知道其就是
