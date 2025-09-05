@@ -1375,4 +1375,25 @@ _ASM_NOKPROBE(\asmsym)
 SYM_CODE_END(\asmsym)
 .endm
 #+end_example
-首先展开SYM_CODE_START知道其就是
+这里可以先贴下反汇编出来的asm_common_interrupt实现：
+#+begin_example
+ffffffff81e01540 <asm_common_interrupt>:
+ffffffff81e01540:	f3 0f 1e fa          	endbr64
+ffffffff81e01544:	90                   	nop
+ffffffff81e01545:	90                   	nop
+ffffffff81e01546:	90                   	nop
+ffffffff81e01547:	fc                   	cld
+ffffffff81e01548:	e8 e3 06 00 00       	call   ffffffff81e01c30 <error_entry>
+ffffffff81e0154d:	48 89 c4             	mov    %rax,%rsp
+ffffffff81e01550:	48 89 e7             	mov    %rsp,%rdi
+ffffffff81e01553:	48 8b 74 24 78       	mov    0x78(%rsp),%rsi
+ffffffff81e01558:	48 c7 44 24 78 ff ff 	movq   $0xffffffffffffffff,0x78(%rsp)
+ffffffff81e0155f:	ff ff 
+ffffffff81e01561:	e8 5a 0c ef ff       	call   ffffffff81cf21c0 <common_interrupt>
+ffffffff81e01566:	e9 05 08 00 00       	jmp    ffffffff81e01d70 <error_return>
+ffffffff81e0156b:	66 66 2e 0f 1f 84 00 	data16 cs nopw 0x0(%rax,%rax,1)
+ffffffff81e01572:	00 00 00 00 
+ffffffff81e01576:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+ffffffff81e0157d:	00 00 00
+#+end_example
+然后可以对照上面的反汇编分析前面的汇编实现，首先展开SYM_CODE_START知道其就是用.global定义一个全局符号，当然还有其它一些对齐等属性。
