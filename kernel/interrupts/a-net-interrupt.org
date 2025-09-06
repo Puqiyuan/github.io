@@ -1327,6 +1327,8 @@ arch/x86/entry/entry_64.S
 
 这里可以看到就会有asm_common_interrupt以及common_interrupt符号了，在idtentry里会进一步定义asm_common_interrupt符号，但是common_interrupt作为一个C函数，其实现在另外的地方，稍后分析，先继续往下看idtentry：
 #+begin_example
+arch/x86/entry/entry_64.S
+
 /**
  * idtentry - Macro to generate entry stubs for simple IDT entries
  * @vector:		Vector number
@@ -1397,3 +1399,60 @@ ffffffff81e01576:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
 ffffffff81e0157d:	00 00 00
 #+end_example
 然后可以对照上面的反汇编分析前面的汇编实现，首先展开SYM_CODE_START知道其就是用.global定义一个全局符号，当然还有其它一些对齐等属性。
+
+开头的if-else逻辑主要是在生成IDT异常入口时，给ORC unwinder提供正确的栈回溯信息。特别是对#BP（breakpoint，调试断点异常）做特殊处理，因为它的RIP行为和其他异常不同。
+
+ENDBR前面介绍过了，继续看ASM_CLAC的作用，ASM_CLAC实际也根据当前处理的是否是汇编.S还是.c文件有不同的定义，但是不论哪种定义它们的作用类似，这里先针对.S引用的定义进行分析，.c版本引用时的定义最后贴下，原理一样：
+#+begin_example
+arch/x86/include/asm/smap.h
+
+#ifdef __ASSEMBLER__
+
+#define ASM_CLAC \
+	ALTERNATIVE "", "clac", X86_FEATURE_SMAP
+#+end_example
+
+#+begin_example
+arch/x86/include/asm/alternative.h
+
+/*
+ * Issue one struct alt_instr descriptor entry (need to put it into
+ * the section .altinstructions, see below). This entry contains
+ * enough information for the alternatives patching code to patch an
+ * instruction. See apply_alternatives().
+ */
+.macro altinstr_entry orig alt ft_flags orig_len alt_len
+	.long \orig - .
+	.long \alt - .
+	.4byte \ft_flags
+	.byte \orig_len
+	.byte \alt_len
+.endm
+
+/*
+ * Define an alternative between two instructions. If @feature is
+ * present, early code in apply_alternatives() replaces @oldinstr with
+ * @newinstr. ".skip" directive takes care of proper instruction padding
+ * in case @newinstr is longer than @oldinstr.
+ */
+#define __ALTERNATIVE(oldinst, newinst, flag)				\
+740:									\
+	oldinst	;							\
+741:									\
+	.skip -(((744f-743f)-(741b-740b)) > 0) * ((744f-743f)-(741b-740b)),0x90	;\
+742:									\
+	.pushsection .altinstructions,"a" ;				\
+	altinstr_entry 740b,743f,flag,742b-740b,744f-743f ;		\
+	.popsection ;							\
+	.pushsection .altinstr_replacement,"ax"	;			\
+743:									\
+	newinst	;							\
+744:									\
+	.popsection ;
+
+.macro ALTERNATIVE oldinstr, newinstr, ft_flags
+	__ALTERNATIVE(\oldinstr, \newinstr, \ft_flags)
+.endm
+#+end_example
+首先看__ALTERNATIVE宏的实现，
+
