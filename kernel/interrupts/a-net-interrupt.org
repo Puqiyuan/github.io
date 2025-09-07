@@ -1454,5 +1454,6 @@ arch/x86/include/asm/alternative.h
 	__ALTERNATIVE(\oldinstr, \newinstr, \ft_flags)
 .endm
 #+end_example
-首先看__ALTERNATIVE宏的实现，
+首先看__ALTERNATIVE宏的实现，在740标签处放置旧指令(oldinst)，这里是默认会执行的指令。741标签处使用skip的作用是，如果newinst比oldinst长，就用nop(0x90)把旧指令区域填充到新指令的长度，保证指令空间足够容纳替换，注意这里算长度的方法，新指令的长度用(744f-743f)算出，因为743-744标签之间就是新指令，而旧指令的长度用(741b-740b)算出，因为741-742标签处就是旧指令，这里b和f的区别就是b是skip指令之后已经出现过的用backward，而f就是skip指令之前在skip之前出现用forward。742标签的最后一行使用pushsection将743处的新指令放到altinstr_replacement段，这样等内核启动时apply_alternatives会根据CPU特性拷贝这里的指令替换掉旧的。而742标签下的altinstr_entry宏用来向altinstructions段写入一个altinstr_entry描述符，记录了：旧指令位置、替换指令位置、CPU feature flag、长度等。整个机制的关键是，编译时准备+运行时替换的机制。默认情况下，执行的始终是旧指令；只有在apply_alternatives判断CPU支持时，才会改写为新指令。通过.altinstructions和 .altinstr_replacement两个特殊段把“原始代码”和“可替换代码”分开存放。nop补齐是为了避免新指令更长导致patch覆盖邻近代码。
 
+查看前面的asm_common_interrupt反汇编，可以知道X86_FEATURE_SMAP这个feature是没有打开的，因为这里就是三个nop，定义ASM_CLAC时ALTERNATIVE后的""就是nop指令，那么这个是什么feature呢？首先clac指令会清除EFLAGS寄存器中的AC（Alignment Check）标志位，这样会关闭对用户态数据访问的对齐检查。另外如果CR4寄存器中的SMAP(Supervisor Mode Access Prevention)位被设置，那么clac还会使内核态（特权态）显式访问用户态页面的能力被禁止。
