@@ -1457,3 +1457,128 @@ arch/x86/include/asm/alternative.h
 首先看__ALTERNATIVE宏的实现，在740标签处放置旧指令(oldinst)，这里是默认会执行的指令。741标签处使用skip的作用是，如果newinst比oldinst长，就用nop(0x90)把旧指令区域填充到新指令的长度，保证指令空间足够容纳替换，注意这里算长度的方法，新指令的长度用(744f-743f)算出，因为743-744标签之间就是新指令，而旧指令的长度用(741b-740b)算出，因为741-742标签处就是旧指令，这里b和f的区别就是b是skip指令之后已经出现过的用backward，而f就是skip指令之前在skip之前出现用forward。742标签的最后一行使用pushsection将743处的新指令放到altinstr_replacement段，这样等内核启动时apply_alternatives会根据CPU特性拷贝这里的指令替换掉旧的。而742标签下的altinstr_entry宏用来向altinstructions段写入一个altinstr_entry描述符，记录了：旧指令位置、替换指令位置、CPU feature flag、长度等。整个机制的关键是，编译时准备+运行时替换的机制。默认情况下，执行的始终是旧指令；只有在apply_alternatives判断CPU支持时，才会改写为新指令。通过.altinstructions和 .altinstr_replacement两个特殊段把“原始代码”和“可替换代码”分开存放。nop补齐是为了避免新指令更长导致patch覆盖邻近代码。
 
 查看前面的asm_common_interrupt反汇编，可以知道X86_FEATURE_SMAP这个feature是没有打开的，因为这里就是三个nop，定义ASM_CLAC时ALTERNATIVE后的""就是nop指令，那么这个是什么feature呢？首先clac指令会清除EFLAGS寄存器中的AC（Alignment Check）标志位，这样会关闭对用户态数据访问的对齐检查。另外如果CR4寄存器中的SMAP(Supervisor Mode Access Prevention)位被设置，那么clac还会使内核态（特权态）显式访问用户态页面的能力被禁止。
+
+
+cld指令将方向标志位(DF, Direction Flag)清零，影响的DF位于EFLAGS寄存器中，它用于控制字符串操作指令的方向，如果 DF=0，字符串操作指令（如 MOVS, CMPS, STOS, LODS, SCAS等）会从内存的低地址向高地址方向处理。如果DF = 1，字符串操作指令会从高地址向低地址方向处理。在字符串操作前，通常会使用cld来确保字符串操作是按从低地址到高地址的顺序进行（默认行为），与之相反作用的指令是cli。
+
+随后判断该异常是否带有error code，如果没有这里主动pushq -1值到栈上，不同的异常分情况是否带有error code，intel sdm vol3 6.3.1有表展示了哪些异常有error code，哪些没有，典型的比如vector 14为Page Fault有error code，而vector 0为Divide Error不带error code，intel sdm vol3 6.13介绍了error code的格式，那么这里pushq -1主要是为了保持栈结构布局在硬件是否push error
+code都是统一的，异常/中断发生时，硬件其实会自动往栈上push一些寄存器，并且如果被中断的程序（procedure）和中断处理的handler的权限级别不一样的话，比如前者在用户态后者在内核态（中断handler肯定在内核态执行），这时涉及用户栈往内核栈切换，这样截止pushq -1（这时软件代码中断handler压栈的）时，栈上的内容如下，此图来自intel sdm vol3 6.12.1：
+#+CAPTION: 中断/异常发生时栈情况
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/interrupt-stack-push.png]]
+
+再往下看是针对在内核态时触发int3调试异常时，需要在栈上多开出6 * 8字节的内容，这样可以模拟call指令，当然前提是int3调试的正是一条call指令。testb从栈上去取cs寄存器的值，从上图中可以看到cs寄存器在rsp + 16的位置，但是这里使用CS-ORIG_RAX这样一个offset，这个差值其实正好就是16：
+#+begin_example
+#define ORIG_RAX 120
+#define CS 136
+#+end_example
+这些宏其实就是pt_regs里结构体的偏移，此时栈顶指向oirg_rax（或error code，有的话），它可以用来保存syscall number，pr_regs的布局也就是栈上寄存器的布局，将来栈上构造好了完全的一个pt_regs后可以用如下宏来访问对应异常发生时各种寄存器的值（截至目前pushq -1还是如上图主要由硬件压栈的，还无法直接用这些宏索引寄存器）：
+#+begin_example
+/*
+ * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
+ * unless syscall needs a complete, fully filled "struct pt_regs".
+ */
+#define R15 0
+#define R14 8
+#define R13 16
+#define R12 24
+#define RBP 32
+#define RBX 40
+/* These regs are callee-clobbered. Always saved on kernel entry. */
+#define R11 48
+#define R10 56
+#define R9 64
+#define R8 72
+#define RAX 80
+#define RCX 88
+#define RDX 96
+#define RSI 104
+#define RDI 112
+/*
+ * On syscall entry, this is syscall#. On CPU exception, this is error code.
+ * On hw interrupt, it's IRQ number:
+ */
+#define ORIG_RAX 120
+/* Return frame for iretq */
+#define RIP 128
+#define CS 136
+#define EFLAGS 144
+#define RSP 152
+#define SS 160
+#endif /* __ASSEMBLER__ */
+
+/* top of stack page */
+#define FRAME_SIZE 168
+#+end_example
+#+begin_example
+struct pt_regs {
+	/*
+	 * C ABI says these regs are callee-preserved. They aren't saved on
+	 * kernel entry unless syscall needs a complete, fully filled
+	 * "struct pt_regs".
+	 */
+	unsigned long r15;
+	unsigned long r14;
+	unsigned long r13;
+	unsigned long r12;
+	unsigned long bp;
+	unsigned long bx;
+
+	/* These regs are callee-clobbered. Always saved on kernel entry. */
+	unsigned long r11;
+	unsigned long r10;
+	unsigned long r9;
+	unsigned long r8;
+	unsigned long ax;
+	unsigned long cx;
+	unsigned long dx;
+	unsigned long si;
+	unsigned long di;
+
+	/*
+	 * orig_ax is used on entry for:
+	 * - the syscall number (syscall, sysenter, int80)
+	 * - error_code stored by the CPU on traps and exceptions
+	 * - the interrupt number for device interrupts
+	 *
+	 * A FRED stack frame starts here:
+	 *   1) It _always_ includes an error code;
+	 *
+	 *   2) The return frame for ERET[US] starts here, but
+	 *      the content of orig_ax is ignored.
+	 */
+	unsigned long orig_ax;
+
+	/* The IRETQ return frame starts here */
+	unsigned long ip;
+
+	union {
+		/* CS selector */
+		u16		cs;
+		/* The extended 64-bit data slot containing CS */
+		u64		csx;
+		/* The FRED CS extension */
+		struct fred_cs	fred_cs;
+	};
+
+	unsigned long flags;
+	unsigned long sp;
+
+	union {
+		/* SS selector */
+		u16		ss;
+		/* The extended 64-bit data slot containing SS */
+		u64		ssx;
+		/* The FRED SS extension */
+		struct fred_ss	fred_ss;
+	};
+
+	/*
+	 * Top of stack on IDT systems, while FRED systems have extra fields
+	 * defined above for storing exception related information, e.g. CR2 or
+	 * DR6.
+	 */
+};
+#+end_example
+继续往下看identry汇编，
