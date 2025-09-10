@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+<!-- 2025-09-10 Wed 12:05 -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hrtimer引起hard lockup分析</title>
+<meta name="generator" content="Org mode">
+<meta name="author" content="Cauchy(pqy7172@gmail.com)">
+<link rel="stylesheet" href="../org-manual.css" type="text/css">
+<script type="text/javascript">
+// @license magnet:?xt=urn:btih:1f739d935676111cfff4b4693e3816e664797050&amp;dn=gpl-3.0.txt GPL-v3-or-Later
+<!--/*--><![CDATA[/*><!--*/
+     function CodeHighlightOn(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.add("code-highlighted");
+         target.classList.add("code-highlighted");
+       }
+     }
+     function CodeHighlightOff(elem, id)
+     {
+       var target = document.getElementById(id);
+       if(null != target) {
+         elem.classList.remove("code-highlighted");
+         target.classList.remove("code-highlighted");
+       }
+     }
+    /*]]>*///-->
+// @license-end
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">hrtimer引起hard lockup分析</h1>
+<p>
+打印“Watchdog detected hard LOCKUP on acpu”在watchdog_overflow_callback里实现，这个函数在nmi不可屏蔽中断处理的路径上触发，相当于一个检查“心跳”的功能：
+</p>
+<pre class="example" id="orgdfaaf4d">
+=&gt; watchdog_overflow_callback
+=&gt; __perf_event_overflow
+=&gt; x86_pmu_handle_irq
+=&gt; amd_pmu_handle_irq
+=&gt; perf_event_nmi_handler
+=&gt; nmi_handle
+=&gt; default_do_nmi
+=&gt; do_nmi
+=&gt; nmi
+</pre>
+<p>
+而控制上面那个串打印的关键逻辑就是watchdog_overflow_callback-&gt;is_hardlockup：
+</p>
+<pre class="example" id="org42e7444">
+/* watchdog detector functions */
+bool is_hardlockup(void)
+{
+    unsigned long hrint = __this_cpu_read(hrtimer_interrupts);
+
+    if (__this_cpu_read(hrtimer_interrupts_saved) == hrint)
+        return true;
+
+    __this_cpu_write(hrtimer_interrupts_saved, hrint);
+    return false;
+}
+</pre>
+<p>
+可见，就是读取hrtimer_interrupts这个per-cpu量，和上次对比看是否变化，没有变化说明“心跳”停止，那么这里的“心跳”具体指的是什么呢？或者换个问题，hrtimer_interrupts在什么路径下递增？答案是watchdog_timer_fn-&gt;watchdog_interrupt_count：
+</p>
+<pre class="example" id="org6a0d353">
+static void watchdog_interrupt_count(void)
+{
+    __this_cpu_inc(hrtimer_interrupts);
+}
+</pre>
+<p>
+而watchdog_timer_fn在一个时钟中断的路径上触发执行：
+</p>
+<pre class="example" id="org55866f7">
+=&gt; watchdog_timer_fn
+=&gt; __hrtimer_run_queues
+=&gt; hrtimer_interrupt
+=&gt; smp_apic_timer_interrupt
+=&gt; apic_timer_interrupt
+=&gt; native_safe_halt
+=&gt; default_idle
+=&gt; default_idle_call
+=&gt; do_idle
+=&gt; cpu_startup_entry
+=&gt; start_secondary
+=&gt; secondary_startup_64_no_verify
+</pre>
+<p>
+所以这里的“心跳”其实就是普通可屏蔽中断是否还能正常被cpu响应，nmi是不可屏蔽的用来实现这个检测手段。当然watchdog_timer_fn里还会wake up per-cpu上的进程softlockup_watchdog，更新软锁计数，以实现soft lockup的检测功能。
+</p>
+
+<p>
+以上是对hard lockup机制本身的介绍，下面分析本case引起hard lockup的root cause。
+</p>
+
+<p>
+先列出cpu 45以及cpu 49的bt：
+</p>
+<pre class="example" id="orge1bc8df">
+crash&gt; bt -c 45
+PID: 30966    TASK: ff440d5990fdc000  CPU: 45   COMMAND: "CPU 1/KVM"
+ #0 [fffffe0000900a10] machine_kexec at ffffffff8e66556e
+ #1 [fffffe0000900a68] __crash_kexec at ffffffff8e7a5bad
+ #2 [fffffe0000900b30] panic at ffffffff8e6edd97
+ #3 [fffffe0000900bb8] watchdog_overflow_callback.cold.7 at ffffffff8e7dc729
+ #4 [fffffe0000900bc8] __perf_event_overflow at ffffffff8e8695c2
+ #5 [fffffe0000900bf8] handle_pmi_common at ffffffff8e60f647
+ #6 [fffffe0000900de0] intel_pmu_handle_irq at ffffffff8e60f80b
+ #7 [fffffe0000900e38] perf_event_nmi_handler at ffffffff8e60647d
+ #8 [fffffe0000900e50] nmi_handle at ffffffff8e626e03
+ #9 [fffffe0000900ea8] default_do_nmi at ffffffff8ef927c9
+#10 [fffffe0000900ec8] do_nmi at ffffffff8e62733f
+#11 [fffffe0000900ef0] end_repeat_nmi at ffffffff8f0015a4
+    [exception RIP: advance_periodic_target_expiration+77]
+    RIP: ffffffffc0d46d4d  RSP: ff4f88f5d98d8ef0  RFLAGS: 00000046
+    RAX: fff0103f91be678e  RBX: fff0103f91be678e  RCX: 00843a7d9e127bcc
+    RDX: 0000000000000002  RSI: 0052ca4003697505  RDI: ff440d5bfbdbd500
+    RBP: ff440d5956f99200   R8: ff2ff2a42deb6a84   R9: 000000000002a6c0
+    R10: 0122d794016332b3  R11: 0000000000000000  R12: ff440db1af39cfc0
+    R13: ff440db1af39cfc0  R14: ffffffffc0d4a560  R15: ff440db1af39d0f8
+    ORIG_RAX: ffffffffffffffff  CS: 0010  SS: 0018
+--- &lt;NMI exception stack&gt; ---
+#12 [ff4f88f5d98d8ef0] advance_periodic_target_expiration at ffffffffc0d46d4d [kvm]
+#13 [ff4f88f5d98d8f00] apic_timer_fn at ffffffffc0d4a591 [kvm]
+#14 [ff4f88f5d98d8f18] __hrtimer_run_queues at ffffffff8e784900
+#15 [ff4f88f5d98d8f78] hrtimer_interrupt at ffffffff8e7853d0
+#16 [ff4f88f5d98d8fd8] smp_apic_timer_interrupt at ffffffff8f0026ba
+#17 [ff4f88f5d98d8ff0] apic_timer_interrupt at ffffffff8f001c4f
+--- &lt;IRQ stack&gt; ---
+#18 [ff4f88f5f144fc58] apic_timer_interrupt at ffffffff8f001c4f
+    [exception RIP: vcpu_enter_guest+2501]
+    RIP: ffffffffc0d35eb5  RSP: ff4f88f5f144fd00  RFLAGS: 00000206
+    RAX: 0000000000000030  RBX: ff440d5bfbdbd500  RCX: 0122d79401632f1f
+    RDX: 000000000122d794  RSI: ff2ff2a42deb6a84  RDI: ff440d5bfbdbd500
+    RBP: ff4f88f5f144fd98   R8: 0000000000000000   R9: 0000000000000000
+    R10: 0000000000000000  R11: 0000000000000000  R12: 0000000000000000
+    R13: 0000000000000000  R14: 0014975e8048c01a  R15: 0000000000000246
+    ORIG_RAX: ffffffffffffff13  CS: 0010  SS: 0018
+#19 [ff4f88f5f144fda0] kvm_arch_vcpu_ioctl_run at ffffffffc0d3940f [kvm]
+#20 [ff4f88f5f144fdd0] kvm_vcpu_ioctl at ffffffffc0d12738 [kvm]
+#21 [ff4f88f5f144fe80] do_vfs_ioctl at ffffffff8e9552f4
+#22 [ff4f88f5f144fef8] ksys_ioctl at ffffffff8e955930
+#23 [ff4f88f5f144ff30] __x64_sys_ioctl at ffffffff8e955976
+#24 [ff4f88f5f144ff38] do_syscall_64 at ffffffff8e60430b
+#25 [ff4f88f5f144ff50] entry_SYSCALL_64_after_hwframe at ffffffff8f0000ad
+    RIP: 00007f04e094162b  RSP: 00007f04a6ffc628  RFLAGS: 00000246
+    RAX: ffffffffffffffda  RBX: 000055acf74f7240  RCX: 00007f04e094162b
+    RDX: 0000000000000000  RSI: 000000000000ae80  RDI: 0000000000000025
+    RBP: 000055acf75041c0   R8: 000055acf525a948   R9: 0000000000000000
+    R10: 0000000000000000  R11: 0000000000000246  R12: 000055acf503fec0
+    R13: 000055acf528b2a0  R14: 00007ffc83056a50  R15: 00007f04e4027000
+    ORIG_RAX: 0000000000000010  CS: 0033  SS: 002b
+</pre>
+<pre class="example" id="orgdfab631">
+crash&gt; bt -c 49
+PID: 30965    TASK: ff440d57307f8000  CPU: 49   COMMAND: "CPU 0/KVM"
+ #0 [fffffe00009cce48] crash_nmi_callback at ffffffff8e657ce3
+ #1 [fffffe00009cce50] nmi_handle at ffffffff8e626e03
+ #2 [fffffe00009ccea8] default_do_nmi at ffffffff8ef927c9
+ #3 [fffffe00009ccec8] do_nmi at ffffffff8e62733f
+ #4 [fffffe00009ccef0] end_repeat_nmi at ffffffff8f0015a4
+    [exception RIP: __remove_hrtimer+31]
+    RIP: ffffffff8e78444f  RSP: ff4f88f5d99a8f18  RFLAGS: 00000046
+    RAX: ff440d5760b79401  RBX: ff440d5cca6abe10  RCX: ff440db1af41d600
+    RDX: 0000000000000000  RSI: ff440db1af41d020  RDI: ff440d5cca6abe10
+    RBP: ff440db1af41d000   R8: 0000000000000000   R9: 000000000002a6c0
+    R10: 0122d79401628667  R11: 0000000000000000  R12: ff440db1af41cfc0
+    R13: ff440db1af41cfc0  R14: 0000000000000001  R15: ff440db1af41d0f8
+    ORIG_RAX: ffffffffffffffff  CS: 0010  SS: 0018
+--- &lt;NMI exception stack&gt; ---
+ #5 [ff4f88f5d99a8f18] __remove_hrtimer at ffffffff8e78444f
+ #6 [ff4f88f5d99a8f18] __hrtimer_run_queues at ffffffff8e7848e3
+ #7 [ff4f88f5d99a8f78] hrtimer_interrupt at ffffffff8e7853d0
+ #8 [ff4f88f5d99a8fd8] smp_apic_timer_interrupt at ffffffff8f0026ba
+ #9 [ff4f88f5d99a8ff0] apic_timer_interrupt at ffffffff8f001c4f
+--- &lt;IRQ stack&gt; ---
+#10 [ff4f88f5f1447c58] apic_timer_interrupt at ffffffff8f001c4f
+    [exception RIP: vcpu_enter_guest+2501]
+    RIP: ffffffffc0d35eb5  RSP: ff4f88f5f1447d00  RFLAGS: 00000206
+    RAX: 0000000000000030  RBX: ff440d5ba0ae0000  RCX: 0122d79401628207
+    RDX: 000000000122d794  RSI: ff2ff2a42deb6a84  RDI: ff440d5ba0ae0000
+    RBP: ff4f88f5f1447d98   R8: 0000000000000000   R9: 0000000000000000
+    R10: 0000000000000000  R11: 0000000000000000  R12: 0000000000000000
+    R13: 0000000000000000  R14: 0014975e8048c01a  R15: 0000000000000246
+    ORIG_RAX: ffffffffffffff13  CS: 0010  SS: 0018
+#11 [ff4f88f5f1447da0] kvm_arch_vcpu_ioctl_run at ffffffffc0d3940f [kvm]
+#12 [ff4f88f5f1447dd0] kvm_vcpu_ioctl at ffffffffc0d12738 [kvm]
+#13 [ff4f88f5f1447e80] do_vfs_ioctl at ffffffff8e9552f4
+#14 [ff4f88f5f1447ef8] ksys_ioctl at ffffffff8e955930
+#15 [ff4f88f5f1447f30] __x64_sys_ioctl at ffffffff8e955976
+#16 [ff4f88f5f1447f38] do_syscall_64 at ffffffff8e60430b
+#17 [ff4f88f5f1447f50] entry_SYSCALL_64_after_hwframe at ffffffff8f0000ad
+    RIP: 00007f04e094162b  RSP: 00007f04a77fd628  RFLAGS: 00000246
+    RAX: ffffffffffffffda  RBX: 000055acf74be240  RCX: 00007f04e094162b
+    RDX: 0000000000000000  RSI: 000000000000ae80  RDI: 0000000000000024
+    RBP: 000055acf74cc3a0   R8: 000055acf525a948   R9: 0000000000000000
+    R10: 0000000000000000  R11: 0000000000000246  R12: 000055acf503fec0
+    R13: 000055acf528b2a0  R14: 00007ffc83056a50  R15: 00007f04e402a000
+    ORIG_RAX: 0000000000000010  CS: 0033  SS: 002b
+</pre>
+
+<p>
+在vcpu_enter_guest+2501处来了timer中断，反汇编分析这附近的代码：
+</p>
+<pre class="example" id="org8e66b93">
+0xffffffffc0d35ea6 &lt;vcpu_enter_guest+2486&gt;:     mov    %rbx,%gs:0x3f2f8322(%rip)        # 0x2e1d0
+0xffffffffc0d35eae &lt;vcpu_enter_guest+2494&gt;:     sti
+0xffffffffc0d35eaf &lt;vcpu_enter_guest+2495&gt;:    nopw   0x0(%rax,%rax,1)
+0xffffffffc0d35eb5 &lt;vcpu_enter_guest+2501&gt;:    addq   $0x1,0x2038(%rbx)
+</pre>
+<p>
+可以看到sti刚开中断时就来了中断，2501指令实际对应vcpu_enter_guest的如下代码：
+</p>
+<pre class="example" id="org6862da7">
+++vcpu-&gt;stat.exits;
+</pre>
+<p>
+因为0x2038 = 8428，而通过struct -o kvm_vcpu以及struct -o  kvm_vcpu_stat知道偏移8428处正是exits成员，而在vcpu_enter_guest的早些时候有关中断的代码：
+</p>
+<pre class="example" id="orge1f8137">
+/*
+ * Disable IRQs before setting IN_GUEST_MODE.  Posted interrupt
+ * IPI are then delayed after guest entry, which ensures that they
+ * result in virtual interrupt delivery.
+ */
+local_irq_disable();
+</pre>
+<p>
+有没有可能是这里关中断太久呢？目前判断不太可能是vcpu_enter_guest里关local_irq_disable关中断太久，假如是这样，那么nmi检测流程应该紧跟在vcpu_enter_guest之后，而现在cpu 45以及cpu 49的nmi检测超时的栈都是跟在__hrtimer_run_queues之后，应该就是执行hrtimer_interrupt-&gt;__hrtimer_run_queues里的timer handler时处于关中断太久：
+</p>
+<pre class="example" id="org1cb49d5">
+/*
+ * High resolution timer interrupt
+ * Called with interrupts disabled
+ */
+void hrtimer_interrupt(struct clock_event_device *dev)
+</pre>
+<p>
+直接原因需要从__hrtimer_run_queues里入手。
+</p>
+
+<p>
+cpu 45和49都是在__hrtimer_run_queues下处理hrtimer callback回调，提供了很好的对比参照，相当于有两次hard lockup panic crash现场，那么它们会是在处理同一个hrtimer的回调吗？首先cpu 45很好知道崩溃时正在处理哪个hrtimer callback，因为其栈上有apic_timer_fn，而对于cpu 49来说反汇编分析nmi到来时正在执行的函数__remove_hrtimer知道，其正在处理的hrtimer地址就在rdi/rbx，通过以下命令验证知道：
+</p>
+<pre class="example" id="org64f45c8">
+crash&gt; struct hrtimer ff440d5cca6abe10
+struct hrtimer {
+  node = {
+    node = {
+      __rb_parent_color = 18393841470272093712,
+      rb_right = 0x0,
+      rb_left = 0x0
+    },
+    expires = 32729147389809510
+  },
+  _softexpires = 32729147389809510,
+  function = 0xffffffffc0d4a560 &lt;apic_timer_fn&gt;,
+  base = 0xff440db1af41d000,
+  state = 0 '\000',
+  is_rel = 0 '\000',
+  is_soft = 0 '\000',
+  is_hard = 1 '\001',
+  hrtimer_size_rh = 0,
+  _rh = 0x0
+}
+</pre>
+<p>
+其正在处理的hrtimer的回调也是apic_timer_fn。
+</p>
+
+<p>
+结合前面以及对函数apic_timer_fn的分析，apic_timer_fn本身一般不会耗时太久，假如是apic_timer_fn耗时太久，那么cpu 49在nmi到来时的函数逻辑应该位于apic_timer_fn里而不是__remove_hrtimer，__run_hrtimer的代码如下：
+</p>
+<pre class="example" id="org187d160">
+static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
+			  struct hrtimer_clock_base *base,
+			  struct hrtimer *timer, ktime_t *now,
+			  unsigned long flags) __must_hold(&amp;cpu_base-&gt;lock)
+{
+	enum hrtimer_restart (*fn)(struct hrtimer *);
+	bool expires_in_hardirq;
+	int restart;
+
+	lockdep_assert_held(&amp;cpu_base-&gt;lock);
+
+	debug_deactivate(timer);
+	base-&gt;running = timer;
+
+	/*
+	 * Separate the -&gt;running assignment from the -&gt;state assignment.
+	 *
+	 * As with a regular write barrier, this ensures the read side in
+	 * hrtimer_active() cannot observe base-&gt;running == NULL &amp;&amp;
+	 * timer-&gt;state == INACTIVE.
+	 */
+	raw_write_seqcount_barrier(&amp;base-&gt;seq);
+
+	__remove_hrtimer(timer, base, HRTIMER_STATE_INACTIVE, 0);
+	fn = timer-&gt;function;
+
+	/*
+	 * Clear the 'is relative' flag for the TIME_LOW_RES case. If the
+	 * timer is restarted with a period then it becomes an absolute
+	 * timer. If its not restarted it does not matter.
+	 */
+	if (IS_ENABLED(CONFIG_TIME_LOW_RES))
+		timer-&gt;is_rel = false;
+
+	/*
+	 * The timer is marked as running in the CPU base, so it is
+	 * protected against migration to a different CPU even if the lock
+	 * is dropped.
+	 */
+	raw_spin_unlock_irqrestore(&amp;cpu_base-&gt;lock, flags);
+	trace_hrtimer_expire_entry(timer, now);
+	expires_in_hardirq = lockdep_hrtimer_enter(timer);
+
+	restart = fn(timer);
+
+	lockdep_hrtimer_exit(expires_in_hardirq);
+	trace_hrtimer_expire_exit(timer);
+	raw_spin_lock_irq(&amp;cpu_base-&gt;lock);
+
+	/*
+	 * Note: We clear the running state after enqueue_hrtimer and
+	 * we do not reprogram the event hardware. Happens either in
+	 * hrtimer_start_range_ns() or in hrtimer_interrupt()
+	 *
+	 * Note: Because we dropped the cpu_base-&gt;lock above,
+	 * hrtimer_start_range_ns() can have popped in and enqueued the timer
+	 * for us already.
+	 */
+	if (restart != HRTIMER_NORESTART &amp;&amp;
+	    !(timer-&gt;state &amp; HRTIMER_STATE_ENQUEUED))
+		enqueue_hrtimer(timer, base, HRTIMER_MODE_ABS);
+
+	/*
+	 * Separate the -&gt;running assignment from the -&gt;state assignment.
+	 *
+	 * As with a regular write barrier, this ensures the read side in
+	 * hrtimer_active() cannot observe base-&gt;running.timer == NULL &amp;&amp;
+	 * timer-&gt;state == INACTIVE.
+	 */
+	raw_write_seqcount_barrier(&amp;base-&gt;seq);
+
+	WARN_ON_ONCE(base-&gt;running != timer);
+	base-&gt;running = NULL;
+}
+</pre>
+<p>
+可以看到运行fn前先调用__remove_hrtimer-&gt;timerqueue_del将定时器从hrtimer_clock_base::active链表里删除，这正是cpu 49的情况，而cpu 45的情况就是在运行回调fn（apic_timer_fn）里，这里从cpu 49的情况就可以看出apic_timer_fn是可以出来的，不是运行很长的那种。那么可以猜想，应该是一轮一轮不停的运行apic_timer_fn，这种情况的耗时太久。
+</p>
+
+<p>
+根据前面的猜想，应该有一个循环不停入队具有apic_timer_fn回调的这个hrtimer，__run_hrtimer的父函数__hrtimer_run_queues里确实有循环：
+</p>
+<pre class="example" id="orgdf8cb63">
+static void __hrtimer_run_queues(struct hrtimer_cpu_base *cpu_base, ktime_t now,
+				 unsigned long flags, unsigned int active_mask)
+{
+	struct hrtimer_clock_base *base;
+	unsigned int active = cpu_base-&gt;active_bases &amp; active_mask;
+
+	for_each_active_base(base, cpu_base, active) {
+		struct timerqueue_node *node;
+		ktime_t basenow;
+
+		basenow = ktime_add(now, base-&gt;offset);
+
+		while ((node = timerqueue_getnext(&amp;base-&gt;active))) {
+			struct hrtimer *timer;
+
+			timer = container_of(node, struct hrtimer, node);
+
+			/*
+			 * The immediate goal for using the softexpires is
+			 * minimizing wakeups, not running timers at the
+			 * earliest interrupt after their soft expiration.
+			 * This allows us to avoid using a Priority Search
+			 * Tree, which can answer a stabbing querry for
+			 * overlapping intervals and instead use the simple
+			 * BST we already have.
+			 * We don't add extra wakeups by delaying timers that
+			 * are right-of a not yet expired timer, because that
+			 * timer will have to trigger a wakeup anyway.
+			 */
+			if (basenow &lt; hrtimer_get_softexpires_tv64(timer))
+				break;
+
+			__run_hrtimer(cpu_base, base, timer, &amp;basenow, flags);
+			if (active_mask == HRTIMER_ACTIVE_SOFT)
+				hrtimer_sync_wait_running(cpu_base, flags);
+		}
+	}
+}
+</pre>
+<p>
+timerqueue_getnext函数就是从hrtimer_clock_base::active里取出一个个超时的hrtimer，然后调用__run_hrtimer去运行回调，但是在__run_hrtimer里有代码逻辑满足条件时会将hrtimer在运行完回调后又enqueue到hrtimer_clock_base::active：
+</p>
+<pre class="example" id="orgb689f91">
+if (restart != HRTIMER_NORESTART &amp;&amp;
+    !(timer-&gt;state &amp; HRTIMER_STATE_ENQUEUED))
+    enqueue_hrtimer(timer, base, HRTIMER_MODE_ABS);
+</pre>
+<p>
+第二个条件是满足的，因为在稍早时候__run_hrtimer-&gt;__remove_hrtimer时已经将hrtimer::state写成了HRTIMER_STATE_INACTIVE（0）：
+</p>
+<pre class="example" id="org5842ad7">
+__remove_hrtimer(timer, base, HRTIMER_STATE_INACTIVE, 0);
+</pre>
+<pre class="example" id="orgd0eb16e">
+WRITE_ONCE(timer-&gt;state, newstate);
+</pre>
+<p>
+那么第一个条件满足不呢？restart作为apic_timer_fn的返回值，从cpu 45的calltrace情况来看也是满足的，apic_timer_fn实现如下：
+</p>
+<pre class="example" id="org225ac97">
+static enum hrtimer_restart apic_timer_fn(struct hrtimer *data)
+{
+    struct kvm_timer *ktimer = container_of(data, struct kvm_timer, timer);
+    struct kvm_lapic *apic = container_of(ktimer, struct kvm_lapic, lapic_timer);
+
+    apic_timer_expired(apic, true);
+
+    if (lapic_is_periodic(apic)) {
+        advance_periodic_target_expiration(apic);
+        hrtimer_add_expires_ns(&amp;ktimer-&gt;timer, ktimer-&gt;period);
+        return HRTIMER_RESTART;
+    } else
+        return HRTIMER_NORESTART;
+}
+</pre>
+
+<p>
+cpu 45上nmi到来时正在执行的正是advance_periodic_target_expiration函数，那么最后必然返回
+HRTIMER_RESTART，总结来说就是具有apic_timer_fn这个callback的hrtimer在执行完毕后又会入队到hrtimer_clock_base::active。
+</p>
+
+<p>
+前面分析到apic_timer_fn回调执行完后会重新enqueue到hrtimer_clock_base::active里以待下次执行，但是apic_timer_fn返回HRTIMER_RESTART前会将到期时间往前加点apic_timer_fn-&gt;advance_periodic_target_expiration：
+</p>
+<pre class="example" id="org2cf85e0">
+static inline void hrtimer_add_expires_ns(struct hrtimer *timer, u64 ns)
+{
+    timer-&gt;node.expires = ktime_add_ns(timer-&gt;node.expires, ns);
+    timer-&gt;_softexpires = ktime_add_ns(timer-&gt;_softexpires, ns);
+}
+</pre>
+<p>
+而在__hrtimer_run_queues函数里会判断这个到期时间和当前时间比较，当前时间basenow大于节点的到期时间才不会执行break跳过__run_hrtimer，也就是到期了才执行这个hrtimer的callback。
+</p>
+
+<p>
+那么当前时间basenow是多少，apic_timer_fn这个hrtimer到期时间又是多少呢？首先basenow可以通过crash里的timer -r -C 45或timer -r -C 49看到，并且还可以看到当前cpu上的定时器超时情况：
+</p>
+<pre class="example" id="org54e1376">
+crash&gt; timer -r -C 49
+CPU: 49  HRTIMER_CPU_BASE: ff440db1af41cfc0
+  CLOCK: 0  HRTIMER_CLOCK_BASE: ff440db1af41d000  [ktime_get]
+       CURRENT
+  37219008123000000
+     SOFTEXPIRES          EXPIRES              TTE            HRTIMER           FUNCTION
+  37218992804000000  37218992804000000      -15319000000  ff440db1af41d600  ffffffff8e795330  &lt;tick_sched_timer&gt;
+  37218992856218969  37218992856218969      -15266781031  ff440d5760b79470  ffffffffc0d4ba90  &lt;pit_timer_fn&gt;
+  37218996361000000  37218996361000000      -11762000000  ff440db1af41d7e0  ffffffff8e7dbbe0  &lt;watchdog_timer_fn&gt;
+  39366476103259139  39366476203259139  2147468080259139  ff4f88f5db19ba70  ffffffff8e7846b0  &lt;hrtimer_wakeup&gt;
+
+  CLOCK: 1  HRTIMER_CLOCK_BASE: ff440db1af41d040  [ktime_get_real]
+  (empty)
+
+  CLOCK: 2  HRTIMER_CLOCK_BASE: ff440db1af41d080  [ktime_get_boottime]
+  (empty)
+
+  CLOCK: 3  HRTIMER_CLOCK_BASE: ff440db1af41d0c0  [ktime_get_clocktai]
+  (empty)
+
+  CLOCK: 4  HRTIMER_CLOCK_BASE: ff440db1af41d100  [ktime_get]
+  (empty)
+
+  CLOCK: 5  HRTIMER_CLOCK_BASE: ff440db1af41d140  [ktime_get_real]
+  (empty)
+
+  CLOCK: 6  HRTIMER_CLOCK_BASE: ff440db1af41d180  [ktime_get_boottime]
+  (empty)
+
+  CLOCK: 7  HRTIMER_CLOCK_BASE: ff440db1af41d1c0  [ktime_get_clocktai]
+</pre>
+<p>
+上面是cpu 49的例子，cpu 45类似，每个cpu上有八种clock（0-7），这是个什么概念呢？这其实表示了定义的hrtimer，使用哪种计时方式来计量时间流逝，进而可以和到期时间进行比较，在代码里一共有八种方式：
+</p>
+<pre class="example" id="org8ea1344">
+enum  hrtimer_base_type {
+    HRTIMER_BASE_MONOTONIC,
+    HRTIMER_BASE_REALTIME,
+    HRTIMER_BASE_BOOTTIME,
+    HRTIMER_BASE_TAI,
+    HRTIMER_BASE_MONOTONIC_SOFT,
+    HRTIMER_BASE_REALTIME_SOFT,
+    HRTIMER_BASE_BOOTTIME_SOFT,
+    HRTIMER_BASE_TAI_SOFT,
+    HRTIMER_MAX_CLOCK_BASES,
+};
+</pre>
+<p>
+以上就是hrtimer所能拥有的不同时间基准：
+</p>
+
+<p>
+1、MONOTONIC：单调递增时钟（不受系统时间调整影响）。
+</p>
+
+<p>
+2、REALTIME：真实时间时钟（可被 settimeofday 修改）。
+</p>
+
+<p>
+3、BOOTTIME：从系统启动算起，包括休眠的时间。
+</p>
+
+<p>
+4、TAI：国际原子时（类似 realtime，但不受闰秒影响）。
+</p>
+
+<p>
+这四种时钟有hard context和soft context两种版本，硬上下文(HARD)：定时器在硬中断上下文中运行，会即时触发。软上下文(SOFT)定时器推迟到softirq（软中断）上下文中运行，更加灵活，允许延后执行。
+</p>
+
+<p>
+这些type体现在hrtimer_clock_base::index成员上，并且在enqueue_hrtimer时置上hrtimer_clock_base所属的hrtimer_cpu_base的active_base的index位：
+</p>
+<pre class="example" id="org8330744">
+/**
+ * struct hrtimer_clock_base - the timer base for a specific clock
+ * @cpu_base:		per cpu clock base
+ * @index:		clock type index for per_cpu support when moving a
+ *			timer to a base on another cpu.
+ * @clockid:		clock id for per_cpu support
+ * @seq:		seqcount around __run_hrtimer
+ * @running:		pointer to the currently running hrtimer
+ * @active:		red black tree root node for the active timers
+ * @get_time:		function to retrieve the current time of the clock
+ * @offset:		offset of this clock to the monotonic base
+ */
+struct hrtimer_clock_base {
+	struct hrtimer_cpu_base	*cpu_base;
+	unsigned int		index;
+	clockid_t		clockid;
+	RH_KABI_REPLACE(seqcount_t		seq,
+			seqcount_raw_spinlock_t	seq)
+	struct hrtimer		*running;
+	struct timerqueue_head	active;
+	ktime_t			(*get_time)(void);
+	ktime_t			offset;
+} __hrtimer_clock_base_align;
+</pre>
+<pre class="example" id="orgb332557">
+static int enqueue_hrtimer(struct hrtimer *timer,
+			   struct hrtimer_clock_base *base,
+			   enum hrtimer_mode mode)
+{
+	debug_activate(timer, mode);
+
+	base-&gt;cpu_base-&gt;active_bases |= 1 &lt;&lt; base-&gt;index;
+
+	/* Pairs with the lockless read in hrtimer_is_queued() */
+	WRITE_ONCE(timer-&gt;state, HRTIMER_STATE_ENQUEUED);
+
+	return timerqueue_add(&amp;base-&gt;active, &amp;timer-&gt;node);
+}
+</pre>
+<p>
+而在__hrtimer_run_queues里运行哪种clock下的hrtimer是有先后顺序的，__hrtimer_run_queues-&gt;for_each_active_base：
+</p>
+<pre class="example" id="org6f4c42e">
+unsigned int active = cpu_base-&gt;active_bases &amp; active_mask;
+</pre>
+<pre class="example" id="org504657e">
+static struct hrtimer_clock_base *
+__next_base(struct hrtimer_cpu_base *cpu_base, unsigned int *active)
+{
+	unsigned int idx;
+
+	if (!*active)
+		return NULL;
+
+	idx = __ffs(*active);
+	*active &amp;= ~(1U &lt;&lt; idx);
+
+	return &amp;cpu_base-&gt;clock_base[idx];
+}
+
+#define for_each_active_base(base, cpu_base, active)	\
+	while ((base = __next_base((cpu_base), &amp;(active))))
+</pre>
+<p>
+__ffs返回参数中最低有效位的1的位置（bit index，从0开始计数），换句话说八种clock执行顺序就
+是按前面定义的顺序。
+</p>
+
+<p>
+那么apic_timer_fn hrtimer所属哪种clock type呢？以cpu 49为例，根据前面struct hrtimer ff440d5cca6abe10命令的结果知道，apic_timer_fn对应的hrtimer_clock_base地址为0xff440db1af41d000，有：
+</p>
+<pre class="example" id="org08ead2c">
+crash&gt; struct hrtimer_clock_base 0xff440db1af41d000
+struct hrtimer_clock_base {
+  cpu_base = 0xff440db1af41cfc0,
+  index = 0,
+  clockid = 1,
+  {
+    seq = {
+      seqcount = {
+        sequence = 255690622
+      }
+    },
+    rh_kabi_hidden_180 = {
+      seq = {
+        sequence = 255690622
+      }
+    },
+    {&lt;No data fields&gt;}
+  },
+  running = 0xff440d5cca6abe10,
+  active = {
+    {
+      rb_root = {
+        rb_root = {
+          rb_node = 0xff440d5760b79470
+        },
+        rb_leftmost = 0xff440db1af41d600
+      },
+      rh_kabi_hidden_17 = {
+        head = {
+          rb_node = 0xff440d5760b79470
+        },
+        next = 0xff440db1af41d600
+      },
+      {&lt;No data fields&gt;}
+    }
+  },
+  get_time = 0xffffffff8e7872b0 &lt;ktime_get&gt;,
+  offset = 0
+}
+</pre>
+<p>
+可见其index为0，如果到期，会最先被执行。这里提到了“如果到期”，也就是除了apic_timer_fn返回HRTIMER_RESTART要求enqueue_hrtimer作为造成死循环的必要条件，另一个条件就是一enqueue就到期了，也就是前面也出现过的__hrtimer_run_queues函数里下面的条件不被满足：
+</p>
+<pre class="example" id="org54e68e7">
+if (basenow &lt; hrtimer_get_softexpires_tv64(timer))
+	break;
+</pre>
+<p>
+basenow现在知道了应该取CLOCK: 0的CURRENT为37219008123000000，hrtimer_get_softexpire_tv64实现如下：
+</p>
+<pre class="example" id="org0fa4954">
+static inline s64 hrtimer_get_softexpires_tv64(const struct hrtimer *timer)
+{
+	return timer-&gt;_softexpires;
+}
+</pre>
+<p>
+这样按前面cpu 49上hrtimer的地址有_softexpires：
+</p>
+<pre class="example" id="org0f18052">
+crash&gt; struct hrtimer._softexpires ff440d5cca6abe10
+  _softexpires = 32729147389809510,
+</pre>
+<p>
+那么就可以算出apic_timer_fn超时了多久：
+</p>
+<pre class="example" id="orga31472c">
+37219008123000000-32729147389809510 = 4489860733190490ns = 4489860s = 51.96days
+</pre>
+<p>
+超时这么久显然是有问题的，cpu 45情况类似，不过cpu 45需要稍微推下，因为其现场不能直接得到hrtimer地址，在nmi到来时，ip在advance_periodic_target_expiration+77：
+</p>
+<pre class="example" id="orgf175ea3">
+0xffffffffc0d46d27 &lt;advance_periodic_target_expiration+39&gt;:     mov    0xa8(%rbp),%rdi
+0xffffffffc0d46d2e &lt;advance_periodic_target_expiration+46&gt;:     sub    %rcx,%rbx
+0xffffffffc0d46d31 &lt;advance_periodic_target_expiration+49&gt;:     or     %rax,%rsi
+0xffffffffc0d46d34 &lt;advance_periodic_target_expiration+52&gt;:     call   0xffffffffc0d1d670 &lt;kvm_read_l1_tsc&gt;
+0xffffffffc0d46d39 &lt;advance_periodic_target_expiration+57&gt;:     mov    0xa8(%rbp),%rdi
+0xffffffffc0d46d40 &lt;advance_periodic_target_expiration+64&gt;:     mov    %rax,%rsi
+0xffffffffc0d46d43 &lt;advance_periodic_target_expiration+67&gt;:     mov    %rbx,%rax
+0xffffffffc0d46d46 &lt;advance_periodic_target_expiration+70&gt;:     movsbl 0xe22(%rdi),%edx
+0xffffffffc0d46d4d &lt;advance_periodic_target_expiration+77&gt;:     mov    %edx,%ecx
+</pre>
+<p>
+advance_periodic_target_expiration实现如下：
+</p>
+<pre class="example" id="org73a4763">
+static void advance_periodic_target_expiration(struct kvm_lapic *apic)
+{
+	ktime_t now = ktime_get();
+	u64 tscl = rdtsc();
+	ktime_t delta;
+
+	/*
+	 * Synchronize both deadlines to the same time source or
+	 * differences in the periods (caused by differences in the
+	 * underlying clocks or numerical approximation errors) will
+	 * cause the two to drift apart over time as the errors
+	 * accumulate.
+	 */
+	apic-&gt;lapic_timer.target_expiration =
+		ktime_add_ns(apic-&gt;lapic_timer.target_expiration,
+				apic-&gt;lapic_timer.period);
+	delta = ktime_sub(apic-&gt;lapic_timer.target_expiration, now);
+	apic-&gt;lapic_timer.tscdeadline = kvm_read_l1_tsc(apic-&gt;vcpu, tscl) +
+		nsec_to_cycles(apic-&gt;vcpu, delta);
+}
+</pre>
+<p>
++52的指令调用了kvm_read_l1_tsc，+39是在准备调用kvm_read_l1_tsc的第一个参数apic-&gt;vcpu，那么由此推出rbp寄存器里就是apic（kvm_lapic），并且从+39到+77的指令都没有破坏rbp：
+</p>
+<pre class="example" id="org1858e8c">
+crash&gt; p/d 0xa8
+$4 = 168
+crash&gt; struct -o kvm_lapic
+struct kvm_lapic {
+    [0] unsigned long base_address;
+    [8] struct kvm_io_device dev;
+   [16] struct kvm_timer lapic_timer;
+  [160] u32 divide_count;
+  [168] struct kvm_vcpu *vcpu;
+  [176] bool sw_enabled;
+  [177] bool irr_pending;
+  [178] bool lvt0_in_nmi_mode;
+  [180] s16 isr_count;
+  [184] int highest_isr_cache;
+  [192] void *regs;
+  [200] gpa_t vapic_addr;
+  [208] struct gfn_to_hva_cache vapic_cache;
+  [248] unsigned long pending_events;
+  [256] unsigned int sipi_vector;
+}
+SIZE: 264
+</pre>
+<p>
+可以看到+168正是vcpu，有了apic = rbp = ff440d5956f99200，回到调用advance_periodic_target_expiration的父函数apic_timer_fn有如下代码：
+</p>
+<pre class="example" id="org1243061">
+struct kvm_timer *ktimer = container_of(data, struct kvm_timer, timer);
+struct kvm_lapic *apic = container_of(ktimer, struct kvm_lapic, lapic_timer);
+</pre>
+<p>
+这样知道kvm_lapic结构体里有一成员lapic_timer其类型是kvm_timer，这样找到了一个kvm_timer的地址，同时kvm_timer里又有类型为hrtimer的成员timer，这样就找到了最终的hrtimer，不过crash可以直接看kvm_lapic，进而可以看到hrtimer的回调function，因为hrtimer是内嵌在kvm_timer的，而kvm_timer又内嵌在kvm_lapic：
+</p>
+<pre class="example" id="org5fccd4f">
+crash&gt; struct kvm_lapic ff440d5956f99200
+struct kvm_lapic {
+  base_address = 4276092928,
+  dev = {
+    ops = 0xffffffffc0d79160 &lt;apic_mmio_ops&gt;
+  },
+  lapic_timer = {
+    timer = {
+      node = {
+        node = {
+          __rb_parent_color = 18393841455450395152,
+          rb_right = 0x0,
+          rb_left = 0x0
+        },
+        expires = 32733273708189402
+      },
+      _softexpires = 32733273708189402,
+      function = 0xffffffffc0d4a560 &lt;apic_timer_fn&gt;,
+      base = 0xff440db1af39d000,
+      state = 0 '\000',
+      is_rel = 0 '\000',
+      is_soft = 0 '\000',
+      is_hard = 1 '\001',
+      hrtimer_size_rh = 0,
+      _rh = 0x0
+    },
+    period = 1739904,
+</pre>
+<p>
+可以看到其function回调也是apic_timer_fn，并且_softexpires为32733273708189402，做差看超时多久：
+</p>
+<pre class="example" id="org9449465">
+37219008123000000 - 32733273708189402 = 4485734414810598ns = 4485734s = 51.91days
+</pre>
+<p>
+和cpu 49上apic_timer_fn超时情况类似。
+</p>
+
+<p>
+下面想看看apic_timer_fn调用hrtimer_add_expires_ns传入的第二个参数ktimer-&gt;period是多少，因为这个值作为往_softexpires上累加的值，目前怀疑可能太小了，导致每次re-enqueue timer后入队即超时。对于cpu 45来说前面struct kvm_lapic ff440d5956f99200已经列出来了为1739904。对于cpu 49来说前面知道了hrtimer的地址为ff440d5cca6abe10，而timer（类型为hrtimer）作为kvm_timer的第一个成员，可以直接把这个地址当作kvm_timer类型来看待，这样得到kvm_timer::period也为1739904：
+</p>
+<pre class="example" id="org783c551">
+crash&gt; struct kvm_timer.period ff440d5cca6abe10
+  period = 1739904,
+</pre>
+
+<p>
+下面分析下enqueue_hrtimer-&gt;timerqueue_add的逻辑：
+</p>
+<pre class="example" id="org9d909c0">
+bool timerqueue_add(struct timerqueue_head *head, struct timerqueue_node *node)
+{
+	struct rb_node **p = &amp;head-&gt;rb_root.rb_root.rb_node;
+	struct rb_node *parent = NULL;
+	struct timerqueue_node *ptr;
+	bool leftmost = true;
+
+	/* Make sure we don't add nodes that are already added */
+	WARN_ON_ONCE(!RB_EMPTY_NODE(&amp;node-&gt;node));
+
+	while (*p) {
+		parent = *p;
+		ptr = rb_entry(parent, struct timerqueue_node, node);
+		if (node-&gt;expires &lt; ptr-&gt;expires) {
+			p = &amp;(*p)-&gt;rb_left;
+		} else {
+			p = &amp;(*p)-&gt;rb_right;
+			leftmost = false;
+		}
+	}
+	rb_link_node(&amp;node-&gt;node, parent, p);
+	rb_insert_color_cached(&amp;node-&gt;node, &amp;head-&gt;rb_root, leftmost);
+
+	return leftmost;
+}
+</pre>
+<p>
+这里可以看到，插到hrtimer_clock_base::active的位置由hrtimer::node::expires（它一般就和hrtimer::_softexpires相等）决定，小的排在红黑树的最左侧，这样timerqueue_getnext取的也是最左侧的hrtimer：
+</p>
+<pre class="example" id="org70b2be8">
+static inline
+struct timerqueue_node *timerqueue_getnext(struct timerqueue_head *head)
+{
+	struct rb_node *leftmost = rb_first_cached(&amp;head-&gt;rb_root);
+
+	return rb_entry(leftmost, struct timerqueue_node, node);
+}
+
+</pre>
+<p>
+由于现在apic_timer_fn这个hrtimer落后当前时间太多（达51天之久），expires很小，每次增加的period又太小，那么它总是插在红黑树的最左侧，所以就不停的执行它，这也是为什么会看到cpu 45和cpu 49的CLOCK 0上有几个超时10多秒还没有执行的hrtimer。
+</p>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Cauchy(pqy7172@gmail.com)</p>
+<p class="date">Created: 2025-09-10 Wed 12:05</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
