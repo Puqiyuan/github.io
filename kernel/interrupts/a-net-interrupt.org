@@ -1581,4 +1581,180 @@ struct pt_regs {
 	 */
 };
 #+end_example
-继续往下看identry汇编，
+继续往下看identry汇编，以cfunc（common_interrupt），has_error_code作为宏指令参数调用了idtentry_body宏指令，该宏汇编实现如下：
+#+begin_example
+/**
+ * idtentry_body - Macro to emit code calling the C function
+ * @cfunc:		C function to be called
+ * @has_error_code:	Hardware pushed error code on stack
+ */
+.macro idtentry_body cfunc has_error_code:req
+
+	/*
+	 * Call error_entry() and switch to the task stack if from userspace.
+	 *
+	 * When in XENPV, it is already in the task stack, and it can't fault
+	 * for native_iret() nor native_load_gs_index() since XENPV uses its
+	 * own pvops for IRET and load_gs_index().  And it doesn't need to
+	 * switch the CR3.  So it can skip invoking error_entry().
+	 */
+	ALTERNATIVE "call error_entry; movq %rax, %rsp", \
+		    "call xen_error_entry", X86_FEATURE_XENPV
+
+	ENCODE_FRAME_POINTER
+	UNWIND_HINT_REGS
+
+	movq	%rsp, %rdi			/* pt_regs pointer into 1st argument*/
+
+	.if \has_error_code == 1
+		movq	ORIG_RAX(%rsp), %rsi	/* get error code into 2nd argument*/
+		movq	$-1, ORIG_RAX(%rsp)	/* no syscall to restart */
+	.endif
+
+	/* For some configurations \cfunc ends up being a noreturn. */
+	ANNOTATE_REACHABLE
+	call	\cfunc
+
+	jmp	error_return
+.endm
+#+end_example
+这里可以看到，又有一个ALTERNATIVE，依据是否是Xen paravirtual的guest而选择不同的指令运行，这里当然是默认情况call error_entry，error_entry汇编有点长，一点点分析：
+#+begin_example
+arch/x86/entry/entry_64.S
+
+SYM_CODE_START(error_entry)
+	ANNOTATE_NOENDBR
+	UNWIND_HINT_FUNC
+
+	PUSH_AND_CLEAR_REGS save_ret=1
+	ENCODE_FRAME_POINTER 8
+
+	testb	$3, CS+8(%rsp)
+	jz	.Lerror_kernelspace
+
+	/*
+	 * We entered from user mode or we're pretending to have entered
+	 * from user mode due to an IRET fault.
+	 */
+	swapgs
+	FENCE_SWAPGS_USER_ENTRY
+	/* We have user CR3.  Change to kernel CR3. */
+	SWITCH_TO_KERNEL_CR3 scratch_reg=%rax
+	IBRS_ENTER
+	UNTRAIN_RET_FROM_CALL
+
+	leaq	8(%rsp), %rdi			/* arg0 = pt_regs pointer */
+	/* Put us onto the real thread stack. */
+	jmp	sync_regs
+
+	/*
+	 * There are two places in the kernel that can potentially fault with
+	 * usergs. Handle them here.  B stepping K8s sometimes report a
+	 * truncated RIP for IRET exceptions returning to compat mode. Check
+	 * for these here too.
+	 */
+.Lerror_kernelspace:
+	leaq	native_irq_return_iret(%rip), %rcx
+	cmpq	%rcx, RIP+8(%rsp)
+	je	.Lerror_bad_iret
+	movl	%ecx, %eax			/* zero extend */
+	cmpq	%rax, RIP+8(%rsp)
+	je	.Lbstep_iret
+	cmpq	$.Lgs_change, RIP+8(%rsp)
+	jne	.Lerror_entry_done_lfence
+
+	/*
+	 * hack: .Lgs_change can fail with user gsbase.  If this happens, fix up
+	 * gsbase and proceed.  We'll fix up the exception and land in
+	 * .Lgs_change's error handler with kernel gsbase.
+	 */
+	swapgs
+
+	/*
+	 * Issue an LFENCE to prevent GS speculation, regardless of whether it is a
+	 * kernel or user gsbase.
+	 */
+.Lerror_entry_done_lfence:
+	FENCE_SWAPGS_KERNEL_ENTRY
+	CALL_DEPTH_ACCOUNT
+	leaq	8(%rsp), %rax			/* return pt_regs pointer */
+	VALIDATE_UNRET_END
+	RET
+
+.Lbstep_iret:
+	/* Fix truncated RIP */
+	movq	%rcx, RIP+8(%rsp)
+	/* fall through */
+
+.Lerror_bad_iret:
+	/*
+	 * We came from an IRET to user mode, so we have user
+	 * gsbase and CR3.  Switch to kernel gsbase and CR3:
+	 */
+	swapgs
+	FENCE_SWAPGS_USER_ENTRY
+	SWITCH_TO_KERNEL_CR3 scratch_reg=%rax
+	IBRS_ENTER
+	UNTRAIN_RET_FROM_CALL
+
+	/*
+	 * Pretend that the exception came from user mode: set up pt_regs
+	 * as if we faulted immediately after IRET.
+	 */
+	leaq	8(%rsp), %rdi			/* arg0 = pt_regs pointer */
+	call	fixup_bad_iret
+	mov	%rax, %rdi
+	jmp	sync_regs
+SYM_CODE_END(error_entry)
+#+end_example
+有实际指令的是PUSH_AND_CLEAR_REGS宏汇编：
+#+begin_example
+arch/x86/entry/calling.h
+
+.macro PUSH_AND_CLEAR_REGS rdx=%rdx rcx=%rcx rax=%rax save_ret=0 clear_bp=1 unwind_hint=1
+	PUSH_REGS rdx=\rdx, rcx=\rcx, rax=\rax, save_ret=\save_ret unwind_hint=\unwind_hint
+	CLEAR_REGS clear_bp=\clear_bp
+#+end_example
+#+begin_example
+/*
+ * 64-bit system call stack frame layout defines and helpers,
+ * for assembly code:
+ */
+
+.macro PUSH_REGS rdx=%rdx rcx=%rcx rax=%rax save_ret=0 unwind_hint=1
+	.if \save_ret
+	pushq	%rsi		/* pt_regs->si */
+	movq	8(%rsp), %rsi	/* temporarily store the return address in %rsi */
+	movq	%rdi, 8(%rsp)	/* pt_regs->di (overwriting original return address) */
+	/* We just clobbered the return address - use the IRET frame for unwinding: */
+	UNWIND_HINT_IRET_REGS offset=3*8
+	.else
+	pushq   %rdi		/* pt_regs->di */
+	pushq   %rsi		/* pt_regs->si */
+	.endif
+	pushq	\rdx		/* pt_regs->dx */
+	pushq   \rcx		/* pt_regs->cx */
+	pushq   \rax		/* pt_regs->ax */
+	pushq   %r8		/* pt_regs->r8 */
+	pushq   %r9		/* pt_regs->r9 */
+	pushq   %r10		/* pt_regs->r10 */
+	pushq   %r11		/* pt_regs->r11 */
+	pushq	%rbx		/* pt_regs->rbx */
+	pushq	%rbp		/* pt_regs->rbp */
+	pushq	%r12		/* pt_regs->r12 */
+	pushq	%r13		/* pt_regs->r13 */
+	pushq	%r14		/* pt_regs->r14 */
+	pushq	%r15		/* pt_regs->r15 */
+
+	.if \unwind_hint
+	UNWIND_HINT_REGS
+	.endif
+
+	.if \save_ret
+	pushq	%rsi		/* return address on top of stack */
+	.endif
+.endm
+#+end_example
+这里PUSH_REGS里的一串pushq指令主要是保存寄存器现场，中断发生时刻和发生时正在执行的代码都是任意的，error_entry作为中断处理的公共流程，必须保证在中断处理完毕后还给异常发生点时的代码的寄存器现场和中断前一模一样，所以这里将所有15个寄存器都压栈保存，最后的rsp在退栈时也会还原到中断发生前的值，保存是在error_entry，恢复是在error_return。
+
+这里需要细节解释下前几条和最后一条指令，这几条看起来有点绕，
