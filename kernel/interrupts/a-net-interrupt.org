@@ -1757,4 +1757,33 @@ arch/x86/entry/calling.h
 #+end_example
 这里PUSH_REGS里的一串pushq指令主要是保存寄存器现场，中断发生时刻和发生时正在执行的代码都是任意的，error_entry作为中断处理的公共流程，必须保证在中断处理完毕后还给异常发生点时的代码的寄存器现场和中断前一模一样，所以这里将所有15个寄存器都压栈保存，最后的rsp在退栈时也会还原到中断发生前的值，保存是在error_entry，恢复是在error_return。
 
-这里需要细节解释下前几条和最后一条指令，这几条看起来有点绕，
+这里需要细节解释下前几条和最后一条指令，这几条看起来有点绕，先将rsi压栈，这时rsi在栈顶，同时rsp+8了，但是push rsi之前，栈顶存着error_entry函数的返回值，然后用mov指令一是保证栈rsp不动，二是将error_entry的返回值放到rsi，这时需要用rsp+8的位置，因为push rsi时rsp向下生长开出空间减少了8，放到rsi是安全的，因为rsi已经事先压栈了，再往下使用mov将rdi保存到原来存放error_entry返回值的栈位置，因为这个位置已经空出来了，原来这个位置存的是error_entry的返回值，现在它暂移到了rsi，所以栈上的rsp+8可以用来保存rdi了，然后就是正常的push其它寄存器了，最结果就是按pt_regs结构体定义的布局压的15个寄存器，至于最后的rsp寄存器在退栈的时候就还原了。
+
+然后CLEAR_REGS将15个通用寄存器进行异或清零：
+#+begin_example
+.macro CLEAR_REGS clear_bp=1
+	/*
+	 * Sanitize registers of values that a speculation attack might
+	 * otherwise want to exploit. The lower registers are likely clobbered
+	 * well before they could be put to use in a speculative execution
+	 * gadget.
+	 */
+	xorl	%esi,  %esi	/* nospec si  */
+	xorl	%edx,  %edx	/* nospec dx  */
+	xorl	%ecx,  %ecx	/* nospec cx  */
+	xorl	%r8d,  %r8d	/* nospec r8  */
+	xorl	%r9d,  %r9d	/* nospec r9  */
+	xorl	%r10d, %r10d	/* nospec r10 */
+	xorl	%r11d, %r11d	/* nospec r11 */
+	xorl	%ebx,  %ebx	/* nospec rbx */
+	.if \clear_bp
+	xorl	%ebp,  %ebp	/* nospec rbp */
+	.endif
+	xorl	%r12d, %r12d	/* nospec r12 */
+	xorl	%r13d, %r13d	/* nospec r13 */
+	xorl	%r14d, %r14d	/* nospec r14 */
+	xorl	%r15d, %r15d	/* nospec r15 */
+
+.endm
+#+end_example
+这主要是为了安全，防止中断前的现场信息带入到中断句柄里。回到error_entry继续分析，testb指令
