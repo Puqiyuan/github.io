@@ -1786,4 +1786,4 @@ arch/x86/entry/calling.h
 
 .endm
 #+end_example
-这主要是为了安全，防止中断前的现场信息带入到中断句柄里。回到error_entry继续分析，testb指令
+这主要是为了安全，防止中断前的现场信息带入到中断句柄里。回到error_entry继续分析，CS+8对应的栈上的值其实就是中断发生时code segment register的值，这个寄存器的低两位存储当前是运行在内核态还是用户态，testb指令是将3和这个code segment register做按位AND操作，但是这个指令不保存运行结果，只更新标志位比如Zero Flags，如果testb的设置了ZF = 1，说明code segment register的低两位0，之前发生中断/异常时cpu处于内核态代码执行，这样后面的jz会跳到error_kernelspace标志开始执行，否则就是中断/异常发生时cpu处于用户态代码执行（一般code segment register低两位为11），后面紧跟着还有一些处理用户态执行时发生中断的指令，顺延往下分析用户态发生中断时的一些动作。
