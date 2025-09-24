@@ -1,4 +1,4 @@
-#+TITLE:X86-64架构下一个网卡中断的处理流程
+https://github.com/torvalds/linux.githttps://github.com/torvalds/linux.git#+TITLE:X86-64架构下一个网卡中断的处理流程
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
@@ -1786,4 +1786,14 @@ arch/x86/entry/calling.h
 
 .endm
 #+end_example
-这主要是为了安全，防止中断前的现场信息带入到中断句柄里。回到error_entry继续分析，CS+8对应的栈上的值其实就是中断发生时code segment register的值，这个寄存器的低两位存储当前是运行在内核态还是用户态，testb指令是将3和这个code segment register做按位AND操作，但是这个指令不保存运行结果，只更新标志位比如Zero Flags，如果testb的设置了ZF = 1，说明code segment register的低两位0，之前发生中断/异常时cpu处于内核态代码执行，这样后面的jz会跳到error_kernelspace标志开始执行，否则就是中断/异常发生时cpu处于用户态代码执行（一般code segment register低两位为11），后面紧跟着还有一些处理用户态执行时发生中断的指令，顺延往下分析用户态发生中断时的一些动作。
+这主要是为了安全，防止中断前的现场信息带入到中断句柄里。回到error_entry继续分析，CS+8对应的栈上的值其实就是中断发生时code segment register的值，这个寄存器的低两位存储当前是运行在内核态还是用户态，testb指令是将3和这个code segment register做按位AND操作，但是这个指令不保存运行结果，只更新标志位比如Zero Flags，如果testb设置了ZF = 1，说明code segment register的低两位为0，之前发生中断/异常时cpu处于内核态代码执行，这样后面的jz会跳到error_kernelspace标志开始执行，否则就是中断/异常发生时cpu处于用户态代码执行（一般code segment register低两位为11），后面紧跟着还有一些处理用户态执行时发生中断的指令，顺延往下先分析用户态发生中断时的一些动作。
+
+swapgs指令会把当前gs基址寄存器的值和MSR C0000102H（IA32_KERNEL_GS_BASE）中存放的值交换，这是一条特权指令，只能由系统软件（内核）使用。在x86-64体系结构的用户态，gs.base指向用户线程的本地数据区（例如TLS），而对于内核态来说，GS.base通常用来指向per-cpu内核数据结构。用户态切换到内核态时，一开始内核栈还没建立，不能随便访问内存或保存寄存器。但是内核又必须很快找到关键的数据结构（如 per-CPU 数据、当前进程信息）。swapgs就是专门为此设计的，在进入内核时，执行swapgs把gs.base从用户态的“线程局部存储”指针换成内核态的per-cpu数据的基地址，从而让内核能够立即通过gs前缀访问per-CPU或当前任务的关键数据结构，而不依赖栈或寄存器。在返回用户态前，再执行一次swapgs把gs.base换回用户态原来的tls基址。
+
+FENCE_SWAPGS_USER_ENTRY主要处理一个安全问题：
+#+begin_example
+.macro FENCE_SWAPGS_USER_ENTRY
+	ALTERNATIVE "", "lfence", X86_FEATURE_FENCE_SWAPGS_USER
+.endm
+#+end_example
+默认情况是nop指令，lfence三字节长，默认这里填3个字节，那么lfence指令什么作用呢？
