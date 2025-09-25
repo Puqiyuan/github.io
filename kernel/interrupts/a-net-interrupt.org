@@ -1,4 +1,4 @@
-https://github.com/torvalds/linux.githttps://github.com/torvalds/linux.git#+TITLE:X86-64架构下一个网卡中断的处理流程
+#+TITLE:X86-64架构下一个网卡中断的处理流程
 #+AUTHOR: Cauchy(pqy7172@gmail.com)
 #+OPTIONS: ^:nil
 #+EMAIL: pqy7172@gmail.com
