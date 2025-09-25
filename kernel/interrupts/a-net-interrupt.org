@@ -1796,4 +1796,9 @@ FENCE_SWAPGS_USER_ENTRY主要处理一个安全问题：
 	ALTERNATIVE "", "lfence", X86_FEATURE_FENCE_SWAPGS_USER
 .endm
 #+end_example
-默认情况是nop指令，lfence三字节长，默认这里填3个字节，那么lfence指令什么作用呢？
+默认情况是nop指令，lfence三字节长，默认这里填3个字节nop，那么lfence指令什么作用呢？它是一个内存栅栏（memory fence），主要是读屏障（load fence），它保证在它之前的所有内存读取指令都真正完成（取到值），之后的指令才会执行，但是写操作（store）不会被完全序列化，写入可能在LFENCE之后才全局可见。现代CPU会乱序执行指令以提高性能。在弱顺序内存模型下，如果依赖“先读 A，
+再读B”的顺序，可能会被打乱，LFENCE就是强制CPU在读操作之间保持顺序。举个例子，有个线程（Producer）写入数据，然后设置一个标志位（flag=1），另一个线程（Consumer）在检查到 flag=1后，必须读到正确的数据，这里检查flag=1和读数据两者之间就是两个读操作，它们必须有序，如果没有LFENCE，consumer可能乱序读取到flag=1，但数据还没真正更新好。在consumer里加LFENCE可以保证flag检查和数据读取的正确顺序。这里swapgs用于交换用户态和内核态的基址，前面jz跳转指令会有分支预测功能，而swapgs之后有mov指令使用gs访问per-cpu数据：
+#+begin_example
+ffffffff81001c8d:       65 48 8b 15 1b 31 c5    mov    %gs:0x2c5311b(%rip),%rdx        # ffffffff83c54db0 <x86_spec_ctrl_current>
+#+end_example
+这样上面访存指令和swapgs是有顺序的，尤其强调的方面就是mov不能提前到swapgs。
