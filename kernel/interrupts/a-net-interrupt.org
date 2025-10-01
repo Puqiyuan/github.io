@@ -75,7 +75,7 @@ X86-64架构对于中断号的使用是划分了范围的，0x20是外部中断�
 
 所以[0x20, 0xeb)共计203个向量号用于外部设备中断，低于0x20的中断号一般用于处理CPU内部异常，比如除0错误，调试以及Page Fault等，NMI使用的向量号也低于0x20。
 
-使用.byte硬编码push指令的方式
+使用.byte硬编码push指令的方式主要是确保push指令加立即数保持在两个字节，直接用push的伪指令，在立即数超过127时，会符号扩展，将这个push+立即数变成5字节，1字节是push本身，4字节是符号扩展后的32位立即数了，而IDT entry stub需要保持固定大小（IDT_ALIGN 对齐），否则布局错乱，导致中断分发混乱。
 
 最后反汇编vmlinux查看被编译出来的irq_entries_start符号处的指令，就类似下面的模式：
 #+begin_example
@@ -480,6 +480,8 @@ arch/x86/include/asm/idtentry.h
 	idtentry vector asm_##func func has_error_code=1
 #+end_example
 这和前面介绍ipi中断时类似。
+
+注意这里has_error_code为1，就是后面有介绍的orig_ax有值的三种情况之一。
 
 下一个要重点分析的就是idt_map_in_cea函数：
 #+begin_example
@@ -1581,7 +1583,7 @@ struct pt_regs {
 	 */
 };
 #+end_example
-继续往下看identry汇编，以cfunc（common_interrupt），has_error_code作为宏指令参数调用了idtentry_body宏指令，该宏汇编实现如下：
+这里多介绍几句关于orig_ax的作用，其实注释里也说的比较清楚了，orig_ax这个位置有三个作用，一是在系统调用时传递syscall number，二是某些异常由硬件自带error code，这种情况是可以对应到intel sdm vol3关于error code的介绍的，具体在6.13以及Table 6-1，三就是设备发出的中断，也就是本文的主题，这时orig_ax这个位置会存上vector号，当然这个动作不像error code那样是硬件自动做的，而是前面分析过的irq_entries_start里的push指令做的压栈动作，为什么在orig_ax这里有这么多情况呢？这里其实为了统一栈帧的情况，无论硬件压不压error code都需要保持栈帧布局的一致，继续往下看identry汇编，以cfunc（common_interrupt），has_error_code作为宏指令参数调用了idtentry_body宏指令，该宏汇编实现如下：
 #+begin_example
 /**
  * idtentry_body - Macro to emit code calling the C function
@@ -1802,3 +1804,5 @@ FENCE_SWAPGS_USER_ENTRY主要处理一个安全问题：
 ffffffff81001c8d:       65 48 8b 15 1b 31 c5    mov    %gs:0x2c5311b(%rip),%rdx        # ffffffff83c54db0 <x86_spec_ctrl_current>
 #+end_example
 这样上面访存指令和swapgs是有顺序的，尤其强调的方面就是mov不能提前到swapgs。
+
+
