@@ -1463,7 +1463,7 @@ arch/x86/include/asm/alternative.h
 
 cld指令将方向标志位(DF, Direction Flag)清零，影响的DF位于EFLAGS寄存器中，它用于控制字符串操作指令的方向，如果 DF=0，字符串操作指令（如 MOVS, CMPS, STOS, LODS, SCAS等）会从内存的低地址向高地址方向处理。如果DF = 1，字符串操作指令会从高地址向低地址方向处理。在字符串操作前，通常会使用cld来确保字符串操作是按从低地址到高地址的顺序进行（默认行为），与之相反作用的指令是cli。
 
-随后判断该异常是否带有error code，如果没有这里主动pushq -1值到栈上，不同的异常分情况是否带有error code，intel sdm vol3 6.3.1有表展示了哪些异常有error code，哪些没有，典型的比如vector 14为Page Fault有error code，而vector 0为Divide Error不带error code，intel sdm vol3 6.13介绍了error code的格式，那么这里pushq -1主要是为了保持栈结构布局在硬件是否push error
+随后判断该异常是否带有error code（或者是stub汇编push的vector，或者是有syscall number），has_error_code实际上是说之前在orig_ax这个位置之前是否有推这三个值中的一种，如果没有这里主动pushq -1值到栈上，不同的异常分情况是否带有error code，intel sdm vol3 6.3.1有表展示了哪些异常有error code，哪些没有，典型的比如vector 14为Page Fault有error code，而vector 0为Divide Error不带error code，intel sdm vol3 6.13介绍了error code的格式，那么这里pushq -1主要是为了保持栈结构布局在硬件是否push error
 code都是统一的，异常/中断发生时，硬件其实会自动往栈上push一些寄存器，并且如果被中断的程序（procedure）和中断处理的handler的权限级别不一样的话，比如前者在用户态后者在内核态（中断handler肯定在内核态执行），这时涉及用户栈往内核栈切换，这样截止pushq -1（这时软件代码中断handler压栈的）时，栈上的内容如下，此图来自intel sdm vol3 6.12.1：
 #+CAPTION: 中断/异常发生时栈情况
 #+LABEL: fig:
@@ -1803,6 +1803,22 @@ FENCE_SWAPGS_USER_ENTRY主要处理一个安全问题：
 #+begin_example
 ffffffff81001c8d:       65 48 8b 15 1b 31 c5    mov    %gs:0x2c5311b(%rip),%rdx        # ffffffff83c54db0 <x86_spec_ctrl_current>
 #+end_example
-这样上面访存指令和swapgs是有顺序的，尤其强调的方面就是mov不能提前到swapgs。
-
-
+这样上面访存指令和swapgs是有顺序的，尤其强调的方面就是mov不能提前到swapgs，继续往下分析SWITCH_TO_KERNEL_CR3：
+#+begin_example
+.macro SWITCH_TO_KERNEL_CR3 scratch_reg:req
+	ALTERNATIVE "jmp .Lend_\@", "", X86_FEATURE_PTI
+	mov	%cr3, \scratch_reg
+	ADJUST_KERNEL_CR3 \scratch_reg
+	mov	\scratch_reg, %cr3
+.Lend_\@:
+.endm
+#+end_example
+PTI是内核/用户页表隔离的功能，用来缓解一个安全问题，一般都是打开了CONFIG_MITIGATION_PAGE_TABLE_ISOLATION配置的，没有开的话ALTERNATIVE默认就是跳到这个宏的末尾，表示不执行后面切换到内核页表的逻辑，一般是开启了这个配置的，mov指令先将cr3搬移到传入的寄存器里，这里是rax，ADJUST_KERNEL_CR3定义如下：
+#+begin_example
+.macro ADJUST_KERNEL_CR3 reg:req
+	ALTERNATIVE "", "SET_NOFLUSH_BIT \reg", X86_FEATURE_PCID
+	/* Clear PCID and "MITIGATION_PAGE_TABLE_ISOLATION bit", point CR3 at kernel pagetables: */
+	andq    $(~PTI_USER_PGTABLE_AND_PCID_MASK), \reg
+.endm
+#+end_example
+pcid一般是一个硬件feature，在Intel架构手册intel sdm vol3 4.10.1对其有介绍，总结起来，
