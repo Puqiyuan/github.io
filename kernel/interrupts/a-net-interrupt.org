@@ -1821,4 +1821,45 @@ PTI是内核/用户页表隔离的功能，用来缓解一个安全问题，一�
 	andq    $(~PTI_USER_PGTABLE_AND_PCID_MASK), \reg
 .endm
 #+end_example
-pcid一般是一个硬件feature，在Intel架构手册intel sdm vol3 4.10.1对其有介绍，总结起来，
+#+begin_example
+.macro SET_NOFLUSH_BIT	reg:req
+	bts	$X86_CR3_PCID_NOFLUSH_BIT, \reg
+.endm
+#+end_example
+#+begin_example
+#define X86_CR3_PCID_NOFLUSH_BIT 63 /* Preserve old PCID */
+#+end_example
+pcid一般是一个硬件feature，在Intel架构手册intel sdm vol3 4.10.1对其有介绍，总结起来，TLB上缓存的条目，可以划分出来不同的部分用来给不同的进程（地址空间）缓存虚拟地址到物理地址的映射，这样刷新tlb时，可以只刷新部分tlb条目，以提高性能。而cr3的bit 63被Intel定义为“no flush”控制位（CR3.NOFLUSH），mov到cr3时到底要不要刷tlb依据软硬件情况有不同的处理，在intel sdm vol3
+4.10.4.1有明确的细节说明，这里总结来说就是，首先会依据CR4.PCIDE的情况有不同情况，这也就是上面X86_FEATURE_PCID指明的硬件是否有的feature：
+
+CR4.PCIDE = 0，该指令会使得所有与PCID = 000H相关的TLB（转换后备缓冲）条目失效（除了全局页Global Pages的条目）。同时，它还会使与PCID = 000H相关的所有页表缓存（paging-structure
+caches，例如页目录/页表缓存）失效，没有开启PCID（即CR4.PCIDE=0），CPU认为所有地址空间都使用PCID=0。此时切换CR3就意味着必须清空与PCID=0相关的TLB和页表缓存（global 页除外）。
+
+CR4.PCIDE = 1并且源操作数（即MOV到CR3的值）的第63位为0，则该指令会使与源操作数低12位（bits 11:0）指定的PCID相关的所有TLB条目失效（全局页除外）。同时也会使该PCID相关的所有页表缓存失效。但CPU不要求使其他PCID的缓存条目失效。开启PCID后，CR3的值不仅包含物理页表基址，还包含PCID（低12位）。这意味着多个进程可以各自带有不同的PCID，从而允许多个地址空间的TLB缓存共存。当bit 63=0时，切换CR3只会刷新对应PCID的TLB，而不会影响其他PCID的缓存。这样可以避免频繁切换进程时清空整个TLB，大幅减少性能损耗。
+
+CR4.PCIDE = 1并且源操作数的第63位为1，则该指令不需要使任何TLB条目或页表缓存失效。
+
+当然使用指令来invlpg/invpcid指令来无效tlb缓存是另外一个方面了，在intel sdm vol3 4.10.4.1同样也有介绍，这里不再细节描述。
+
+最终情况对于现代cpu来说一般就是开启了pcide，并且软件上也是开了PTI feature的（X86_FEATURE_PTI）的，所以ADJUST_KERNEL_CR3在初始运行时就会通过bts设置CR3的bit 63为1，这样最后mov到cr3时就对应前面CR4.PCIDE = 1且CR3.bit63 = 1的情况，也就是不需要使任何TLB条目或页表缓存失效。
+
+ADJUST_KERNEL_CR3的下一条指令是andq，它和PTI_USER_PGTABLE_AND_PCID_MASK进行运算，这个宏定义如下：
+#+begin_example
+/*
+ * MITIGATION_PAGE_TABLE_ISOLATION PGDs are 8k.  Flip bit 12 to switch between the two
+ * halves:
+ */
+#define PTI_USER_PGTABLE_BIT		PAGE_SHIFT
+#define PTI_USER_PGTABLE_MASK		(1 << PTI_USER_PGTABLE_BIT)
+#define PTI_USER_PCID_BIT		X86_CR3_PTI_PCID_USER_BIT
+#define PTI_USER_PCID_MASK		(1 << PTI_USER_PCID_BIT)
+#define PTI_USER_PGTABLE_AND_PCID_MASK  (PTI_USER_PCID_MASK | PTI_USER_PGTABLE_MASK)
+#+end_example
+#+begin_example
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+# define X86_CR3_PTI_PCID_USER_BIT	11
+#endif
+#+end_example
+这里X86_CR3_PTI_PCID_USER_BIT其实就是对应硬件pcid的最高位（pcid总共12位），它可以用来区分user/kernel pcid，这位置1时，代表是用户pcid，而清为0时，就是内核pcid，再换个角度说就是，PCID总长度是12位（0..11），共4096个值，若把bit11置0，就把可用范围限制为0..2047（低 2048），这样内核可以保留一块连续的PCID空间，用户进程用另一块（bit11=1的高2048）。
+
+而PAGE_SHIFT一般定义为12，也就是bit 12了，该位不设置就是内核用的低4KB的顶级页表（8KB的前半部分），设置的话就是用户态用的顶级页表，就是8KB的后半部分，那么MITIGATION_PAGE_TABLE_ISOLATION就是把bit 11和bit 12两个位设置上，但ADJUST_KERNEL_CR3里其实是这个宏取反再用，就是0xffffffffffffe7ff，也就是把bit 11和bit 12都设置为0了，这样和原来的cr3里值进行与操作，相当于清零这两位，就是用内存里的内核页表（8KB的后半部分），以及tlb用低2048的pcid号（也就是内核用的），这里稍微展开一点user/kernel pcid以及软件上的asic如何对应到硬件架构上的pcid，
