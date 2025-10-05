@@ -1862,4 +1862,153 @@ ADJUST_KERNEL_CR3的下一条指令是andq，它和PTI_USER_PGTABLE_AND_PCID_MAS
 #+end_example
 这里X86_CR3_PTI_PCID_USER_BIT其实就是对应硬件pcid的最高位（pcid总共12位），它可以用来区分user/kernel pcid，这位置1时，代表是用户pcid，而清为0时，就是内核pcid，再换个角度说就是，PCID总长度是12位（0..11），共4096个值，若把bit11置0，就把可用范围限制为0..2047（低 2048），这样内核可以保留一块连续的PCID空间，用户进程用另一块（bit11=1的高2048）。
 
-而PAGE_SHIFT一般定义为12，也就是bit 12了，该位不设置就是内核用的低4KB的顶级页表（8KB的前半部分），设置的话就是用户态用的顶级页表，就是8KB的后半部分，那么MITIGATION_PAGE_TABLE_ISOLATION就是把bit 11和bit 12两个位设置上，但ADJUST_KERNEL_CR3里其实是这个宏取反再用，就是0xffffffffffffe7ff，也就是把bit 11和bit 12都设置为0了，这样和原来的cr3里值进行与操作，相当于清零这两位，就是用内存里的内核页表（8KB的后半部分），以及tlb用低2048的pcid号（也就是内核用的），这里稍微展开一点user/kernel pcid以及软件上的asic如何对应到硬件架构上的pcid，
+而PAGE_SHIFT一般定义为12，也就是bit 12了，该位不设置就是内核用的低4KB的顶级页表（8KB的前半部分），设置的话就是用户态用的顶级页表，就是8KB的后半部分，那么MITIGATION_PAGE_TABLE_ISOLATION就是把bit 11和bit 12两个位设置上，但ADJUST_KERNEL_CR3里其实是这个宏取反再用，就是0xffffffffffffe7ff，也就是把bit 11和bit 12都设置为0了，这样和原来的cr3里值进行与操作，相当于清零这两位，就是用内存里的内核页表（8KB的后半部分），以及tlb用低2048的pcid号（也就是内核用的），这里稍微展开一点user/kernel pcid以及软件上的asic如何对应到硬件架构上的pcid，虽然总共有4096个pcid可以使用，但是内核仅用了6个：
+#+begin_example
+#define TLB_NR_DYN_ASIDS 6
+#+end_example
+意思是每个CPU上，Linux内核最多同时缓存6个不同的mm_struct（进程地址空间）的ASID。多了没必要，因为常用的活跃进程不会太多（多数场景只有几个task在频繁切换）。少了也不行，否则频繁切换会一直失效。6这个数字保证struct tlb_state（保存per-cpu的ASID使用状态）可以放在两个cache line内，降低开销。
+
+内核还提供两个小接口：
+#+begin_example
+static inline u16 user_pcid(u16 asid)
+{
+	u16 ret = kern_pcid(asid);
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+	ret |= 1 << X86_CR3_PTI_PCID_USER_BIT;
+#endif
+	return ret;
+}
+#+end_example
+#+begin_example
+/*
+ * Given @asid, compute kPCID
+ */
+static inline u16 kern_pcid(u16 asid)
+{
+	VM_WARN_ON_ONCE(asid > MAX_ASID_AVAILABLE);
+
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+	/*
+	 * Make sure that the dynamic ASID space does not conflict with the
+	 * bit we are using to switch between user and kernel ASIDs.
+	 */
+	BUILD_BUG_ON(TLB_NR_DYN_ASIDS >= (1 << X86_CR3_PTI_PCID_USER_BIT));
+
+	/*
+	 * The ASID being passed in here should have respected the
+	 * MAX_ASID_AVAILABLE and thus never have the switch bit set.
+	 */
+	VM_WARN_ON_ONCE(asid & (1 << X86_CR3_PTI_PCID_USER_BIT));
+#endif
+	/*
+	 * The dynamically-assigned ASIDs that get passed in are small
+	 * (<TLB_NR_DYN_ASIDS).  They never have the high switch bit set,
+	 * so do not bother to clear it.
+	 *
+	 * If PCID is on, ASID-aware code paths put the ASID+1 into the
+	 * PCID bits.  This serves two purposes.  It prevents a nasty
+	 * situation in which PCID-unaware code saves CR3, loads some other
+	 * value (with PCID == 0), and then restores CR3, thus corrupting
+	 * the TLB for ASID 0 if the saved ASID was nonzero.  It also means
+	 * that any bugs involving loading a PCID-enabled CR3 with
+	 * CR4.PCIDE off will trigger deterministically.
+	 */
+	return asid + 1;
+}
+#+end_example
+kern_pcid(asid)：只是简单地asid+1，目的是避免ASID=0被滥用。user_pcid(asid)：在kern_pcid(asid)的基础上，再设置一个PTI区分位，这样同一个进程会有两个PCID：一个用于用户态页表（带USER_BIT标记），其实就是高2048范围的pcid。一个用于内核态页表。这样既能利用PCID避免TLB flush，又能配合PTI隔离内核与用户空间。
+
+这里可以看到，硬件的pcid就是软件上的asid+1，因为asid=0（pcid=0）保留是为了兼容老的pcid-unware的代码。
+
+一个调用user_pcid的例子比如native_flush_tlb_one_user：
+#+begin_example
+STATIC_NOPV void native_flush_tlb_one_user(unsigned long addr)
+{
+	u32 loaded_mm_asid;
+	bool cpu_pcide;
+
+	/* Flush 'addr' from the kernel PCID: */
+	invlpg(addr);
+
+	/* If PTI is off there is no user PCID and nothing to flush. */
+	if (!static_cpu_has(X86_FEATURE_PTI))
+		return;
+
+	loaded_mm_asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
+	cpu_pcide      = this_cpu_read(cpu_tlbstate.cr4) & X86_CR4_PCIDE;
+
+	/*
+	 * invpcid_flush_one(pcid>0) will #GP if CR4.PCIDE==0.  Check
+	 * 'cpu_pcide' to ensure that *this* CPU will not trigger those
+	 * #GP's even if called before CR4.PCIDE has been initialized.
+	 */
+	if (boot_cpu_has(X86_FEATURE_INVPCID) && cpu_pcide)
+		invpcid_flush_one(user_pcid(loaded_mm_asid), addr);
+	else
+		invalidate_user_asid(loaded_mm_asid);
+}
+#+end_example
+这里传入的是per-cpu变量cpu_tlbstate.loaded_mm_asid，它一般在进程切换流程函数switch_mm_irqs_off切换mm_struct时可能会得到更新：
+#+begin_example
+this_cpu_write(cpu_tlbstate.loaded_mm_asid, ns.asid);
+#+end_example
+#+begin_example
+ns = choose_new_asid(next, next_tlb_gen);
+
+this_cpu_write(cpu_tlbstate.loaded_mm_asid, ns.asid);
+
+static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
+{
+	struct new_asid ns;
+	u16 asid;
+
+	if (!static_cpu_has(X86_FEATURE_PCID)) {
+		ns.asid = 0;
+		ns.need_flush = 1;
+		return ns;
+	}
+
+	/*
+	 * TLB consistency for global ASIDs is maintained with hardware assisted
+	 * remote TLB flushing. Global ASIDs are always up to date.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_INVLPGB)) {
+		u16 global_asid = mm_global_asid(next);
+
+		if (global_asid) {
+			ns.asid = global_asid;
+			ns.need_flush = 0;
+			return ns;
+		}
+	}
+
+	if (this_cpu_read(cpu_tlbstate.invalidate_other))
+		clear_asid_other();
+
+	for (asid = 0; asid < TLB_NR_DYN_ASIDS; asid++) {
+		if (this_cpu_read(cpu_tlbstate.ctxs[asid].ctx_id) !=
+		    next->context.ctx_id)
+			continue;
+
+		ns.asid = asid;
+		ns.need_flush = (this_cpu_read(cpu_tlbstate.ctxs[asid].tlb_gen) < next_tlb_gen);
+		return ns;
+	}
+
+	/*
+	 * We don't currently own an ASID slot on this CPU.
+	 * Allocate a slot.
+	 */
+	ns.asid = this_cpu_add_return(cpu_tlbstate.next_asid, 1) - 1;
+	if (ns.asid >= TLB_NR_DYN_ASIDS) {
+		ns.asid = 0;
+		this_cpu_write(cpu_tlbstate.next_asid, 1);
+	}
+	ns.need_flush = true;
+
+	return ns;
+}
+#+end_example
+当然有了新的asid（pcid），可能需要通过switch_mm_irqs_off->load_new_mm_cr3->write_cr3来真正写到硬件cr3寄存器，对硬件产生效果，另外一个小细节是，tlb_state是per-cpu的，里面管理了每个cpu的tlb状态，在这个结构体里tlb_state::loaded_mm_asid指明了现在使用的是六个tlb_state::ctxs（type: tlb_context）中的哪一个，而tlb_context::ctx_id来自mm_struct::context::ctx_id，这样就完成了tlb按pcid划分的条目具体关联到哪个user mm_struct，关于进程切换细节（包括切换mm，切换mm就涉及tlb管理）可以参考[[../process-sched/process-schedule.html][进程切换]]。
+
+上面是岔开的一点关于pcid/asid的主题，现在回到error_entry汇编继续分析，总之到目前cr3的值就是要切换到内核位于内存的顶级页表以及内核使用的pcid（也就是tlb条目），尤其是在开了CONFIG_MITIGATION_PAGE_TABLE_ISOLATION配置时，
