@@ -2011,4 +2011,47 @@ static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
 #+end_example
 当然有了新的asid（pcid），可能需要通过switch_mm_irqs_off->load_new_mm_cr3->write_cr3来真正写到硬件cr3寄存器，对硬件产生效果，另外一个小细节是，tlb_state是per-cpu的，里面管理了每个cpu的tlb状态，在这个结构体里tlb_state::loaded_mm_asid指明了现在使用的是六个tlb_state::ctxs（type: tlb_context）中的哪一个，而tlb_context::ctx_id来自mm_struct::context::ctx_id，这样就完成了tlb按pcid划分的条目具体关联到哪个user mm_struct，关于进程切换细节（包括切换mm，切换mm就涉及tlb管理）可以参考[[../process-sched/process-schedule.html][进程切换]]。
 
-上面是岔开的一点关于pcid/asid的主题，现在回到error_entry汇编继续分析，总之到目前cr3的值就是要切换到内核位于内存的顶级页表以及内核使用的pcid（也就是tlb条目），尤其是在开了CONFIG_MITIGATION_PAGE_TABLE_ISOLATION配置时，
+注意虽然内核态的页表映射一般都是稳定不变的，但是仍有一些当前进程的用户态映射，比如系统调用、页错误处理、copy_from_user()/copy_to_user()等情况都需要在内核态直接访问用户空间的地址。这样内核态也不能用唯一的一个pcid比如0或者其它的唯一一个，内核态TLB不仅缓存“内核统一的地址翻译”，还缓存“该进程特有的用户空间翻译”。所以每个进程的内核态都需要有自己独立的PCID。假设所有进程进入内核时PCID=0，那么进程A在内核态访问过的用户虚拟地址VA->PA的翻译会被缓存到PCID=0的TLB 里，切到进程B的内核态时，仍然用PCID=0，那些用户虚拟地址翻译可能仍然存在于TLB中，但对应的是进程A的用户内存。这样一来，进程B在内核里如果访问相同的虚拟地址，可能直接命中错误的TLB条目（严重的内存隔离安全问题）。所以内核不能只用一个 PCID，Linux 的做法是每个进程有 一对 PCID，user_pcid = base_pcid | (1 <<11)，ernel_pcid = base_pcid，其中base_pcid在现行内核里最大就是5。
+
+
+总之到目前cr3的值就是要切换到内核位于内存的顶级页表以及内核使用的pcid（也就是tlb条目），尤其是在开了CONFIG_MITIGATION_PAGE_TABLE_ISOLATION配置时，现在回过头来看这个配置，传统方式（无PTI）依赖CPL权限机制，用户态(CPL=3)下虽然能看到内核地址空间的页表映射，但访问会触发page fault，因为PTE权限位要求CPL=0才能访问。内核态(CPL=0)就能访问内核虚拟地址。按理说这样已经安全，为什么还要PTI？关键原因是Meltdown漏洞，现代CPU特别是 Intel在乱序执行(out-of-order execution)下存在缺陷，即使用户态访问了内核地址理论上不允许），CPU在触发异常前，乱序执行单元可能已经speculatively执行了内核地址的读操作。虽然最终指令会因为权限错误而抛异常，但旁路数据已经进了缓存(cache)。攻击者可以通过侧信道攻击（比如flush+reload）从缓存推断出内核数据。这就是Meltdown攻击。传统保护只保证最终结果不允许访问。但Meltdown绕过了这个保护，因为权限检查的时机晚于实际访存。换句话说：“合法性检查”在提交阶段才进行，但数据访问在执行阶段已经发生，结果就是内核数据可能“被偷看”，哪怕CPL=3。PTI的核心思想是从根本上防止用户态能speculatively触碰内核页表，在用户态时，CR3指向的页表里根本就不包含完整的内核映射，即使CPU乱序执行，也没有页表项可用，不会speculatively读到内核物理页，这样彻底杜绝了Meltdown攻击。
+
+上面是岔开的一点关于pcid/asid的主题，现在回到error_entry汇编继续分析，IBRS_ENTER是一个安全相关的功能：
+#+begin_example
+/*
+ * IBRS kernel mitigation for Spectre_v2.
+ *
+ * Assumes full context is established (PUSH_REGS, CR3 and GS) and it clobbers
+ * the regs it uses (AX, CX, DX). Must be called before the first RET
+ * instruction (NOTE! UNTRAIN_RET includes a RET instruction)
+ *
+ * The optional argument is used to save/restore the current value,
+ * which is used on the paranoid paths.
+ *
+ * Assumes x86_spec_ctrl_{base,current} to have SPEC_CTRL_IBRS set.
+ */
+.macro IBRS_ENTER save_reg
+#ifdef CONFIG_MITIGATION_IBRS_ENTRY
+	ALTERNATIVE "jmp .Lend_\@", "", X86_FEATURE_KERNEL_IBRS
+	movl	$MSR_IA32_SPEC_CTRL, %ecx
+
+.ifnb \save_reg
+	rdmsr
+	shl	$32, %rdx
+	or	%rdx, %rax
+	mov	%rax, \save_reg
+	test	$SPEC_CTRL_IBRS, %eax
+	jz	.Ldo_wrmsr_\@
+	lfence
+	jmp	.Lend_\@
+.Ldo_wrmsr_\@:
+.endif
+
+	movq	PER_CPU_VAR(x86_spec_ctrl_current), %rdx
+	movl	%edx, %eax
+	shr	$32, %rdx
+	wrmsr
+.Lend_\@:
+#endif
+.endm
+#+end_example
