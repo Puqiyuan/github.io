@@ -2055,3 +2055,37 @@ static struct new_asid choose_new_asid(struct mm_struct *next, u64 next_tlb_gen)
 #endif
 .endm
 #+end_example
+MSR_IA32_SPEC_CTRL定义为0x48，查阅intel sdm vol4，Register Address为0x48时，这个msr的作用是Speculation Control，比如Bit 0就是IBRS，Indirect Branch Restricted Speculation，当置1时，CPU禁止使用来自低权限代码（例如用户态）或早期执行路径的间接分支预测，避免了用户态污染内核态预测器的Spectre v2攻击，但代价是严重影响性能，因为预测器效果下降，而且设置/清除这个位需要执行wrmsr（非常慢）。在新一代CPU（支持Enhanced IBRS）中，IBRS可以在硬件中自动在权限切换时生效，无需频繁写MSR。
+
+wrmsr写时，要写的msr寄存器标号在ecx里存储，而写的值是由edx:eax两个32位拼起来的64位值。
+
+UNTRAIN_RET_FROM_CALL也是一个安全方面的功能，针对它就不详细介绍了，毕竟本文主题是中断且前面已经有一个类似的安全相关代码介绍。
+
+继续分析error_entry汇编代码，后面的两条指令是：
+#+begin_example
+leaq	8(%rsp), %rdi			/* arg0 = pt_regs pointer */
+/* Put us onto the real thread stack. */
+jmp	sync_regs
+#+end_example
+rsp要加8才是完整pt_regs结构体的地址，因为rsp栈顶存的是error_entry的返回地址，也就是前面asm_common_interrupt汇编call error_entry后的mov指令（ffffffff81e0154d）：
+#+begin_example
+ffffffff81e01540 <asm_common_interrupt>:
+ffffffff81e01540:	f3 0f 1e fa          	endbr64
+ffffffff81e01544:	90                   	nop
+ffffffff81e01545:	90                   	nop
+ffffffff81e01546:	90                   	nop
+ffffffff81e01547:	fc                   	cld
+ffffffff81e01548:	e8 e3 06 00 00       	call   ffffffff81e01c30 <error_entry>
+ffffffff81e0154d:	48 89 c4             	mov    %rax,%rsp
+ffffffff81e01550:	48 89 e7             	mov    %rsp,%rdi
+ffffffff81e01553:	48 8b 74 24 78       	mov    0x78(%rsp),%rsi
+ffffffff81e01558:	48 c7 44 24 78 ff ff 	movq   $0xffffffffffffffff,0x78(%rsp)
+ffffffff81e0155f:	ff ff 
+ffffffff81e01561:	e8 5a 0c ef ff       	call   ffffffff81cf21c0 <common_interrupt>
+ffffffff81e01566:	e9 05 08 00 00       	jmp    ffffffff81e01d70 <error_return>
+ffffffff81e0156b:	66 66 2e 0f 1f 84 00 	data16 cs nopw 0x0(%rax,%rax,1)
+ffffffff81e01572:	00 00 00 00 
+ffffffff81e01576:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+ffffffff81e0157d:	00 00 00
+#+end_example
+注意这里用jmp去到了sync_regs，那么在sync_regs的ret就会回到asm_common_interrupt继续执行。
