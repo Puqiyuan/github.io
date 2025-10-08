@@ -2067,7 +2067,7 @@ leaq	8(%rsp), %rdi			/* arg0 = pt_regs pointer */
 /* Put us onto the real thread stack. */
 jmp	sync_regs
 #+end_example
-rsp要加8才是完整pt_regs结构体的地址，因为rsp栈顶存的是error_entry的返回地址，也就是前面asm_common_interrupt汇编call error_entry后的mov指令（ffffffff81e0154d）：
+rsp要加8才是完整pt_regs结构体的地址，因为rsp栈顶存的是error_entry的返回地址，也就是前面asm_common_interrupt汇编call error_entry后的mov指令（ffffffff81e0154d），+8才是对应第一个寄存器r15：
 #+begin_example
 ffffffff81e01540 <asm_common_interrupt>:
 ffffffff81e01540:	f3 0f 1e fa          	endbr64
@@ -2088,4 +2088,23 @@ ffffffff81e01572:	00 00 00 00
 ffffffff81e01576:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
 ffffffff81e0157d:	00 00 00
 #+end_example
-注意这里用jmp去到了sync_regs，那么在sync_regs的ret就会回到asm_common_interrupt继续执行。
+注意这里用jmp去到了sync_regs，那么在sync_regs的ret就会回到asm_common_interrupt继续执行，下面是sync_regs实现：
+#+begin_example
+/*
+ * Help handler running on a per-cpu (IST or entry trampoline) stack
+ * to switch to the normal thread stack if the interrupted code was in
+ * user mode. The actual stack switch is done in entry_64.S
+ */
+asmlinkage __visible noinstr struct pt_regs *sync_regs(struct pt_regs *eregs)
+{
+	struct pt_regs *regs = (struct pt_regs *)current_top_of_stack() - 1;
+	if (regs != eregs)
+		*regs = *eregs;
+	return regs;
+}
+#+end_example
+如果被中断的代码运行在用户模式时，直接使用的保护寄存器现场现场的栈可能和内核开的内核栈（current_top_of_stack）不一样，如果是这样，这里需要复制一份到内核栈（task_struct::stack）。
+
+error_entry剩余部分的处理主要是针对几个特别的指令在执行时发生中断的情况的特别处理，具体处理逻辑就不分析了，总的来说error_entry最重要的工作就是保存寄存器现场到内核栈。
+
+从sync_regs（error_entry）返回时，rax里返回的就是栈顶，这个栈顶存放了一个pt_regs结构体，这个结构体是异常/中断发生时的现场，回到asm_common_interrupt继续分析，
