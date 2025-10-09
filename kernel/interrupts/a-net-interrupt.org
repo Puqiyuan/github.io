@@ -2107,4 +2107,128 @@ asmlinkage __visible noinstr struct pt_regs *sync_regs(struct pt_regs *eregs)
 
 error_entry剩余部分的处理主要是针对几个特别的指令在执行时发生中断的情况的特别处理，具体处理逻辑就不分析了，总的来说error_entry最重要的工作就是保存寄存器现场到内核栈。
 
-从sync_regs（error_entry）返回时，rax里返回的就是栈顶，这个栈顶存放了一个pt_regs结构体，这个结构体是异常/中断发生时的现场，回到asm_common_interrupt继续分析，
+从sync_regs（error_entry）返回时，rax里返回的就是栈顶，这个栈顶存放了一个pt_regs结构体，这个结构体是异常/中断发生时的现场，回到asm_common_interrupt继续分析，也就是idtentry_body的剩余部分，这里再次列出idtentry_body汇编，主要是为了在此处方便查阅，本文已经走了太长了：
+#+begin_example
+/**
+ * idtentry_body - Macro to emit code calling the C function
+ * @cfunc:		C function to be called
+ * @has_error_code:	Hardware pushed error code on stack
+ */
+.macro idtentry_body cfunc has_error_code:req
+
+	/*
+	 * Call error_entry() and switch to the task stack if from userspace.
+	 *
+	 * When in XENPV, it is already in the task stack, and it can't fault
+	 * for native_iret() nor native_load_gs_index() since XENPV uses its
+	 * own pvops for IRET and load_gs_index().  And it doesn't need to
+	 * switch the CR3.  So it can skip invoking error_entry().
+	 */
+	ALTERNATIVE "call error_entry; movq %rax, %rsp", \
+		    "call xen_error_entry", X86_FEATURE_XENPV
+
+	ENCODE_FRAME_POINTER
+	UNWIND_HINT_REGS
+
+	movq	%rsp, %rdi			/* pt_regs pointer into 1st argument*/
+
+	.if \has_error_code == 1
+		movq	ORIG_RAX(%rsp), %rsi	/* get error code into 2nd argument*/
+		movq	$-1, ORIG_RAX(%rsp)	/* no syscall to restart */
+	.endif
+
+	/* For some configurations \cfunc ends up being a noreturn. */
+	ANNOTATE_REACHABLE
+	call	\cfunc
+
+	jmp	error_return
+.endm
+#+end_example
+从error_entry->sync_regs里ret返回到idtentry_body里后，rax作为返回寄存器存放的是栈顶，也就是一个pt_regs结构体，所以mov %rsp, %rdi就是将这个返回值作为一个参数给到rdi，而第二个参数是给到rsi寄存器，之前有提到过在pt_regs里的orig_rax的位置在硬件中断情形时，由irq_entries_start里push了vector号，而cfunc就是之前宏汇编调用链idtentry_irq->idtentry->idtentry_body传入的common_interrupt，自这个call后，就来到了c语言函数的世界，那么这个函数实现的“庐山真面目”在哪里呢？
+
+common_interrupt通过如下宏定义出来：
+#+begin_example
+/*
+ * common_interrupt() handles all normal device IRQ's (the special SMP
+ * cross-CPU interrupts have their own entry points).
+ */
+DEFINE_IDTENTRY_IRQ(common_interrupt)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	/* entry code tells RCU that we're not quiescent.  Check it. */
+	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
+
+	if (unlikely(!call_irq_handler(vector, regs)))
+		apic_eoi();
+
+	set_irq_regs(old_regs);
+}
+#+end_example
+可以看到，common_interrupt是所有外部设备中断同意的处理入口，DEFINE_IDTENTRY_IRQ是声明irq处理的函数的公共宏，除了外部设备使用它，伪中断也会使用它：
+#+begin_example
+DEFINE_IDTENTRY_IRQ(spurious_interrupt)
+#+end_example
+也就是DEFINE_IDTENTRY_IRQ里有二者的公共逻辑，先来分析这个宏的实现，再看上面的逻辑体：
+#+begin_example
+/**
+ * DEFINE_IDTENTRY_IRQ - Emit code for device interrupt IDT entry points
+ * @func:	Function name of the entry point
+ *
+ * The vector number is pushed by the low level entry stub and handed
+ * to the function as error_code argument which needs to be truncated
+ * to an u8 because the push is sign extending.
+ *
+ * irq_enter/exit_rcu() are invoked before the function body and the
+ * KVM L1D flush request is set. Stack switching to the interrupt stack
+ * has to be done in the function body if necessary.
+ */
+#define DEFINE_IDTENTRY_IRQ(func)					\
+static void __##func(struct pt_regs *regs, u32 vector);			\
+									\
+__visible noinstr void func(struct pt_regs *regs,			\
+			    unsigned long error_code)			\
+{									\
+	irqentry_state_t state = irqentry_enter(regs);			\
+	u32 vector = (u32)(u8)error_code;				\
+									\
+	kvm_set_cpu_l1tf_flush_l1d();                                   \
+	instrumentation_begin();					\
+	run_irq_on_irqstack_cond(__##func, regs, vector);		\
+	instrumentation_end();						\
+	irqentry_exit(regs, state);					\
+}									\
+									\
+static noinline void __##func(struct pt_regs *regs, u32 vector)
+#+end_example
+针对前面的common_interrupt展开，整段代码实现如下：
+#+begin_example
+static void __##func(struct pt_regs *regs, u32 vector);			
+									
+__visible noinstr void func(struct pt_regs *regs,			
+			    unsigned long error_code)			
+{									
+	irqentry_state_t state = irqentry_enter(regs);			
+	u32 vector = (u32)(u8)error_code;				
+									
+	kvm_set_cpu_l1tf_flush_l1d();                                   
+	instrumentation_begin();					
+	run_irq_on_irqstack_cond(__##func, regs, vector);		
+	instrumentation_end();						
+	irqentry_exit(regs, state);					
+}									
+									
+static noinline void __##func(struct pt_regs *regs, u32 vector)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+
+	/* entry code tells RCU that we're not quiescent.  Check it. */
+	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
+
+	if (unlikely(!call_irq_handler(vector, regs)))
+		apic_eoi();
+
+	set_irq_regs(old_regs);
+}
+#+end_example
+irqentry_enter/irqentry_exit用于保存中断或异常进入时状态信息的临时上下文结构体，主要帮助irqentry框架在退出时正确恢复RCU或lockdep状态，下面先分析一点这方面的知识，
