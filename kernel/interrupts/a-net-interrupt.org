@@ -2231,4 +2231,30 @@ static noinline void __##func(struct pt_regs *regs, u32 vector)
 	set_irq_regs(old_regs);
 }
 #+end_example
-irqentry_enter/irqentry_exit用于保存中断或异常进入时状态信息的临时上下文结构体，主要帮助irqentry框架在退出时正确恢复RCU或lockdep状态，下面先分析一点这方面的知识，
+irqentry_enter/irqentry_exit用于保存中断或异常进入时状态信息的临时上下文结构体，主要帮助irqentry框架在退出时正确恢复RCU或lockdep状态，这方面跟中断本身的处理没有太大关系，就不在本文的主题介绍了。
+
+error_code在设备中断发生时就是vector号，只是这里需要转成u8，再转成u32然后给到vector。
+
+kvm_set_cpu_l1tf_flush_l1d是一个安全功能，防止信息在guest间泄露，这里只是做了一个标记：
+#+begin_example
+static __always_inline void kvm_set_cpu_l1tf_flush_l1d(void)
+{
+	__this_cpu_write(irq_stat.kvm_cpu_l1tf_flush_l1d, 1);
+}
+#+end_example
+真正在下次进入guest时在vmx_l1d_flush里通过这个标志判断是否需要做l1d cache的刷新。
+
+instrumentation_begin/instrumentation_end一般没有开启CONFIG_NOINSTR_VALIDATION，所以这两个函数实现为空。
+
+继续往下分析就是重要的run_irq_on_irqstack_cond，它才是中断处理的正式函数：
+#+begin_example
+#define run_irq_on_irqstack_cond(func, regs, vector)			\
+{									\
+	assert_function_type(func, void (*)(struct pt_regs *, u32));	\
+	assert_arg_type(regs, struct pt_regs *);			\
+	assert_arg_type(vector, u32);					\
+									\
+	call_on_irqstack_cond(func, regs, ASM_CALL_IRQ,			\
+			      IRQ_CONSTRAINTS, regs, vector);		\
+}
+#+end_example
