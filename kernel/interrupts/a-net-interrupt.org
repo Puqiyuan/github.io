@@ -2203,9 +2203,9 @@ static noinline void __##func(struct pt_regs *regs, u32 vector)
 #+end_example
 针对前面的common_interrupt展开，整段代码实现如下：
 #+begin_example
-static void __##func(struct pt_regs *regs, u32 vector);			
+static void __common_interrupt(struct pt_regs *regs, u32 vector);			
 									
-__visible noinstr void func(struct pt_regs *regs,			
+__visible noinstr void common_interrupt(struct pt_regs *regs,			
 			    unsigned long error_code)			
 {									
 	irqentry_state_t state = irqentry_enter(regs);			
@@ -2213,12 +2213,12 @@ __visible noinstr void func(struct pt_regs *regs,
 									
 	kvm_set_cpu_l1tf_flush_l1d();                                   
 	instrumentation_begin();					
-	run_irq_on_irqstack_cond(__##func, regs, vector);		
+	run_irq_on_irqstack_cond(__common_interrupt, regs, vector);		
 	instrumentation_end();						
 	irqentry_exit(regs, state);					
 }									
 									
-static noinline void __##func(struct pt_regs *regs, u32 vector)
+static noinline void __common_interrupt(struct pt_regs *regs, u32 vector)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
@@ -2257,4 +2257,68 @@ instrumentation_begin/instrumentation_end一般没有开启CONFIG_NOINSTR_VALIDA
 	call_on_irqstack_cond(func, regs, ASM_CALL_IRQ,			\
 			      IRQ_CONSTRAINTS, regs, vector);		\
 }
+#+end_example
+#+begin_example
+/*
+ * Macro to invoke system vector and device interrupt C handlers.
+ */
+#define call_on_irqstack_cond(func, regs, asm_call, constr, c_args...)	\
+{									\
+	/*								\
+	 * User mode entry and interrupt on the irq stack do not	\
+	 * switch stacks. If from user mode the task stack is empty.	\
+	 */								\
+	if (user_mode(regs) || __this_cpu_read(hardirq_stack_inuse)) {	\
+		irq_enter_rcu();					\
+		func(c_args);						\
+		irq_exit_rcu();						\
+	} else {							\
+		/*							\
+		 * Mark the irq stack inuse _before_ and unmark _after_	\
+		 * switching stacks. Interrupts are disabled in both	\
+		 * places. Invoke the stack switch macro with the call	\
+		 * sequence which matches the above direct invocation.	\
+		 */							\
+		__this_cpu_write(hardirq_stack_inuse, true);		\
+		call_on_irqstack(func, asm_call, constr);		\
+		__this_cpu_write(hardirq_stack_inuse, false);		\
+	}								\
+}
+
+#+end_example
+这里又涉及到栈的切换，这里的栈主要指的是common_interrupt这种句柄真正执行时在哪个栈上运行，早先irq_entries_start/error_entry里用的栈和这里中断句柄运行的栈是两回事，可能不同，在用户态时触发中断，第一进入的代码就是irq_entries_start（以及error_entry），这时中断是由用户态进入的，CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶（这个栈非常浅，是专门给中断入口保存少量寄存器用的）。然后在entry汇编中，会调用sync_regs。这个函数将寄存器现场从这个临时中断栈复制到当前进程的内核栈顶部（current_top_of_stack函数得到）。之后返回新的regs指针，后续中断处理流程就以这个寄存器现场为准，实际运行在task的内核栈上。总结起来就是在用户态触发中断时，cpu硬件在第一时间处理中断用的不是内核栈，而是一个“临时小栈”，从这里拷贝一份到内核栈，并通过ret返回这个真正的内核栈。后续call_on_irqstack_cond运行中断句柄时，使用的这个内核栈，这也就是call_on_irqstack_cond中判断出处于用户模式时，不用再通过call_on_irqstack切换栈直接运行。
+
+用下面的图展示用户态触发中断时的栈切换流程：
+#+begin_example
+用户态进程
+│
+│  中断触发（例如：外设IRQ）
+▼
+CPU 硬件自动做：
+  - 切换栈到 TSS.sp0（或 IST）        ← 硬件“临时小栈”
+  - 压入旧 SS, RSP, RFLAGS, CS, RIP
+  - 跳到 IDT 中的中断入口
+▼
+entry_64.S
+│
+│  保存现场寄存器到 eregs（在临时小栈上）
+│
+│  调用 sync_regs(eregs)
+│    └─ 检测当前不在内核栈上
+│    └─ 拷贝 eregs → 当前 task 内核栈 顶部
+│    └─ 返回新的 regs 指针（在内核栈）
+▼
+中断上下文切换完成：
+现在运行在当前进程的 **内核栈**
+▼
+call_on_irqstack_cond(func, regs, ...)
+  └─ user_mode(regs) == true
+  └─ 不切栈，直接调用 func()
+▼
+func() = 实际中断处理函数（例如 handle_irq_event）
+运行在：task 内核栈
+▼
+irq_exit_rcu() → 返回
+▼
+iret → 返回用户态
 #+end_example
