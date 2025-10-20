@@ -2322,3 +2322,53 @@ irq_exit_rcu() → 返回
 ▼
 iret → 返回用户态
 #+end_example
+
+而在内核态触发中断时，当前的rsp已经是task的内核栈，这时CPU不会切换栈，直接在这个内核栈上保存寄存器现场，但是到了call_on_irqstack_cond时，会走else分支切换中断句柄专门用的栈，因为此前代码已经在内核态跑，task内核栈可能被破坏或使用太深，中断句柄再用task内核栈时会有风险比如溢出，所以切换到另一个栈，内核态触发中断栈切换流程如下图：
+#+begin_example
+内核态代码（已在 task 内核栈）
+│
+│  硬件中断触发（CPL=0）
+│  → CPU 不会切换栈！
+│
+│  中断入口 (entry_64.S)
+│    保存现场到当前 task 内核栈
+│
+│  调用 call_on_irqstack_cond(func, regs, ...)
+│    └─ user_mode(regs) == false
+│    └─ hardirq_stack_inuse == false
+│    └─ 因此切换到 per-CPU hardirq 栈执行：
+│          call_on_irqstack(func, asm_call, ...)
+│
+│  __this_cpu_read(hardirq_stack_ptr)
+│    → 指向 map_irq_stack() 分配的 per-CPU 栈顶
+▼
+func() = 中断处理函数（handle_irq_event）
+运行在：per-CPU **hardirq 栈**
+▼
+执行完后：
+  __this_cpu_write(hardirq_stack_inuse, false)
+  irq_exit_rcu()
+▼
+iret 返回到原来的内核栈位置继续执行
+#+end_example
+还有一种情况是嵌套中断，就是硬中断执行时再次来了硬中断，这时上面代码里的hardirq_stack_inuse为true了，这时也不切栈，所有嵌套硬中断都在当前CPU的同一hardirq栈上执行，由hardirq_stack_inuse 保护避免重复切换，栈切换图示流程如下：
+#+begin_example
+当前已在 hardirq 栈中
+│
+│  新的硬中断触发
+│  → CPU 不切栈（仍是 CPL=0）
+│
+│  entry_64.S 保存现场
+│
+│  call_on_irqstack_cond(func, regs, ...)
+│    └─ user_mode(regs) == false
+│    └─ hardirq_stack_inuse == true
+│    └─ 不再切栈（递归禁止）
+│    └─ 直接 func() 在当前 hardirq 栈执行
+▼
+func() = 新的 IRQ handler
+运行在：当前 CPU 的 **同一个 hardirq 栈**
+▼
+irq_exit_rcu() → 退出嵌套中断
+#+end_example
+
