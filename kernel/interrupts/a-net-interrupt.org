@@ -2351,7 +2351,7 @@ func() = 中断处理函数（handle_irq_event）
 ▼
 iret 返回到原来的内核栈位置继续执行
 #+end_example
-还有一种情况是嵌套中断，就是硬中断执行时再次来了硬中断，这时上面代码里的hardirq_stack_inuse为true了，这时也不切栈，所有嵌套硬中断都在当前CPU的同一hardirq栈上执行，由hardirq_stack_inuse 保护避免重复切换，栈切换图示流程如下：
+还有一种情况是嵌套中断，就是硬中断执行时再次来了硬中断，这时上面代码里的hardirq_stack_inuse为true了，这时也不切栈，所有嵌套硬中断都在当前CPU的同一hardirq栈上执行，由hardirq_stack_inuse保护避免重复切换，栈切换图示流程如下：
 #+begin_example
 当前已在 hardirq 栈中
 │
@@ -2371,4 +2371,4 @@ func() = 新的 IRQ handler
 ▼
 irq_exit_rcu() → 退出嵌套中断
 #+end_example
-
+前面有提到，当在用户态触发中断时，“CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶”，那么这个栈顶是怎么设置并起效的呢？这个问题涉及到和架构手册紧密关系的原理，这里打算再详细分析下这个问题，首先架构手册对于sp0的描述如下：
