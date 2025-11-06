@@ -2371,4 +2371,8 @@ func() = 新的 IRQ handler
 ▼
 irq_exit_rcu() → 退出嵌套中断
 #+end_example
-前面有提到，当在用户态触发中断时，“CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶”，那么这个栈顶是怎么设置并起效的呢？这个问题涉及到和架构手册紧密关系的原理，这里打算再详细分析下这个问题，首先架构手册对于sp0的描述如下：
+前面有提到，当在用户态触发中断时，“CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶”，那么这个栈顶是怎么设置并起效的呢？这个问题涉及到和架构手册紧密关系的原理，这里打算再详细分析下这个问b题，首先架构手册对于sp0的描述如下，它位于tss段（task-state segment），在64位下定义如下（摘自intel sdm vol3 Figure 7-11）：
+#+CAPTION: 64bit模式下的tss格式
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/64bit-tss.png]]
