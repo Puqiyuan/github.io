@@ -2371,8 +2371,51 @@ func() = 新的 IRQ handler
 ▼
 irq_exit_rcu() → 退出嵌套中断
 #+end_example
-前面有提到，当在用户态触发中断时，“CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶”，那么这个栈顶是怎么设置并起效的呢？这个问题涉及到和架构手册紧密关系的原理，这里打算再详细分析下这个问b题，首先架构手册对于sp0的描述如下，它位于tss段（task-state segment），在64位下定义如下（摘自intel sdm vol3 Figure 7-11）：
+前面有提到，当在用户态触发中断时，“CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶”，那么这个栈顶是怎么设置并起效的呢？这个问题涉及到和架构手册紧密关系的部分，这里打算再详细分析下这个问题，首先架构手册对于sp0的描述如下，它位于tss段（task-state segment），在64位下定义如下（摘自intel sdm vol3 Figure 7-11）：
 #+CAPTION: 64bit模式下的tss格式
 #+LABEL: fig:
 #+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
 [[./img/64bit-tss.png]]
+
+可以看到这里不仅有rsp0，还有rsp1以及rsp2，另外还有7个IST栈。Intel sdm vol3有两段分散的表述，说明了当call/interrupt/exception引起权限级的变化时，会切换栈，第一段表述如下：
+#+begin_example
+When the processor performs a call to the exception- or interrupt-handler procedure: If the handler procedure is going to be executed at a numerically lower privilege level, a stack switch occurs. When the stack switch occurs: 
+a. The segment selector and stack pointer for the stack to be used by the handler are obtained from the TSS 
+for the currently executing task. On this new stack, the processor pushes the stack segment selector and 
+stack pointer of the interrupted procedure. 
+b. The processor then saves the current state of the EFLAGS, CS, and EIP registers on the new stack (see 
+Figure 6-4). 
+c. If an exception causes an error code to be saved, it is pushed on the new stack after the EIP value.
+#+end_example
+这段指明了cpu硬件在发生中断时，假如当前权限级在user mode为3，中断代码多是在内核态，需要权限级为0才能执行，那么这时就会发生栈切换，对于切换后使用的新栈，来自当前执行任务的tss里，那么究竟使用前面tss里指明的rsp几呢？Intel sdm vol3有另外一段描述：
+#+begin_example
+If the call requires a change in privilege level, the processor also switches to the stack for the targeted privilege level. 
+#+end_example
+也就是使用切换到的目标权限级别的rsp，这里是需要切换到level 0，那么就是使用rsp0。
+
+有了上面的架构手册的理解，再来看Linux内核代码如何对其进行对应的设置，以使得其生效。首先内核定义了x86_hw_tss结构体，对于x86-64如下：
+#+begin_example
+arch/x86/include/asm/processor.h
+
+struct x86_hw_tss {
+	u32			reserved1;
+	u64			sp0;
+	u64			sp1;
+
+	/*
+	 * Since Linux does not use ring 2, the 'sp2' slot is unused by
+	 * hardware.  entry_SYSCALL_64 uses it as scratch space to stash
+	 * the user RSP value.
+	 */
+	u64			sp2;
+
+	u64			reserved2;
+	u64			ist[7];
+	u32			reserved3;
+	u32			reserved4;
+	u16			reserved5;
+	u16			io_bitmap_base;
+
+} __attribute__((packed));
+#+end_example
+可以看到其是严格对应cpu硬件架构手册的。
