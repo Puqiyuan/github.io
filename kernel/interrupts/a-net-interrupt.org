@@ -2418,4 +2418,32 @@ struct x86_hw_tss {
 
 } __attribute__((packed));
 #+end_example
-可以看到其是严格对应cpu硬件架构手册的。
+可以看到其是严格对应cpu硬件架构手册的，这个结构体是具体的tss段的结构，但是这个段需要一个段描述符来描述，比如段描述符会记录这个tss段的基地址base，限长limit等，x86-64架构针对tss段的段描述符格式如下图：
+
+#+CAPTION: 64位模式下tss/ldt描述符的格式
+#+LABEL: fig:
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/tss-ldt-desc.png]]
+
+当然，内核针对这种类型的描述符有结构体定义：
+#+begin_example
+/* LDT or TSS descriptor in the GDT. */
+struct ldttss_desc {
+	u16	limit0;
+	u16	base0;
+
+	u16	base1 : 8, type : 5, dpl : 2, p : 1;
+	u16	limit1 : 4, zero0 : 3, g : 1, base2 : 8;
+#ifdef CONFIG_X86_64
+	u32	base3;
+	u32	zero1;
+#endif
+} __attribute__((packed));
+#+end_example
+可以看到其也是和硬件架构手册一一对应的。
+
+这里已经出现了段、段描述符以及段选择子等概念，先要解释下这些概念，首先段机制在x86-64下开启分页时一般不再大量使用，但是本处描述的位于tss段中的sp0、sp1以及sp2在切换特权级时还会使用，所以从tss段开始分析的话，需要解释这些连贯相关的概念。
+
+首先，根据intel sdm vol3，段是指
+
+Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到taskregister（TR）里，
