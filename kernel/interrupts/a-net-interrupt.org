@@ -2444,6 +2444,15 @@ struct ldttss_desc {
 
 这里已经出现了段、段描述符以及段选择子等概念，先要解释下这些概念，首先段机制在x86-64下开启分页时一般不再大量使用，但是本处描述的位于tss段中的sp0、sp1以及sp2在切换特权级时还会使用，所以从tss段开始分析的话，需要解释这些连贯相关的概念。
 
-首先，根据intel sdm vol3，段是指
+X86 cpu刚起来时进入的是16位的real mode（实模式），随后进入32位protected mode（保护模式），然后现代x86 cpu一般支持64位模式，也就是IA-32e mode下的一个子模式64-bit mode（另一个子模式是Compatibility兼容模式，可以在64位机器上运行32位app）。
 
-Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到taskregister（TR）里，
+根据intel sdm vol3，段（机制）可以将逻辑地址翻译成线性地址，在没有开启分页机制时，这时只有段机制，线性地址就是物理地址了，如下图：
+#+CAPTION: 只有分段机制时地址翻译
+#+lABEL: fig:only-segment
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/only-segment.png]]
+
+逻辑地址的高一些位用来在描述符表（GDT，Global Descriptor Table。LDT，Local Descriptor
+Table）中选取描述符，这些描述符实际就是一个结构体，描述有一个段的基地址、限长以及访问权限等。而逻辑地址的低一些位用来在在段内进行偏移。
+
+Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）里，
