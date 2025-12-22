@@ -2448,11 +2448,28 @@ X86 cpu刚起来时进入的是16位的real mode（实模式），随后进入32
 
 根据intel sdm vol3，段（机制）可以将逻辑地址翻译成线性地址，在没有开启分页机制时，这时只有段机制，线性地址就是物理地址了，如下图：
 #+CAPTION: 只有分段机制时地址翻译
-#+lABEL: fig:only-segment
+#+LABEL: fig:only-segment
 #+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
 [[./img/only-segment.png]]
 
 逻辑地址的高一些位用来在描述符表（GDT，Global Descriptor Table。LDT，Local Descriptor
-Table）中选取描述符，这些描述符实际就是一个结构体，描述有一个段的基地址、限长以及访问权限等。而逻辑地址的低一些位用来在在段内进行偏移。
+Table）中选取描述符，这些描述符实际就是一个结构体，描述有一个段的基地址、限长以及访问权限等，而逻辑地址的低一些位用来在段内进行偏移到哪个地址。
+
+GDTR（Global Descriptor Table Register）存放了GDT的线性地址，而LDTR（Local DescriptorTable
+Register）里存放的是LDT的线性地址，除此之外，还有一些段寄存器（包括CS、SS、DS、ES、FS以及GS段），用来缓存位于GDT（LDT）里的段描述符，这是段寄存器的不可见部分，还有就是可见部分，用来存放段选择子，如下图：
+#+CAPTION: 段寄存器（格式）
+#+LABEL: fig:segment-registers
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/segment-registers.png]]
+
+有了这些段寄存器，访问段描述符就不用每次都访问内存里的gdt/ldt表了。
+
+段选择子的格式如下：
+#+CAPTION: 段选择子
+#+LABEL: fig:segment-selector
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/segment-selector.png]]
+
+bit 3-15作为索引，用来选择gdt/ldt表里的哪个描述符条目，TI表示从哪个表里选择，当加载段选择子到段寄存器的可见部分时，段寄存器的不可见部分段描述符自动从内存gdt/ldt里获取并填充。
 
 Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）里，
