@@ -2165,7 +2165,7 @@ DEFINE_IDTENTRY_IRQ(common_interrupt)
 	set_irq_regs(old_regs);
 }
 #+end_example
-可以看到，common_interrupt是所有外部设备中断同意的处理入口，DEFINE_IDTENTRY_IRQ是声明irq处理的函数的公共宏，除了外部设备使用它，伪中断也会使用它：
+可以看到，common_interrupt是所有外部设备中断统一的处理入口，DEFINE_IDTENTRY_IRQ是声明irq处理的函数的公共宏，除了外部设备使用它，伪中断也会使用它：
 #+begin_example
 DEFINE_IDTENTRY_IRQ(spurious_interrupt)
 #+end_example
@@ -2471,5 +2471,13 @@ Register）里存放的是LDT的线性地址，除此之外，还有一些段寄
 [[./img/segment-selector.png]]
 
 bit 3-15作为索引，用来选择gdt/ldt表里的哪个描述符条目，TI表示从哪个表里选择，当加载段选择子到段寄存器的可见部分时，段寄存器的不可见部分段描述符自动从内存gdt/ldt里获取并填充。
+
+通过task register，x86架构可以访问tss段的内容，task register的内容也是分为两个部分，可见和不可见部分，可见部分就是对应tss段描述符在gdt中的段选择子，而不可见部分就是gdt中的tss段描述符，具体的访问路径如下图：
+#+CAPTION: 通过task register访问tss段
+#+LABEL: fig:task-register
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/task-register.png]]
+
+可以看到，其和其它前面介绍过的段寄存器是类似的使用方式。
 
 Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）里，
