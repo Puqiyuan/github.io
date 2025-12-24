@@ -2480,4 +2480,4 @@ bit 3-15作为索引，用来选择gdt/ldt表里的哪个描述符条目，TI表
 
 可以看到，其和其它前面介绍过的段寄存器是类似的使用方式。
 
-Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）里，
+Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss段的描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）里，
