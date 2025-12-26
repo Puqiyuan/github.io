@@ -2480,4 +2480,35 @@ bit 3-15作为索引，用来选择gdt/ldt表里的哪个描述符条目，TI表
 
 可以看到，其和其它前面介绍过的段寄存器是类似的使用方式。
 
-Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss段的描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）里，
+从前面对x86架构分段机制以及tss的介绍，怎么才能使得tss（比如本文关心的里面rspN要生效）对于硬件生效呢？这个问题要分两个部分对硬件进行设置。首先是位于内存的gdt表要生效，这依靠lgdt指令，其次需要将gdt里tss对应的段描述符加载到task register（其实是加载tss在gdt里对应的段选择子，因为只有加载段选择子到task register的可见部分，tss描述符由硬件自动加载到TR的不可见部分）。
+
+先分析Linux内核如何实现gdt对硬件的设置。Linux对于每个cpu都有一页大小的gdt page：
+#+begin_example
+/*
+ * cpu_entry_area is a percpu region that contains things needed by the CPU
+ * and early entry/exit code.  Real types aren't used for all fields here
+ * to avoid circular header dependencies.
+ *
+ * Every field is a virtual alias of some other allocated backing store.
+ * There is no direct allocation of a struct cpu_entry_area.
+ */
+
+
+struct cpu_entry_area {
+	char gdt[PAGE_SIZE];
+      ...
+}
+#+end_example
+然后在setup_cpu_entry_area里有将内核虚拟地址关联到这个gdt page：
+#+begin_example
+/* Setup the fixmap mappings only once per-processor */
+static void __init setup_cpu_entry_area(unsigned int cpu)
+{
+      ...
+	cea_set_pte(&cea->gdt, get_cpu_gdt_paddr(cpu), gdt_prot);
+      ...
+}
+#+end_example
+以上cea_set_pte之前介绍过，总结下，cpu_entry_area结构体只是描述了一个内存布局，但是内存本身一般没有alloc_*这种接口来分配，而是一般来自percpu的空间，然后通过cea_set_pte手工设置页表，来完成cpu_entry_area里的虚拟地址到物理页面的映射。另外一个题外话，percpu的空间又是怎么开出来的呢？
+
+然后分析Linux对tss描述符的设置与设置到硬件，Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss段的描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR），关于这点（个流程）后续还会从代码上去说明。
