@@ -2237,6 +2237,8 @@ error_code在设备中断发生时就是vector号，只是这里需要转成u8�
 
 kvm_set_cpu_l1tf_flush_l1d是一个安全功能，防止信息在guest间泄露，这里只是做了一个标记：
 #+begin_example
+arch/x86/include/asm/hardirq.h
+
 static __always_inline void kvm_set_cpu_l1tf_flush_l1d(void)
 {
 	__this_cpu_write(irq_stat.kvm_cpu_l1tf_flush_l1d, 1);
@@ -2248,6 +2250,8 @@ instrumentation_begin/instrumentation_end一般没有开启CONFIG_NOINSTR_VALIDA
 
 继续往下分析就是重要的run_irq_on_irqstack_cond，它才是中断处理的正式函数：
 #+begin_example
+arch/x86/include/asm/irq_stack.h
+
 #define run_irq_on_irqstack_cond(func, regs, vector)			\
 {									\
 	assert_function_type(func, void (*)(struct pt_regs *, u32));	\
@@ -2259,6 +2263,8 @@ instrumentation_begin/instrumentation_end一般没有开启CONFIG_NOINSTR_VALIDA
 }
 #+end_example
 #+begin_example
+arch/x86/include/asm/irq_stack.h
+
 /*
  * Macro to invoke system vector and device interrupt C handlers.
  */
@@ -2427,6 +2433,8 @@ struct x86_hw_tss {
 
 当然，内核针对这种类型的描述符有结构体定义：
 #+begin_example
+arch/x86/include/asm/desc_defs.h
+
 /* LDT or TSS descriptor in the GDT. */
 struct ldttss_desc {
 	u16	limit0;
@@ -2484,6 +2492,8 @@ bit 3-15作为索引，用来选择gdt/ldt表里的哪个描述符条目，TI表
 
 先分析Linux内核如何实现gdt对硬件的设置。Linux对于每个cpu都有一页大小的gdt page：
 #+begin_example
+arch/x86/include/asm/cpu_entry_area.h
+
 /*
  * cpu_entry_area is a percpu region that contains things needed by the CPU
  * and early entry/exit code.  Real types aren't used for all fields here
@@ -2501,6 +2511,8 @@ struct cpu_entry_area {
 #+end_example
 然后在setup_cpu_entry_area里有将内核虚拟地址关联到这个gdt page：
 #+begin_example
+arch/x86/mm/cpu_entry_area.c
+
 /* Setup the fixmap mappings only once per-processor */
 static void __init setup_cpu_entry_area(unsigned int cpu)
 {
@@ -2509,6 +2521,151 @@ static void __init setup_cpu_entry_area(unsigned int cpu)
       ...
 }
 #+end_example
-以上cea_set_pte之前介绍过，总结下，cpu_entry_area结构体只是描述了一个内存布局，但是内存本身一般没有alloc_*这种接口来分配，而是一般来自percpu的空间，然后通过cea_set_pte手工设置页表，来完成cpu_entry_area里的虚拟地址到物理页面的映射。另外一个题外话，percpu的空间又是怎么开出来的呢？
+以上cea_set_pte之前介绍过，总结下，cpu_entry_area结构体只是描述了一个内存布局，但是内存本身一般没有alloc_*这种接口来分配，而是一般来自percpu的空间，然后通过cea_set_pte手工设置页表，来完成cpu_entry_area里的虚拟地址到物理页面的映射。另外一个题外话，percpu的空间又是怎么开出来的呢？可以从get_cpu_gdt_paddr的实现得到答案：
+#+begin_example
+arch/x86/include/asm/desc.h
+
+/* Provide the physical address of the GDT page. */
+static inline phys_addr_t get_cpu_gdt_paddr(unsigned int cpu)
+{
+	return per_cpu_ptr_to_phys(get_cpu_gdt_rw(cpu));
+}
+
+static inline struct desc_struct *get_cpu_gdt_rw(unsigned int cpu)
+{
+	return per_cpu(gdt_page, cpu).gdt;
+}
+#+end_example
+从这里可以更加清晰的认识前面注释说的cpu_entry_area里的成员都是一个虚拟别名，而backingstore比如就是这里的gdt_page这个per_cpu变量。继续往下调查percpu变量的内存空间是怎么出来的，主要是定义（DEFINE），而不是声明（DECLARE）来开出空间：
+#+begin_example
+arch/x86/kernel/cpu/common.c
+
+DEFINE_PER_CPU_PAGE_ALIGNED(struct gdt_page, gdt_page) = { .gdt = {
+#ifdef CONFIG_X86_64
+	/*
+	 * We need valid kernel segments for data and code in long mode too
+	 * IRET will check the segment types  kkeil 2000/10/28
+	 * Also sysret mandates a special GDT layout
+	 *
+	 * TLS descriptors are currently at a different place compared to i386.
+	 * Hopefully nobody expects them at a fixed place (Wine?)
+	 */
+	[GDT_ENTRY_KERNEL32_CS]		= GDT_ENTRY_INIT(DESC_CODE32, 0, 0xfffff),
+	[GDT_ENTRY_KERNEL_CS]		= GDT_ENTRY_INIT(DESC_CODE64, 0, 0xfffff),
+	[GDT_ENTRY_KERNEL_DS]		= GDT_ENTRY_INIT(DESC_DATA64, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER32_CS]	= GDT_ENTRY_INIT(DESC_CODE32 | DESC_USER, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(DESC_DATA64 | DESC_USER, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(DESC_CODE64 | DESC_USER, 0, 0xfffff),
+#else
+	[GDT_ENTRY_KERNEL_CS]		= GDT_ENTRY_INIT(DESC_CODE32, 0, 0xfffff),
+	[GDT_ENTRY_KERNEL_DS]		= GDT_ENTRY_INIT(DESC_DATA32, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_CS]	= GDT_ENTRY_INIT(DESC_CODE32 | DESC_USER, 0, 0xfffff),
+	[GDT_ENTRY_DEFAULT_USER_DS]	= GDT_ENTRY_INIT(DESC_DATA32 | DESC_USER, 0, 0xfffff),
+	/*
+	 * Segments used for calling PnP BIOS have byte granularity.
+	 * They code segments and data segments have fixed 64k limits,
+	 * the transfer segment sizes are set at run time.
+	 */
+	[GDT_ENTRY_PNPBIOS_CS32]	= GDT_ENTRY_INIT(DESC_CODE32_BIOS, 0, 0xffff),
+	[GDT_ENTRY_PNPBIOS_CS16]	= GDT_ENTRY_INIT(DESC_CODE16, 0, 0xffff),
+	[GDT_ENTRY_PNPBIOS_DS]		= GDT_ENTRY_INIT(DESC_DATA16, 0, 0xffff),
+	[GDT_ENTRY_PNPBIOS_TS1]		= GDT_ENTRY_INIT(DESC_DATA16, 0, 0),
+	[GDT_ENTRY_PNPBIOS_TS2]		= GDT_ENTRY_INIT(DESC_DATA16, 0, 0),
+	/*
+	 * The APM segments have byte granularity and their bases
+	 * are set at run time.  All have 64k limits.
+	 */
+	[GDT_ENTRY_APMBIOS_BASE]	= GDT_ENTRY_INIT(DESC_CODE32_BIOS, 0, 0xffff),
+	[GDT_ENTRY_APMBIOS_BASE+1]	= GDT_ENTRY_INIT(DESC_CODE16, 0, 0xffff),
+	[GDT_ENTRY_APMBIOS_BASE+2]	= GDT_ENTRY_INIT(DESC_DATA32_BIOS, 0, 0xffff),
+
+	[GDT_ENTRY_ESPFIX_SS]		= GDT_ENTRY_INIT(DESC_DATA32, 0, 0xfffff),
+	[GDT_ENTRY_PERCPU]		= GDT_ENTRY_INIT(DESC_DATA32, 0, 0xfffff),
+#endif
+} };
+#+end_example
+以上对一些段描述符已经进行了初始化。继续看上面的宏实现：
+#+begin_example
+include/linux/percpu-defs.h
+
+#define DEFINE_PER_CPU_PAGE_ALIGNED(type, name)				\
+	DEFINE_PER_CPU_SECTION(type, name, "..page_aligned")		\
+	__aligned(PAGE_SIZE)
+
+#define DEFINE_PER_CPU_SECTION(type, name, sec)				\
+	__PCPU_ATTRS(sec) __typeof__(type) name
+
+/*
+ * Base implementations of per-CPU variable declarations and definitions, where
+ * the section in which the variable is to be placed is provided by the
+ * 'sec' argument.  This may be used to affect the parameters governing the
+ * variable's storage.
+ *
+ * NOTE!  The sections for the DECLARE and for the DEFINE must match, lest
+ * linkage errors occur due the compiler generating the wrong code to access
+ * that section.
+ */
+#define __PCPU_ATTRS(sec)						\
+	__percpu __attribute__((section(PER_CPU_BASE_SECTION sec)))	\
+	PER_CPU_ATTRIBUTES
+
+#ifndef PER_CPU_BASE_SECTION
+#ifdef CONFIG_SMP
+#define PER_CPU_BASE_SECTION ".data..percpu"
+#+end_example
+可以看到，所以percpu变量最终其实就是将这样的变量放入了一个特别的section里，比如这里的.data..percpu..page_aligned这个section，至于percpu变量占据的空间本身，从这里看到可以是静态定义开出来的。但是在vmlinux里通过readelf -S并没有看到.data.percpu..page_aligned这个section，但是有.data..percpu这个section，这是因为如下的链接脚本代码将所有percpu的section都归到.data..percpu section了：
+#+begin_example
+include/asm-generic/vmlinux.lds.h
+
+/**
+ * PERCPU_INPUT - the percpu input sections
+ * @cacheline: cacheline size
+ *
+ * The core percpu section names and core symbols which do not rely
+ * directly upon load addresses.
+ *
+ * @cacheline is used to align subsections to avoid false cacheline
+ * sharing between subsections for different purposes.
+ */
+#define PERCPU_INPUT(cacheline)						\
+	__per_cpu_start = .;						\
+	. = ALIGN(PAGE_SIZE);						\
+	*(.data..percpu..page_aligned)					\
+	. = ALIGN(cacheline);						\
+	__per_cpu_hot_start = .;					\
+	*(SORT_BY_ALIGNMENT(.data..percpu..hot.*))			\
+	__per_cpu_hot_end = .;						\
+	. = ALIGN(cacheline);						\
+	*(.data..percpu..read_mostly)					\
+	. = ALIGN(cacheline);						\
+	*(.data..percpu)						\
+	*(.data..percpu..shared_aligned)				\
+	PERCPU_DECRYPTED_SECTION					\
+	__per_cpu_end = .;
+
+/**
+ * PERCPU_SECTION - define output section for percpu area
+ * @cacheline: cacheline size
+ *
+ * Macro which expands to output section for percpu area.
+ *
+ * @cacheline is used to align subsections to avoid false cacheline
+ * sharing between subsections for different purposes.
+ */
+#define PERCPU_SECTION(cacheline)					\
+	. = ALIGN(PAGE_SIZE);						\
+	.data..percpu	: AT(ADDR(.data..percpu) - LOAD_OFFSET) {	\
+		PERCPU_INPUT(cacheline)					\
+	}
+#+end_example
+可以看到以上链接代码不仅将所有percpu的section都归到了.data..percpu（PERCPU_SECTION->PERCPU_INPUT），还定义了这些section的边界符号，比如__per_cpu_start，__per_cpu_end等。以上链接代码是位于公共的链接脚本，架构相关的链接代码会调用上面的接口来完成percpu section的归一：
+#+begin_example
+arch/x86/kernel/vmlinux.lds.S
+
+PERCPU_SECTION(L1_CACHE_BYTES)
+#+end_example
+.data..percpu这个section的Type是PROGBITS，Flags是WA，意味着其在vmlinux镜像里是占有物理空间的，bootloader加载内核并解压时，会复制这部分内容到物理内存，这样一份模板的percpu空间以这种方式就开好了，当内核运行起来时通过setup_per_cpu_areas函数会为每个cpu按这个模板生成各自的percpu空间，并且设置各自的percpu offset，当然里面实现逻辑就会利用__per_cpu_start这些符号去获取percpu空间的大小。
+
+还有一个问题，就是cea里的虚拟地址又是怎么来的。
 
 然后分析Linux对tss描述符的设置与设置到硬件，Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss段的描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR），关于这点（个流程）后续还会从代码上去说明。
