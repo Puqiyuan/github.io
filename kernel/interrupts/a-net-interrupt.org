@@ -2516,6 +2516,22 @@ arch/x86/mm/cpu_entry_area.c
 /* Setup the fixmap mappings only once per-processor */
 static void __init setup_cpu_entry_area(unsigned int cpu)
 {
+      struct cpu_entry_area *cea = get_cpu_entry_area(cpu);
+#ifdef CONFIG_X86_64
+	/* On 64-bit systems, we use a read-only fixmap GDT and TSS. */
+	pgprot_t gdt_prot = PAGE_KERNEL_RO;
+	pgprot_t tss_prot = PAGE_KERNEL_RO;
+#else
+	/*
+	 * On 32-bit systems, the GDT cannot be read-only because
+	 * our double fault handler uses a task gate, and entering through
+	 * a task gate needs to change an available TSS to busy.  If the
+	 * GDT is read-only, that will triple fault.  The TSS cannot be
+	 * read-only because the CPU writes to it on task switches.
+	 */
+	pgprot_t gdt_prot = PAGE_KERNEL;
+	pgprot_t tss_prot = PAGE_KERNEL;
+#endif
       ...
 	cea_set_pte(&cea->gdt, get_cpu_gdt_paddr(cpu), gdt_prot);
       ...
@@ -2664,8 +2680,120 @@ arch/x86/kernel/vmlinux.lds.S
 
 PERCPU_SECTION(L1_CACHE_BYTES)
 #+end_example
-.data..percpu这个section的Type是PROGBITS，Flags是WA，意味着其在vmlinux镜像里是占有物理空间的，bootloader加载内核并解压时，会复制这部分内容到物理内存，这样一份模板的percpu空间以这种方式就开好了，当内核运行起来时通过setup_per_cpu_areas函数会为每个cpu按这个模板生成各自的percpu空间，并且设置各自的percpu offset，当然里面实现逻辑就会利用__per_cpu_start这些符号去获取percpu空间的大小。
+.data..percpu这个section的Type是PROGBITS，Flags是WA，意味着其在vmlinux镜像里是占有物理空间的，bootloader加载内核并解压时，会复制这部分内容到物理内存，这样一份模板的percpu空间以这种方式就开好了，当内核运行起来时通过setup_per_cpu_areas函数会为每个cpu按这个模板生成各自的percpu空间，并且设置各自的percpu offset，当然里面实现逻辑就会利用__per_cpu_start这些符号去获取percpu空间的大小。关于percpu的更多细节（比如percpu用的内存分配器）参见笔者其它文章。
 
-还有一个问题，就是cea里的虚拟地址又是怎么来的。
+还有一个问题，就是cea里的虚拟地址又是怎么来的。这要分析setup_cpu_entry_area->get_cpu_entry_area：
+#+begin_example
+arch/x86/mm/cpu_entry_area.c
 
-然后分析Linux对tss描述符的设置与设置到硬件，Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss段的描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR），关于这点（个流程）后续还会从代码上去说明。
+/* Is called from entry code, so must be noinstr */
+noinstr struct cpu_entry_area *get_cpu_entry_area(int cpu)
+{
+	unsigned long va = CPU_ENTRY_AREA_PER_CPU + cea_offset(cpu) * CPU_ENTRY_AREA_SIZE;
+	BUILD_BUG_ON(sizeof(struct cpu_entry_area) % PAGE_SIZE != 0);
+
+	return (struct cpu_entry_area *) va;
+}
+#+end_example
+#+begin_example
+arch/x86/include/asm/pgtable_areas.h
+
+/* Single page reserved for the readonly IDT mapping: */
+#define CPU_ENTRY_AREA_RO_IDT		CPU_ENTRY_AREA_BASE
+#define CPU_ENTRY_AREA_PER_CPU		(CPU_ENTRY_AREA_RO_IDT + PAGE_SIZE)
+#+end_example
+CPU_ENTRY_AREA_BASE之前介绍过，就是说内核在它的虚拟地址空间里开出了一段空间，位于CPU_ENTRY_AREA_BASE之后的一页便是用于entry area per cpu的内核虚拟地址空间CPU_ENTRY_AREA_PER_CPU，内核代码需要手动建立（cea_set_pte）这段虚拟地址空间到per cpu物理页面的映射，才能通过这段虚拟地址访问percpu数据，当然这段虚拟空间针对每个cpu具有不一样的偏移，通过cea_offset去体现。
+
+上面通过cea_set_pte去映射一个per cpu gdt_page到cea->gdt时，使用的第三个参数是PAGE_KERNEL_RO，也就是只读的（针对x86-64），这样获取percpu gdt page实际上有两种方式一种是直接通过percpu back store page，叫做direct rw方式，一种就是通过前面开的内核虚拟地址空间（cea->gdt），叫做fixmap ro方式。可读写的gdt page获取方式如下：
+#+begin_example
+arch/x86/include/asm/desc.h
+
+/* Provide the original GDT */
+static inline struct desc_struct *get_cpu_gdt_rw(unsigned int cpu)
+{
+	return per_cpu(gdt_page, cpu).gdt;
+}
+#+end_example
+只读的gdt page获取方式如下：
+#+begin_example
+arch/x86/include/asm/desc.h
+
+/* Provide the fixmap address of the remapped GDT */
+static inline struct desc_struct *get_cpu_gdt_ro(int cpu)
+{
+	return (struct desc_struct *)&get_cpu_entry_area(cpu)->gdt;
+}
+#+end_example
+有了这些gdt page来源的分析，现在终于可以看到设置gdtr的函数代码了：
+#+begin_example
+arch/x86/kernel/cpu/common.c
+
+/* Load the original GDT from the per-cpu structure */
+void load_direct_gdt(int cpu)
+{
+	struct desc_ptr gdt_descr;
+
+	gdt_descr.address = (long)get_cpu_gdt_rw(cpu);
+	gdt_descr.size = GDT_SIZE - 1;
+	load_gdt(&gdt_descr);
+}
+EXPORT_SYMBOL_FOR_KVM(load_direct_gdt);
+
+/* Load a fixmap remapping of the per-cpu GDT */
+void load_fixmap_gdt(int cpu)
+{
+	struct desc_ptr gdt_descr;
+
+	gdt_descr.address = (long)get_cpu_gdt_ro(cpu);
+	gdt_descr.size = GDT_SIZE - 1;
+	load_gdt(&gdt_descr);
+}
+EXPORT_SYMBOL_GPL(load_fixmap_gdt);
+#+end_example
+可以看到以上就分为两种方式来设置gdtr寄存器，不论通过那种方式，都会经由load_gdt函数使用lgdt指令去设置到gdtr寄存器：
+#+begin_example
+arch/x86/include/asm/desc.h
+
+#define load_gdt(dtr)				native_load_gdt(dtr)
+
+static inline void native_load_gdt(const struct desc_ptr *dtr)
+{
+	asm volatile("lgdt %0"::"m" (*dtr));
+}
+#+end_example
+以上就回答了前面的问题：Linux内核如何实现gdt对硬件的设置。
+
+然后分析Linux对tss描述符的填充与设置到硬件，Linux内核在cpu_init_exception_handling函数里先通过set_tss_desc设置tss段的描述符，然后通过调用load_TR_desc将tss描述符对应的段选择子加载到task register（TR）。
+#+begin_example
+arch/x86/kernel/cpu/common.c
+
+/*
+ * Setup everything needed to handle exceptions from the IDT, including the IST
+ * exceptions which use paranoid_entry().
+ */
+void cpu_init_exception_handling(bool boot_cpu)
+{
+      ...
+	set_tss_desc(cpu, &get_cpu_entry_area(cpu)->tss.x86_tss);
+
+	load_TR_desc();
+      ...
+}
+#+end_example
+
+set_tss_desc本身的逻辑先抛开不看，还是先分析tss.x86_tss的空间来源，它和前面的gdt_page类似，所有来自cpu_entry_area的成员都是需要percpu开出内存作backing store的，还是在setup_cpu_entry_area里有：
+#+begin_example
+/* Setup the fixmap mappings only once per-processor */
+static void __init setup_cpu_entry_area(unsigned int cpu)
+{
+	struct cpu_entry_area *cea = get_cpu_entry_area(cpu);
+      pgprot_t tss_prot = PAGE_KERNEL_RO;
+
+      ...
+      cea_map_percpu_pages(&cea->tss, &per_cpu(cpu_tss_rw, cpu),
+	                     sizeof(struct tss_struct) / PAGE_SIZE, tss_prot);
+      ...
+}
+#+end_example
+
+到目前费了半天劲就分析清楚了gdt以及tss描述符在Linux下生效的实现。但是tss段本身的内容如前有图展示的，里面的内容比如rsp0怎么设置的，设置了什么又是另外的问题需要分析了，下面分析清楚这个问题。
