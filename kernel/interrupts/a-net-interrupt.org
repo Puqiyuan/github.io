@@ -2930,4 +2930,76 @@ void cpu_init(void)
       ...
 }
 #+end_example
-注释说的也很清楚，就是
+注释说的很清楚，cpu_init就是初始化per-CPU的数据，这包括sp0，也就是说不论当前跑的是哪个用户进程，当其需要进入ring 0的内核代码执行时，都是用的这里设置的针对这个cpu的sp0。load_sp0最终写的就是percpu的x86_tss里的sp0：
+#+begin_example
+arch/x86/include/asm/processor.h
+
+static inline void load_sp0(unsigned long sp0)
+{
+	native_load_sp0(sp0);
+}
+
+native_load_sp0(unsigned long sp0)
+{
+	this_cpu_write(cpu_tss_rw.x86_tss.sp0, sp0);
+}
+#+end_example
+
+前面分析过x86_tss的地址已经设置到gdt_page里对应的描述符了。但是具体的sp0的值要从cpu_entry_stack的实现分析：
+#+begin_example
+arch/x86/include/asm/cpu_entry_area.h
+
+static __always_inline struct entry_stack *cpu_entry_stack(int cpu)
+{
+	return &get_cpu_entry_area(cpu)->entry_stack_page.stack;
+}
+#+end_example
+可见，与上面的cpu_entry_area里的量类似，entry_stack_page成员需要percpu的物理页：
+#+begin_example
+arch/x86/mm/cpu_entry_area.c
+
+static DEFINE_PER_CPU_PAGE_ALIGNED(struct entry_stack_page, entry_stack_storage);
+#+end_example
+建立映射依旧是在setup_cpu_entry_area函数里了：
+#+begin_example
+arch/x86/mm/cpu_entry_area.c
+
+/* Setup the fixmap mappings only once per-processor */
+static void __init setup_cpu_entry_area(unsigned int cpu)
+{
+      ......
+	cea_map_percpu_pages(&cea->entry_stack_page,
+			     per_cpu_ptr(&entry_stack_storage, cpu), 1,
+			     PAGE_KERNEL);
+      ......
+}
+#+end_example
+
+以上就终于分析完了问题：[当在用户态触发中断时，“CPU会自动切换到TSS.IST或TSS.sp0指定的栈顶”，那么这个栈顶是怎么设置并起效的呢？]。后面可以继续中断流程的代码分析了，下面继续分析函数call_on_irqstack_cond：
+#+begin_example
+/*
+ * Macro to invoke system vector and device interrupt C handlers.
+ */
+#define call_on_irqstack_cond(func, regs, asm_call, constr, c_args...)	\
+{									\
+	/*								\
+	 * User mode entry and interrupt on the irq stack do not	\
+	 * switch stacks. If from user mode the task stack is empty.	\
+	 */								\
+	if (user_mode(regs) || __this_cpu_read(hardirq_stack_inuse)) {	\
+		irq_enter_rcu();					\
+		func(c_args);						\
+		irq_exit_rcu();						\
+	} else {							\
+		/*							\
+		 * Mark the irq stack inuse _before_ and unmark _after_	\
+		 * switching stacks. Interrupts are disabled in both	\
+		 * places. Invoke the stack switch macro with the call	\
+		 * sequence which matches the above direct invocation.	\
+		 */							\
+		__this_cpu_write(hardirq_stack_inuse, true);		\
+		call_on_irqstack(func, asm_call, constr);		\
+		__this_cpu_write(hardirq_stack_inuse, false);		\
+	}								\
+}
+#+end_example
