@@ -2879,6 +2879,7 @@ enum {
 #+LABEL: fig:system-segment-gate-desc-type
 #+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
 [[./img/system-segment-gate-desc-type.png]]
+
 为9可以是IA-32e模式下的64位tss desc描述符类型，所有系统段描述符S位都是0，memset在一开始清0了整个描述符。
 
 最后的write_gdt_entry其实就是个memcpy了：
