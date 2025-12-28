@@ -2783,6 +2783,8 @@ void cpu_init_exception_handling(bool boot_cpu)
 
 set_tss_desc本身的逻辑先抛开不看，还是先分析tss.x86_tss的空间来源，它和前面的gdt_page类似，所有来自cpu_entry_area的成员都是需要percpu开出内存作backing store的，还是在setup_cpu_entry_area里有：
 #+begin_example
+arch/x86/mm/cpu_entry_area.c
+
 /* Setup the fixmap mappings only once per-processor */
 static void __init setup_cpu_entry_area(unsigned int cpu)
 {
@@ -2796,4 +2798,136 @@ static void __init setup_cpu_entry_area(unsigned int cpu)
 }
 #+end_example
 
-到目前费了半天劲就分析清楚了gdt以及tss描述符在Linux下生效的实现。但是tss段本身的内容如前有图展示的，里面的内容比如rsp0怎么设置的，设置了什么又是另外的问题需要分析了，下面分析清楚这个问题。
+cea_map_percpu_pages还是通过调用cea_set_pte函数来完成内核虚拟地址到物理percpu page的页表映射。cpu_tss_rw就是percpu的变量：
+#+begin_example
+/*
+ * per-CPU TSS segments. Threads are completely 'soft' on Linux,
+ * no more per-task TSS's. The TSS size is kept cacheline-aligned
+ * so they are allowed to end up in the .data..cacheline_aligned
+ * section. Since TSS's are completely CPU-local, we want them
+ * on exact cacheline boundaries, to eliminate cacheline ping-pong.
+ */
+__visible DEFINE_PER_CPU_PAGE_ALIGNED(struct tss_struct, cpu_tss_rw) = {
+	.x86_tss = {
+		/*
+		 * .sp0 is only used when entering ring 0 from a lower
+		 * privilege level.  Since the init task never runs anything
+		 * but ring 0 code, there is no need for a valid value here.
+		 * Poison it.
+		 */
+		.sp0 = (1UL << (BITS_PER_LONG-1)) + 1,
+
+#ifdef CONFIG_X86_32
+		.sp1 = TOP_OF_INIT_STACK,
+
+		.ss0 = __KERNEL_DS,
+		.ss1 = __KERNEL_CS,
+#endif
+		.io_bitmap_base	= IO_BITMAP_OFFSET_INVALID,
+	 },
+};
+#+end_example
+这和前面的gdt_page类似，也是利用了percpu机制。但是注意这里sp0并没有设置为有效的值，因为sp0在从较低的权限级进入较高的ring 0时才被使用，而init task就是运行内核代码的处于ring 0，不存在这个场景，而普通进程在何时设置成什么值，后面再分析。TSS的概念是per-cpu的，因为在Linux上进程切换主要由软件来完成，和硬件提供的tss结构体没有关系（不使用硬件机制进行进程切换）。
+
+继续往下分析set_tss_desc函数：
+#+begin_example
+arch/x86/include/asm/desc.h
+
+static inline void __set_tss_desc(unsigned cpu, unsigned int entry, struct x86_hw_tss *addr)
+{
+	struct desc_struct *d = get_cpu_gdt_rw(cpu);
+	tss_desc tss;
+
+	set_tssldt_descriptor(&tss, (unsigned long)addr, DESC_TSS,
+			      __KERNEL_TSS_LIMIT);
+	write_gdt_entry(d, entry, &tss, DESC_TSS);
+}
+
+#define set_tss_desc(cpu, addr) __set_tss_desc(cpu, GDT_ENTRY_TSS, addr)
+#+end_example
+set_tss_desc接受两个参数，cpu是指当前要设置哪个cpu的tss描述符，而addr是tss段的地址（而不是tss描述符），这里就是percpu的变量cpu_tss_rw，类型为tss_struct，这个地址会参与构建tss描述符，主要就是通过set_tssldt_descriptor设置tss描述符里的几个base部分，也就是cpu_tss_rw的地址被拆成几个部分写到ldttss_desc里的base0-3：
+#+begin_example
+static inline void set_tssldt_descriptor(void *d, unsigned long addr,
+					 unsigned type, unsigned size)
+{
+	struct ldttss_desc *desc = d;
+
+	memset(desc, 0, sizeof(*desc));
+
+	desc->limit0		= (u16) size;
+	desc->base0		= (u16) addr;
+	desc->base1		= (addr >> 16) & 0xFF;
+	desc->type		= type;
+	desc->p			= 1;
+	desc->limit1		= (size >> 16) & 0xF;
+	desc->base2		= (addr >> 24) & 0xFF;
+#ifdef CONFIG_X86_64
+	desc->base3		= (u32) (addr >> 32);
+#endif
+}
+#+end_example
+这里type为DESC_TSS，定义如下：
+#+begin_example
+enum {
+	DESC_TSS = 0x9,
+	DESC_LDT = 0x2,
+	DESCTYPE_S = 0x10,	/* !system */
+};
+#+end_example
+为9的类型在intel sdm vol3里是有明确类型的，所有类型的表包括如下图：
+#+CAPTION: 系统段以及门描述符类型
+#+LABEL: fig:system-segment-gate-desc-type
+#+ATTR_HTML: alt="" title="" align="center" :width 20% :height 20%
+[[./img/system-segment-gate-desc-type.png]]
+为9可以是IA-32e模式下的64位tss desc描述符类型，所有系统段描述符S位都是0，memset在一开始清0了整个描述符。
+
+最后的write_gdt_entry其实就是个memcpy了：
+#+begin_example
+#define write_gdt_entry(dt, entry, desc, type)	native_write_gdt_entry(dt, entry, desc, type)
+
+static inline void
+native_write_gdt_entry(struct desc_struct *gdt, int entry, const void *desc, int type)
+{
+	unsigned int size;
+
+	switch (type) {
+	case DESC_TSS:	size = sizeof(tss_desc);	break;
+	case DESC_LDT:	size = sizeof(ldt_desc);	break;
+	default:	size = sizeof(*gdt);		break;
+	}
+
+	memcpy(&gdt[entry], desc, size);
+}
+#+end_example
+这里虽然最终改动是对内存的，但是由于先前将这个gdt_page设置到了gdtr寄存器，所以改动gdt_page里的描述符对硬件就会立即生效。
+
+注意以上逻辑先通过get_cpu_gdt_rw获得当前cpu的gdt_page，然后才能使用里面的第GDT_ENTRY_TSS个条目作为tss描述符，这也是为什么前面有一些篇幅执着于分析清楚gdt的生效/设置逻辑，x86-64下，GDT_ENTRY_TSS按如下定义：
+#+begin_example
+/* Needs two entries */
+#define GDT_ENTRY_TSS			8
+#+end_example
+
+到目前费了半天劲就分析清楚了gdt以及tss描述符在Linux下生效的实现。但是tss段本身的内容如前有图展示的，比如rsp0怎么设置的，设置了什么这些又是另外的问题需要分析了，前面也提到过这个问题，下面分析清楚这些问题。
+
+其实前面提到过，tss在Linux上并不是per-task的概念，而是per-cpu的，这点尤其在设置tss里的sp0得到明确体现：
+#+begin_example
+arch/x86/kernel/cpu/common.c
+
+/*
+ * cpu_init() initializes state that is per-CPU. Some data is already
+ * initialized (naturally) in the bootstrap process, such as the GDT.  We
+ * reload it nevertheless, this function acts as a 'CPU state barrier',
+ * nothing should get across.
+ */
+void cpu_init(void)
+{
+      ...
+	/*
+	 * sp0 points to the entry trampoline stack regardless of what task
+	 * is running.
+	 */
+	load_sp0((unsigned long)(cpu_entry_stack(cpu) + 1));
+      ...
+}
+#+end_example
+注释说的也很清楚，就是
